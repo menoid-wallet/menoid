@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "./NoirAccount.sol";
 interface IDepositVerifier {
     function verifyProof(
         uint256[2] calldata a,
@@ -69,6 +70,7 @@ contract PrivatePool {
     //global state
     mapping(bytes32 => bool) public nullifierSpent;
     mapping(bytes32 => bool) public commitmentExists;
+    mapping(bytes32 => bool) public noirAccountCommitments;
 
     // verifiers
     IDepositVerifier public immutable depositVerifier;
@@ -561,6 +563,39 @@ contract PrivatePool {
             );
         }
     }
+
+    // private accounts creation
+    struct CreateNoirAccountCall {
+        // zk proof
+        uint256[2] a;
+        uint256[2][2] b;
+        uint256[2] c;
+        //input details
+        uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
+        bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
+        uint256[MAX_INPUTS] poolIds; // poolid of that root
+        bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
+        // outputs (maximum of 2)
+        bytes32 C1; // change commitment
+        bytes32 C2; // relayer commitment
+        bytes encryptedNote1; // change encrypted note
+        bytes encryptedNote2; // relayer encrypted note
+    }
+
+    function createNoirAccount(CreateNoirAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
+
+        require(!noirAccountCommitments[cmx], "NoirAccount already exists");
+        for (uint8 i = 0; i < calls.length; i++ ) {
+            _singleCreateNACall(calls[i]);
+        }
+
+    }
+
+    function _singleCreateNACall(CreateNoirAccountCall calldata call) internal {
+        
+    }
+
+
 
     // helper functions
     struct InsertedNote {

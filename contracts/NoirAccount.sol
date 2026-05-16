@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 
 /* 
-NoirAccount is created on behalf of the user privately. 
+NoirAccount is the Private Identity of the user. 
 the owner of this contract is set as a commitment. (not an address)
 
 User initially creates the NoirAccount privately by sending the commitment, private notes to the relayer.
