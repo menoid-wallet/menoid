@@ -23,11 +23,11 @@ For now its only public owner.
 */
 
 contract NoirAccount is IERC721Receiver, IERC1155Receiver {
-    address public user; // this will be replaced by ownership commitment.
-
+    bytes32 public commitment;
+    uint256 public nonce; // to protect from the phishing using the same proof.
 
     modifier onlyUser() {
-        require(msg.sender == user, "Not the user");// this will be replaced by proof verification for ownership commitment.
+        // require(msg.sender == user, "Not the user");// this will be replaced by proof verification for ownership commitment.
         _;
     }
 
@@ -39,8 +39,8 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
         bytes result
     );
 
-    constructor(address _user) {
-        user = _user;
+    constructor(bytes32 _commitment) {
+        commitment = _commitment;
     }
 
     function execute(

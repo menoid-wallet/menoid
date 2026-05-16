@@ -28,6 +28,15 @@ interface IWithdrawVerifier {
     ) external view returns (bool);
 }
 
+interface ICreateNoirAccountVerifier {
+    function verifyProof(
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[17] calldata publicSignals
+    ) external view returns (bool);
+}
+
 interface IPoseidon {
     function poseidon(
         uint256[2] calldata input
@@ -76,7 +85,7 @@ contract PrivatePool {
     IDepositVerifier public immutable depositVerifier;
     ITransferVerifier public immutable transferVerifier;
     IWithdrawVerifier public immutable withdrawVerifier;
-
+    ICreateNoirAccountVerifier public immutable createNoirAccountVerifier;
     // poseidon
     IPoseidon public immutable poseidon;
 
@@ -88,6 +97,8 @@ contract PrivatePool {
     event NewPool(uint256 indexed poolId); //indexed-> searchable/filterable
     // we dont store the encryptedNotes on chain ( storage gas ) instead we emit them as events
     event NoteCreated(uint256 poolId, bytes32 commitment, bytes encryptedNote);
+    // event for noir account creation
+    event NoirAccountCreated(bytes32 commitment, bytes encryptedNote);
     // nullfier spent
     event NullifierSpent(bytes32 nullifier);
 
@@ -95,6 +106,7 @@ contract PrivatePool {
         address _depositVerifier,
         address _transferVerifier,
         address _withdrawVerifier,
+        address _createNoirAccountVerifier,
         address _poseidon,
         address _relayer,
         uint256 _relayerZkPubkey
@@ -102,6 +114,7 @@ contract PrivatePool {
         depositVerifier = IDepositVerifier(_depositVerifier);
         transferVerifier = ITransferVerifier(_transferVerifier);
         withdrawVerifier = IWithdrawVerifier(_withdrawVerifier);
+        createNoirAccountVerifier = ICreateNoirAccountVerifier(_createNoirAccountVerifier);
         poseidon = IPoseidon(_poseidon);
         relayer = _relayer;
         relayerZkPubkey = _relayerZkPubkey;
@@ -582,17 +595,135 @@ contract PrivatePool {
         bytes encryptedNote2; // relayer encrypted note
     }
 
-    function createNoirAccount(CreateNoirAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
 
+    // Cmx = Poseidon(4, zkPubKey, r, "CREATE_NOIR_ACCOUNT")
+    // r is stored in the encryptedNote
+    function createNoirAccount(CreateNoirAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
+    
         require(!noirAccountCommitments[cmx], "NoirAccount already exists");
         for (uint8 i = 0; i < calls.length; i++ ) {
             _singleCreateNACall(calls[i]);
         }
+        new NoirAccount(cmx);
+        noirAccountCommitments[cmx] = true;
+        emit NoirAccountCreated(cmx, eNote);
 
     }
 
     function _singleCreateNACall(CreateNoirAccountCall calldata call) internal {
-        
+        // validate the inputs
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            require(
+                call.enabled[i] * (1 - call.enabled[i]) == 0,
+                "Invalid enable flag"
+            );
+            if (call.enabled[i] == 0) {
+                continue;
+            }
+            require(call.poolIds[i] < pools.length, "Invalid poolId");
+            Pool storage p = pools[call.poolIds[i]];
+            require(p.validRoot[call.roots[i]], "Invalid root");
+
+            require(
+                !nullifierSpent[call.nullifiers[i]],
+                "Nullifier already spent"
+            );
+            // all nullifiers in a Transfer call must be unique
+            for (uint8 j = 0; j < i; j++) {
+                if (call.enabled[j] == 0) continue;
+
+                require(
+                    call.nullifiers[i] != call.nullifiers[j],
+                    "Duplicate nullifier"
+                );
+            }
+        }
+
+
+        //duplicate commitment check
+        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
+            require(call.C1 != call.C2, "Duplicate commitments");
+        }
+
+        // public signals to be added
+        // relayer, - 1
+        // enabled, - MAX_INPUTS
+        // roots,   - MAX_INPUTS
+        // nullifiers, - MAX_INPUTS
+        // out_enabled, - 2
+        // c_outs - 2
+
+        uint256[17] memory publicSignals;
+        uint8 idx = 0;
+        publicSignals[idx++] = relayerZkPubkey;
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.enabled[i]);
+        }
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.roots[i]);
+        }
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.nullifiers[i]);
+        }
+
+        // outputs enabled
+        bytes32[] memory tempOutCmx = new bytes32[](2);
+        uint8 cmxCount = 0;
+        if (call.C1 != ZERO_COMMITMENT) {
+            publicSignals[idx++] = 1;
+            tempOutCmx[cmxCount++] = call.C1;
+        } else {
+            publicSignals[idx++] = 0;
+        }
+
+        if (call.C2 != ZERO_COMMITMENT) {
+            publicSignals[idx++] = 1;
+            tempOutCmx[cmxCount++] = call.C2;
+        } else {
+            publicSignals[idx++] = 0;
+        }
+
+        // c_outs
+        publicSignals[idx++] = uint256(call.C1);
+        publicSignals[idx++] = uint256(call.C2);
+
+        // proof verification
+        require(
+            createNoirAccountVerifier.verifyProof(call.a, call.b, call.c, publicSignals),
+            "Noir Account creation proof verification failed"
+        );
+
+        // add nullifiers to the pool
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            if (call.enabled[i] == 0) continue;
+            require(
+                !nullifierSpent[call.nullifiers[i]],
+                "Nullifier already exists"
+            );
+            nullifierSpent[call.nullifiers[i]] = true;
+            emit NullifierSpent(call.nullifiers[i]);
+        }
+
+        // add commitments to the pool
+        bytes32[] memory commitments = new bytes32[](cmxCount);
+        for (uint8 i = 0; i < cmxCount; i++) {
+            commitments[i] = tempOutCmx[i];
+        }
+        InsertedNote[] memory insertedNotes = _insertBatch(commitments);
+        for (uint8 i = 0; i < insertedNotes.length; i++) {
+            bytes memory enc;
+            if (insertedNotes[i].commitment == call.C1)
+                enc = call.encryptedNote1;
+            else if (insertedNotes[i].commitment == call.C2)
+                enc = call.encryptedNote2;
+            else revert("Unknown commiment");
+
+            emit NoteCreated(
+                insertedNotes[i].poolId,
+                insertedNotes[i].commitment,
+                enc
+            );
+        }
     }
 
 
