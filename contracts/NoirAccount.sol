@@ -27,7 +27,7 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
     uint256 public nonce; // to protect from the phishing using the same proof.
 
     modifier onlyUser() {
-        // require(msg.sender == user, "Not the user");// this will be replaced by proof verification for ownership commitment.
+
         _;
     }
 
@@ -56,6 +56,7 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
         require(success, "Execution failed");
 
         emit Executed(target, value, data, result);
+        nonce++;
 
         return res;
     }
