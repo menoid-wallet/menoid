@@ -43,7 +43,7 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
         user = _user;
     }
 
-    function executed(
+    function execute(
         address target,
         uint256 value,
         bytes calldata data
