@@ -3,7 +3,7 @@ Deposit Flow
 
         User signs a fixed message using their wallet
         Wallet derives:
-            PrivateKey = H(signature("prifiwallet"))
+            PrivateKey = H(signature("noirit.wallet"))
             zkPublicKey = Poseidon(3, PrivateKey)
             Note: 3 <-- domain seperator
             encPublicKey = EC_Derive(PrivateKey)
