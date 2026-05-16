@@ -33,7 +33,7 @@ interface ICreateNoirAccountVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        uint256[17] calldata publicSignals
+        uint256[18] calldata publicSignals
     ) external view returns (bool);
 }
 
@@ -602,7 +602,7 @@ contract PrivatePool {
     
         require(!noirAccountCommitments[cmx], "NoirAccount already exists");
         for (uint8 i = 0; i < calls.length; i++ ) {
-            _singleCreateNACall(calls[i]);
+            _singleCreateNACall(calls[i], cmx);
         }
         new NoirAccount(cmx);
         noirAccountCommitments[cmx] = true;
@@ -610,7 +610,7 @@ contract PrivatePool {
 
     }
 
-    function _singleCreateNACall(CreateNoirAccountCall calldata call) internal {
+    function _singleCreateNACall(CreateNoirAccountCall calldata call , bytes32 cmx) internal {
         // validate the inputs
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
             require(
@@ -653,7 +653,7 @@ contract PrivatePool {
         // out_enabled, - 2
         // c_outs - 2
 
-        uint256[17] memory publicSignals;
+        uint256[18] memory publicSignals;
         uint8 idx = 0;
         publicSignals[idx++] = relayerZkPubkey;
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
@@ -686,6 +686,9 @@ contract PrivatePool {
         // c_outs
         publicSignals[idx++] = uint256(call.C1);
         publicSignals[idx++] = uint256(call.C2);
+
+        // commitment of Noir Account
+        publicSignals[idx++] = uint256(cmx);
 
         // proof verification
         require(

@@ -150,6 +150,16 @@ include "./merkle_path.circom";
     // Input Summation == Output Summation constraint
     sum[max_inputs] === outSum[2];
 
+    // NOTE CREATION CHECK
+    signal input r_noirAccount; // private input
+    signal input cmx_noirAccount; // public input
+
+    component noirAccountHasher = Poseidon(3);
+    noirAccountHasher.inputs[0] <== 4;
+    noirAccountHasher.inputs[1] <== pk;
+    noirAccountHasher.inputs[2] <== r_noirAccount;
+
+    cmx_noirAccount === noirAccountHasher.out;
  }
 
 component main {public [
@@ -158,5 +168,6 @@ component main {public [
     roots,
     nullifiers,
     out_enabled,
-    c_outs
+    c_outs,
+    cmx_noirAccount
 ]} = CreateNoirAccountProof(4,20);
