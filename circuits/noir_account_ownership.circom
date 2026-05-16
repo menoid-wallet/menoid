@@ -11,6 +11,12 @@ template NoirAccountOwnership(){
     signal input callCommitment; // public
     signal input nonce; // public
 
+    // execution details 
+    signal input target; 
+    signal input value; 
+    signal input dataHash;
+
+
     // ownership
     signal input sk; // private
     signal input pk; // private
@@ -29,10 +35,19 @@ template NoirAccountOwnership(){
 
     commitmentHasher.out === commitment;
 
+    signal actionHash;
+    component actionHasher = Poseidon(3);
+
+    actionHasher.inputs[0] <== target;
+    actionHasher.inputs[1] <== value;
+    actionHasher.inputs[2] <== dataHash;
+    actionHash <== actionHasher.out;
+
     // callCmx = Poseidon(cmx, nonce);
-    component callCmxHasher = Poseidon(2);
+    component callCmxHasher = Poseidon(3);
     callCmxHasher.inputs[0] <== commitment;
     callCmxHasher.inputs[1] <== nonce;
+    callCmxHasher.inputs[2] <== actionHash;
 
     callCmxHasher.out === callCommitment;
 }
@@ -40,5 +55,8 @@ template NoirAccountOwnership(){
 component main {public [
 commitment,
 callCommitment,
-nonce
+nonce,
+target,
+value,
+dataHash
 ]} = NoirAccountOwnership();

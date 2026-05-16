@@ -57,7 +57,7 @@ interface IPoseidon {
  * All sensitive data is handled off-chain by wallets.
  * On-chain logic only verifies cryptographic correctness.
  */
-contract PrivatePool {
+contract NoirPool {
     /**
      * Wallet:
      *      Get signature from real wallet
@@ -79,13 +79,15 @@ contract PrivatePool {
     //global state
     mapping(bytes32 => bool) public nullifierSpent;
     mapping(bytes32 => bool) public commitmentExists;
-    mapping(bytes32 => bool) public noirAccountCommitments;
+    mapping(bytes32 => address) public noirAccounts;
 
     // verifiers
     IDepositVerifier public immutable depositVerifier;
     ITransferVerifier public immutable transferVerifier;
     IWithdrawVerifier public immutable withdrawVerifier;
     ICreateNoirAccountVerifier public immutable createNoirAccountVerifier;
+    INoirAccountOwnershipVerifier public immutable noirAccountOwnershipVerifier;
+
     // poseidon
     IPoseidon public immutable poseidon;
 
@@ -107,6 +109,7 @@ contract PrivatePool {
         address _transferVerifier,
         address _withdrawVerifier,
         address _createNoirAccountVerifier,
+        address _noirAccountOwnershipVerifier,
         address _poseidon,
         address _relayer,
         uint256 _relayerZkPubkey
@@ -115,6 +118,7 @@ contract PrivatePool {
         transferVerifier = ITransferVerifier(_transferVerifier);
         withdrawVerifier = IWithdrawVerifier(_withdrawVerifier);
         createNoirAccountVerifier = ICreateNoirAccountVerifier(_createNoirAccountVerifier);
+        noirAccountOwnershipVerifier = INoirAccountOwnershipVerifier(_noirAccountOwnershipVerifier);
         poseidon = IPoseidon(_poseidon);
         relayer = _relayer;
         relayerZkPubkey = _relayerZkPubkey;
@@ -596,16 +600,16 @@ contract PrivatePool {
     }
 
 
-    // Cmx = Poseidon(4, zkPubKey, r, "CREATE_NOIR_ACCOUNT")
+    // Cmx = Poseidon(4, zkPubKey, r)
     // r is stored in the encryptedNote
     function createNoirAccount(CreateNoirAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
     
-        require(!noirAccountCommitments[cmx], "NoirAccount already exists");
+        require(noirAccounts[cmx] == address(0), "NoirAccount already exists");
         for (uint8 i = 0; i < calls.length; i++ ) {
             _singleCreateNACall(calls[i], cmx);
         }
-        new NoirAccount(cmx);
-        noirAccountCommitments[cmx] = true;
+        NoirAccount account = new NoirAccount(cmx , noirAccountOwnershipVerifier);
+        noirAccounts[cmx] = address(account);
         emit NoirAccountCreated(cmx, eNote);
 
     }

@@ -22,13 +22,40 @@ Testing NoirAccount,
 For now its only public owner. 
 */
 
+interface INoirAccountOwnershipVerifier {
+    function verifyProof(
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[6] calldata publicSignals
+    ) external view returns (bool);
+}
+
 contract NoirAccount is IERC721Receiver, IERC1155Receiver {
     bytes32 public commitment;
     uint256 public nonce; // to protect from the phishing using the same proof.
+    INoirAccountOwnershipVerifier public immutable noirAccountOwnershipVerifier;
+    uint256 internal constant SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
-    modifier onlyUser() {
+    function _verifyOwnership(
+        bytes32 callCmx,  
+        address target,
+        uint256 value,
+        bytes calldata data,       
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+        ) internal view  {
+        uint256 dataHash = uint256(keccak256(data)) % SNARK_SCALAR_FIELD; 
+        uint256[6] memory publicSignals; 
+        publicSignals[0] = uint256(commitment); 
+        publicSignals[1] = uint256(callCmx); 
+        publicSignals[2] = nonce; 
+        publicSignals[3] = uint256(uint160(target)); 
+        publicSignals[4] = value; 
+        publicSignals[5] = dataHash;
 
-        _;
+        require(noirAccountOwnershipVerifier.verifyProof(a, b, c, publicSignals),"Noir Account ownership verification failed");
     }
 
 
@@ -39,23 +66,29 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
         bytes result
     );
 
-    constructor(bytes32 _commitment) {
+    constructor(bytes32 _commitment, INoirAccountOwnershipVerifier _verifier) {
         commitment = _commitment;
+        noirAccountOwnershipVerifier = _verifier;
     }
 
     function execute(
         address target,
         uint256 value,
-        bytes calldata data
-    ) external onlyUser returns (bytes memory result){
+        bytes calldata data,
+        bytes32 callCommitment,
+        // zkproof
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) external returns (bytes memory result){
         require(target != address(0), "No address, Please provide valid address");
-
+        _verifyOwnership(callCommitment,target,value,data,a,b,c);
         (bool success, bytes memory res) =
             target.call{value: value}(data);
         
         require(success, "Execution failed");
 
-        emit Executed(target, value, data, result);
+        emit Executed(target, value, data, res);
         nonce++;
 
         return res;
