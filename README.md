@@ -1,4 +1,3 @@
-```md
 # 🌑 NoirIt Wallet
 
 > A private smart wallet for Monad.
@@ -209,4 +208,3 @@ while maintaining:
 - 🧩 Seamless smart wallet interactions
 
 ---
-```
