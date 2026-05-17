@@ -733,6 +733,76 @@ contract NoirPool {
         }
     }
 
+    struct ExecuteFunctionCall {
+        // zk proof
+        uint256[2] a;
+        uint256[2][2] b;
+        uint256[2] c;
+        //input details
+        uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
+        bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
+        uint256[MAX_INPUTS] poolIds; // poolid of that root
+        bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
+        // outputs (maximum of 2)
+        bytes32 C1; // change commitment
+        bytes32 C2; // relayer commitment
+        bytes encryptedNote1; // change encrypted note
+        bytes encryptedNote2; // relayer encrypted note
+        uint256 callValue; // portion of value from this call to the function call's value
+    }
+
+    function executeFunction(
+        ExecuteFunctionCall[] calldata calls,
+        address target,
+        uint256 value,
+        bytes calldata data,
+        bytes32 callCommitment,
+        // zkproof
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c
+    ) external {
+        for (uint8 i = 0; i < calls.length ; i++) {
+            _singleExecuteFunction(calls[i]);
+        }
+    }
+
+    function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal {
+        // validate the inputs
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            require(
+                call.enabled[i] * (1 - call.enabled[i]) == 0,
+                "Invalid enable flag"
+            );
+            if (call.enabled[i] == 0) {
+                continue;
+            }
+            require(call.poolIds[i] < pools.length, "Invalid poolId");
+            Pool storage p = pools[call.poolIds[i]];
+            require(p.validRoot[call.roots[i]], "Invalid root");
+
+            require(
+                !nullifierSpent[call.nullifiers[i]],
+                "Nullifier already spent"
+            );
+            // all nullifiers in a Transfer call must be unique
+            for (uint8 j = 0; j < i; j++) {
+                if (call.enabled[j] == 0) continue;
+
+                require(
+                    call.nullifiers[i] != call.nullifiers[j],
+                    "Duplicate nullifier"
+                );
+            }
+        }
+
+        //duplicate commitment check
+        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
+            require(call.C1 != call.C2, "Duplicate commitments");
+        }
+
+    }
+
 
 
     // helper functions
