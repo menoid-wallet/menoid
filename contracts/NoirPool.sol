@@ -36,6 +36,14 @@ interface ICreateNoirAccountVerifier {
         uint256[18] calldata publicSignals
     ) external view returns (bool);
 }
+interface IExecuteFunctionCallVerifier {
+    function verifyProof(
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[18] calldata publicSignals
+    ) external view returns (bool);
+}
 
 interface IPoseidon {
     function poseidon(
@@ -87,6 +95,7 @@ contract NoirPool {
     IWithdrawVerifier public immutable withdrawVerifier;
     ICreateNoirAccountVerifier public immutable createNoirAccountVerifier;
     INoirAccountOwnershipVerifier public immutable noirAccountOwnershipVerifier;
+    IExecuteFunctionCallVerifier public immutable executeFunCallVerifier;
 
     // poseidon
     IPoseidon public immutable poseidon;
@@ -110,6 +119,7 @@ contract NoirPool {
         address _withdrawVerifier,
         address _createNoirAccountVerifier,
         address _noirAccountOwnershipVerifier,
+        address _executeCallVerifier,
         address _poseidon,
         address _relayer,
         uint256 _relayerZkPubkey
@@ -119,6 +129,7 @@ contract NoirPool {
         withdrawVerifier = IWithdrawVerifier(_withdrawVerifier);
         createNoirAccountVerifier = ICreateNoirAccountVerifier(_createNoirAccountVerifier);
         noirAccountOwnershipVerifier = INoirAccountOwnershipVerifier(_noirAccountOwnershipVerifier);
+        executeFunCallVerifier = IExecuteFunctionCallVerifier(_executeCallVerifier);
         poseidon = IPoseidon(_poseidon);
         relayer = _relayer;
         relayerZkPubkey = _relayerZkPubkey;
@@ -656,6 +667,7 @@ contract NoirPool {
         // nullifiers, - MAX_INPUTS
         // out_enabled, - 2
         // c_outs - 2
+        // cmx - 1
 
         uint256[18] memory publicSignals;
         uint8 idx = 0;
@@ -762,9 +774,14 @@ contract NoirPool {
         uint256[2][2] calldata b,
         uint256[2] calldata c
     ) external {
+        uint256 totalValue = 0;
         for (uint8 i = 0; i < calls.length ; i++) {
+            totalValue += calls[i].callValue;
             _singleExecuteFunction(calls[i]);
         }
+        require(totalValue == value,"Values mismatched");
+        // exectution logic to be added here
+
     }
 
     function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal {
@@ -799,6 +816,86 @@ contract NoirPool {
         //duplicate commitment check
         if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
             require(call.C1 != call.C2, "Duplicate commitments");
+        }
+
+        /* Public signals
+        relayer, - 1
+        enabled, - MAX_INPUTS
+        roots,   - MAX_INPUTS
+        nullifiers, - MAX_INPUTS
+        out_enabled, - 2
+        c_outs, - 2
+        callValue - 1
+        */
+        uint256[18] memory publicSignals;
+        uint8 idx = 0;
+        publicSignals[idx++] = relayerZkPubkey;
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.enabled[i]);
+        }
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.roots[i]);
+        }
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.nullifiers[i]);
+        }
+
+        // outputs enabled
+        bytes32[] memory tempOutCmx = new bytes32[](2);
+        uint8 cmxCount = 0;
+        if (call.C1 != ZERO_COMMITMENT) {
+            publicSignals[idx++] = 1;
+            tempOutCmx[cmxCount++] = call.C1;
+        } else {
+            publicSignals[idx++] = 0;
+        }
+
+        if (call.C2 != ZERO_COMMITMENT) {
+            publicSignals[idx++] = 1;
+            tempOutCmx[cmxCount++] = call.C2;
+        } else {
+            publicSignals[idx++] = 0;
+        }
+
+        // c_outs
+        publicSignals[idx++] = uint256(call.C1);
+        publicSignals[idx++] = uint256(call.C2);
+
+        // callValue
+        publicSignals[idx++] = call.callValue;
+
+        require(executeFunCallVerifier.verifyProof(call.a, call.b, call.c, publicSignals),"Execute function call proof verification failed");
+
+        // add nullifiers to the pool
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            if (call.enabled[i] == 0) continue;
+            require(
+                !nullifierSpent[call.nullifiers[i]],
+                "Nullifier already exists"
+            );
+            nullifierSpent[call.nullifiers[i]] = true;
+            emit NullifierSpent(call.nullifiers[i]);
+        }
+
+        // add commitments to the pool
+        bytes32[] memory commitments = new bytes32[](cmxCount);
+        for (uint8 i = 0; i < cmxCount; i++) {
+            commitments[i] = tempOutCmx[i];
+        }
+        InsertedNote[] memory insertedNotes = _insertBatch(commitments);
+        for (uint8 i = 0; i < insertedNotes.length; i++) {
+            bytes memory enc;
+            if (insertedNotes[i].commitment == call.C1)
+                enc = call.encryptedNote1;
+            else if (insertedNotes[i].commitment == call.C2)
+                enc = call.encryptedNote2;
+            else revert("Unknown commiment");
+
+            emit NoteCreated(
+                insertedNotes[i].poolId,
+                insertedNotes[i].commitment,
+                enc
+            );
         }
 
     }
