@@ -80,7 +80,7 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c
-    ) external returns (bytes memory result){
+    ) external payable returns (bytes memory result){
         require(target != address(0), "No address, Please provide valid address");
         _verifyOwnership(callCommitment,target,value,data,a,b,c);
         (bool success, bytes memory res) =

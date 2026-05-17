@@ -768,11 +768,13 @@ contract NoirPool {
         address target,
         uint256 value,
         bytes calldata data,
+        bytes32 commitment, // owndership commitment of the noir account
         bytes32 callCommitment,
         // zkproof
         uint256[2] calldata a,
         uint256[2][2] calldata b,
-        uint256[2] calldata c
+        uint256[2] calldata c,
+        address noirAccount
     ) external {
         uint256 totalValue = 0;
         for (uint8 i = 0; i < calls.length ; i++) {
@@ -780,8 +782,18 @@ contract NoirPool {
             _singleExecuteFunction(calls[i]);
         }
         require(totalValue == value,"Values mismatched");
-        // exectution logic to be added here
 
+        require(noirAccounts[commitment] == noirAccount , "Noir account mismatch");
+
+        NoirAccount(payable(noirAccount)).execute{value: value} (
+            target,
+            value,
+            data,
+            callCommitment,
+            a,
+            b,
+            c
+        );
     }
 
     function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal {
