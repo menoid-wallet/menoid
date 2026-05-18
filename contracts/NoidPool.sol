@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./NoirAccount.sol";
+import "./NoidAccount.sol";
 interface IDepositVerifier {
     function verifyProof(
         uint256[2] calldata a,
@@ -28,7 +28,7 @@ interface IWithdrawVerifier {
     ) external view returns (bool);
 }
 
-interface ICreateNoirAccountVerifier {
+interface ICreateNoidAccountVerifier {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
@@ -65,7 +65,7 @@ interface IPoseidon {
  * All sensitive data is handled off-chain by wallets.
  * On-chain logic only verifies cryptographic correctness.
  */
-contract NoirPool {
+contract NoidPool {
     /**
      * Wallet:
      *      Get signature from real wallet
@@ -87,14 +87,14 @@ contract NoirPool {
     //global state
     mapping(bytes32 => bool) public nullifierSpent;
     mapping(bytes32 => bool) public commitmentExists;
-    mapping(bytes32 => address) public noirAccounts;
+    mapping(bytes32 => address) public NoidAccounts;
 
     // verifiers
     IDepositVerifier public immutable depositVerifier;
     ITransferVerifier public immutable transferVerifier;
     IWithdrawVerifier public immutable withdrawVerifier;
-    ICreateNoirAccountVerifier public immutable createNoirAccountVerifier;
-    INoirAccountOwnershipVerifier public immutable noirAccountOwnershipVerifier;
+    ICreateNoidAccountVerifier public immutable createNoidAccountVerifier;
+    INoidAccountOwnershipVerifier public immutable NoidAccountOwnershipVerifier;
     IExecuteFunctionCallVerifier public immutable executeFunCallVerifier;
 
     // poseidon
@@ -108,8 +108,8 @@ contract NoirPool {
     event NewPool(uint256 indexed poolId); //indexed-> searchable/filterable
     // we dont store the encryptedNotes on chain ( storage gas ) instead we emit them as events
     event NoteCreated(uint256 poolId, bytes32 commitment, bytes encryptedNote);
-    // event for noir account creation
-    event NoirAccountCreated(bytes32 commitment, bytes encryptedNote);
+    // event for Noid account creation
+    event NoidAccountCreated(bytes32 commitment, bytes encryptedNote);
     // nullfier spent
     event NullifierSpent(bytes32 nullifier);
 
@@ -117,8 +117,8 @@ contract NoirPool {
         address _depositVerifier,
         address _transferVerifier,
         address _withdrawVerifier,
-        address _createNoirAccountVerifier,
-        address _noirAccountOwnershipVerifier,
+        address _createNoidAccountVerifier,
+        address _NoidAccountOwnershipVerifier,
         address _executeCallVerifier,
         address _poseidon,
         address _relayer,
@@ -127,8 +127,8 @@ contract NoirPool {
         depositVerifier = IDepositVerifier(_depositVerifier);
         transferVerifier = ITransferVerifier(_transferVerifier);
         withdrawVerifier = IWithdrawVerifier(_withdrawVerifier);
-        createNoirAccountVerifier = ICreateNoirAccountVerifier(_createNoirAccountVerifier);
-        noirAccountOwnershipVerifier = INoirAccountOwnershipVerifier(_noirAccountOwnershipVerifier);
+        createNoidAccountVerifier = ICreateNoidAccountVerifier(_createNoidAccountVerifier);
+        NoidAccountOwnershipVerifier = INoidAccountOwnershipVerifier(_NoidAccountOwnershipVerifier);
         executeFunCallVerifier = IExecuteFunctionCallVerifier(_executeCallVerifier);
         poseidon = IPoseidon(_poseidon);
         relayer = _relayer;
@@ -593,7 +593,7 @@ contract NoirPool {
     }
 
     // private accounts creation
-    struct CreateNoirAccountCall {
+    struct CreateNoidAccountCall {
         // zk proof
         uint256[2] a;
         uint256[2][2] b;
@@ -613,19 +613,19 @@ contract NoirPool {
 
     // Cmx = Poseidon(4, zkPubKey, r)
     // r is stored in the encryptedNote
-    function createNoirAccount(CreateNoirAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
+    function createNoidAccount(CreateNoidAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
     
-        require(noirAccounts[cmx] == address(0), "NoirAccount already exists");
+        require(NoidAccounts[cmx] == address(0), "NoidAccount already exists");
         for (uint8 i = 0; i < calls.length; i++ ) {
             _singleCreateNACall(calls[i], cmx);
         }
-        NoirAccount account = new NoirAccount(cmx , noirAccountOwnershipVerifier);
-        noirAccounts[cmx] = address(account);
-        emit NoirAccountCreated(cmx, eNote);
+        NoidAccount account = new NoidAccount(cmx , NoidAccountOwnershipVerifier);
+        NoidAccounts[cmx] = address(account);
+        emit NoidAccountCreated(cmx, eNote);
 
     }
 
-    function _singleCreateNACall(CreateNoirAccountCall calldata call , bytes32 cmx) internal {
+    function _singleCreateNACall(CreateNoidAccountCall calldata call , bytes32 cmx) internal {
         // validate the inputs
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
             require(
@@ -703,13 +703,13 @@ contract NoirPool {
         publicSignals[idx++] = uint256(call.C1);
         publicSignals[idx++] = uint256(call.C2);
 
-        // commitment of Noir Account
+        // commitment of Noid Account
         publicSignals[idx++] = uint256(cmx);
 
         // proof verification
         require(
-            createNoirAccountVerifier.verifyProof(call.a, call.b, call.c, publicSignals),
-            "Noir Account creation proof verification failed"
+            createNoidAccountVerifier.verifyProof(call.a, call.b, call.c, publicSignals),
+            "Noid Account creation proof verification failed"
         );
 
         // add nullifiers to the pool
@@ -768,13 +768,13 @@ contract NoirPool {
         address target,
         uint256 value,
         bytes calldata data,
-        bytes32 commitment, // owndership commitment of the noir account
+        bytes32 commitment, // owndership commitment of the Noid account
         bytes32 callCommitment,
         // zkproof
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        address noirAccount
+        address noidAccount
     ) external {
         uint256 totalValue = 0;
         for (uint8 i = 0; i < calls.length ; i++) {
@@ -783,9 +783,9 @@ contract NoirPool {
         }
         require(totalValue == value,"Values mismatched");
 
-        require(noirAccounts[commitment] == noirAccount , "Noir account mismatch");
+        require(NoidAccounts[commitment] == noidAccount , "Noid account mismatch");
 
-        NoirAccount(payable(noirAccount)).execute{value: value} (
+        NoidAccount(payable(noidAccount)).execute{value: value} (
             target,
             value,
             data,

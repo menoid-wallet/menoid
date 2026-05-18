@@ -1,27 +1,29 @@
-# 🌑 NoirIt Wallet
+# 🌑 Menoid Wallet
 
-> A private smart wallet for Monad.
+> An AI-native private smart wallet for Monad.
 
 ---
 
 # ✨ Introduction
 
-NoirIt is a privacy-focused smart wallet built for the Monad ecosystem.
+Menoid is an AI-native private smart wallet built for the Monad ecosystem.
 
-Unlike traditional wallets that publicly expose every interaction, NoirIt aims to provide a private execution layer that enables users to:
+Unlike traditional wallets that publicly expose every interaction and require users to manually understand complex onchain actions, Menoid combines privacy infrastructure, smart accounts, and AI-assisted execution into a seamless wallet experience.
 
-- 🕶️ Transfer assets privately
-- 🔐 Interact with onchain protocols privately
-- 🧠 Use zk-authorized smart accounts
-- 🌐 Execute protocol interactions through smart execution accounts
-- ⚡ Experience fast and low-cost privacy interactions on Monad
+Menoid enables users to:
 
-NoirIt explores the intersection of:
-
-- 🔏 Privacy
-- 🧩 Smart Accounts
-- 🛡️ zk Proof Systems
-- 🚀 Monad Infrastructure
+- 🌍 Use both Public Mode and Noid Mode depending on how visible they want to be onchain
+- 🕶️ Transfer assets privately through Noid Mode
+- 🔐 Interact with onchain protocols privately through Noid Smart Accounts
+- 🤖 Get an integrated AI companion called Meno across the entire wallet experience
+- ⚡ Let Meno simulate transactions before execution and explain what could happen
+- 🚨 Receive warnings from Meno about suspicious or dangerous onchain activities
+- 🔎 Explore and discover Monad protocols, NFT collections, DeFi platforms, and new onchain opportunities through Meno
+- 🚀 Receive live market-style suggestions from Meno — for example, notifying users when a Monad token suddenly surges in activity, volume, or price movement and suggesting possible actions like buy, sell, or swap
+- ⏰ Schedule secure transfers, swaps, purchases, and automated actions — even in Noid Mode
+- 📰 Stay updated with crypto and Monad ecosystem news through Menews
+- 💬 Chat with Meno about crypto, protocols, wallet activity, Monad, and the Menoid ecosystem
+- 🛡️ Maintain privacy while remaining fully composable with Monad protocols
 
 ---
 
@@ -32,7 +34,11 @@ NoirIt explores the intersection of:
 - Circom
 - SnarkJS
 - Groth16
-- Poseidon Hash
+
+### 🤖 AI Infrastructure
+
+- AI Wallet Companion (Meno)
+- AI Transaction Simulation & Risk Analysis
 
 ### ⛓️ Smart Contracts
 
@@ -42,7 +48,7 @@ NoirIt explores the intersection of:
 
 ### 🌐 Wallet & Frontend
 
-- React
+- Next
 - Vite
 - Chrome Extension APIs
 - CRXJS
@@ -109,48 +115,53 @@ NoirIt explores the intersection of:
 
 ### 👻 Private Execution Infrastructure
 
-- 🧠 Private smart account abstraction
+- 🧠 Private smart account abstraction (Noid Account)
 - 🌐 Private protocol interaction system
 - 📜 Arbitrary smart contract execution
 - 🔄 zk-authorized execution accounts
 - 🔐 Private execution infrastructure for Monad
 
-### 🌑 NoirIt Wallet
+### 🌑 Menoid Wallet
 
 - 🖥️ Complete browser wallet extension
-- 📚 Wallet integration libraries
+- 📚 Wallet integration libraries (dev SDKs)
 - 🔗 Monad wallet integration
 
 ---
 
-# 🌌 NoirIt — Private Execution Layer
+# 🌌 Menoid — AI-Native Private Wallet Infrastructure
 
 > Not just private balances.  
 > Private on-chain existence.
+> An AI companion called Meno across the entire wallet experience.
 
 ---
 
 ### 👻 Vision
 
-NoirIt expands beyond private transfers into a complete privacy-first smart wallet ecosystem for Monad.
+Menoid expands beyond private transfers into a complete AI-native private smart wallet ecosystem for Monad.
 
-The goal is not only to hide balances — but to let users decide how visible they want to be onchain.
+The goal is not only to hide balances — but to give users full control over how they exist and interact onchain, with an integrated AI companion that helps users navigate crypto, understand risks, discover opportunities, and interact smarter across the entire wallet experience.
 
 Users should be able to:
 
-- 👻 Become ghosts onchain
-- 🌍 Choose between public and private protocol interactions
-- 🧠 Interact with smart contracts through zk-authorized execution accounts
-- ⚡ Use a seamless wallet experience with integrated privacy infrastructure
+- 🌍 Switch seamlessly between Public Mode and Noid Mode
+- 👻 Become ghosts onchain when privacy is needed
+- 🔐 Interact with protocols privately through Noid infrastructure
+- 🧠 Execute interactions through zk-authorized smart accounts
+- 🤖 Use an integrated AI companion called Meno across the wallet experience
+- ⚡ Understand transactions, risks, and protocol behavior before execution
+- 🔎 Discover new protocols, NFTs, tokens, and ecosystem opportunities through Meno
+- 📰 Stay updated with Monad and crypto ecosystem activity through Menews
 - 🔐 Hold balances privately while remaining fully composable with Monad protocols
 
 ---
 
 ### 🌐 Private Execution Layer
 
-NoirIt introduces a private execution architecture where users interact with protocols through private smart execution accounts.
+Menoid introduces a private execution architecture where users interact with protocols through private smart execution accounts ( Noid Smart Accounts).
 
-Instead of directly exposing wallet activity publicly, NoirIt abstracts:
+Instead of directly exposing wallet activity publicly, Menoid abstracts:
 
 - 👤 User identity
 - 🔗 Protocol interaction relationships
@@ -173,32 +184,39 @@ feel native inside the Monad ecosystem.
 
 ### 🖥️ Wallet Ecosystem
 
-NoirIt is being designed as a complete smart wallet infrastructure for Monad.
+Menoid is being designed as a complete AI-native smart wallet infrastructure for Monad.
 
 The ecosystem direction includes:
 
 - 🌑 Browser wallet extension
 - ⚡ Sidebar-first wallet architecture
+- 🤖 Integrated AI companion called Meno across the wallet experience
 - 📚 Developer SDKs & integration libraries
 - 🔗 Wallet-provider injection system
 - 🧩 Smart account infrastructure
 - 📡 Relayer-powered private execution
 - 🛡️ zk-authorized transaction flows
+- 📰 Menews — integrated Monad & crypto ecosystem updates by Meno
+- ⏰ Secure scheduled transfers, swaps, purchases, and automated actions
+- 🔎 AI-powered protocol, NFT, and token discovery infrastructure
 
-The goal is to provide a wallet experience where privacy becomes an integrated primitive — not an additional tool.
+The goal is to provide a wallet experience where privacy and AI become integrated primitives — not additional tools.
 
 ---
 
 ### ⚡ Direction
 
-NoirIt aims to evolve into:
+Menoid aims to evolve into:
 
-> A complete private execution layer for Monad.
+> An AI-native private execution layer for Monad.
 
 A smart wallet where users can:
 
 - 🌍 Interact publicly when desired
-- 👻 Disappear privately when needed
+- 👻 Disappear privately through Noid Mode when needed
+- 🤖 Navigate crypto with an integrated AI companion called Meno
+- ⚡ Understand transactions and protocol interactions before execution
+- 🔎 Discover opportunities, tokens, NFTs, and ecosystem activity in real time
 
 while maintaining:
 
@@ -206,5 +224,6 @@ while maintaining:
 - 🌐 Full protocol composability
 - 🔐 Strong privacy guarantees
 - 🧩 Seamless smart wallet interactions
+- 🛡️ Intelligent onchain safety and guidance
 
 ---

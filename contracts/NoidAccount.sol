@@ -5,11 +5,11 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 
 /* 
-NoirAccount is the Private Identity of the user. 
+NoidAccount is the Private Identity of the user. 
 the owner of this contract is set as a commitment. (not an address)
 
-User initially creates the NoirAccount privately by sending the commitment, private notes to the relayer.
-Relayer deployes that NoirAccount on behalf of the user, collecting the fees privately.
+User initially creates the NoidAccount privately by sending the commitment, private notes to the relayer.
+Relayer deployes that NoidAccount on behalf of the user, collecting the fees privately.
 User submits the targetContract, value, data (i.e pararmeters) , zkProof - proving he owns that commmitment.
 to the Relayer.
 Relayer calls the execute function with the required parameters + zkProof.
@@ -18,11 +18,11 @@ and the function gets executed.
 */
 
 /* 
-Testing NoirAccount,
+Testing NoidAccount,
 For now its only public owner. 
 */
 
-interface INoirAccountOwnershipVerifier {
+interface INoidAccountOwnershipVerifier {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
@@ -31,10 +31,10 @@ interface INoirAccountOwnershipVerifier {
     ) external view returns (bool);
 }
 
-contract NoirAccount is IERC721Receiver, IERC1155Receiver {
+contract NoidAccount is IERC721Receiver, IERC1155Receiver {
     bytes32 public commitment;
     uint256 public nonce; // to protect from the phishing using the same proof.
-    INoirAccountOwnershipVerifier public immutable noirAccountOwnershipVerifier;
+    INoidAccountOwnershipVerifier public immutable NoidAccountOwnershipVerifier;
     uint256 internal constant SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
     function _verifyOwnership(
@@ -55,7 +55,7 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
         publicSignals[4] = value; 
         publicSignals[5] = dataHash;
 
-        require(noirAccountOwnershipVerifier.verifyProof(a, b, c, publicSignals),"Noir Account ownership verification failed");
+        require(NoidAccountOwnershipVerifier.verifyProof(a, b, c, publicSignals),"Noid Account ownership verification failed");
     }
 
 
@@ -66,9 +66,9 @@ contract NoirAccount is IERC721Receiver, IERC1155Receiver {
         bytes result
     );
 
-    constructor(bytes32 _commitment, INoirAccountOwnershipVerifier _verifier) {
+    constructor(bytes32 _commitment, INoidAccountOwnershipVerifier _verifier) {
         commitment = _commitment;
-        noirAccountOwnershipVerifier = _verifier;
+        NoidAccountOwnershipVerifier = _verifier;
     }
 
     function execute(
