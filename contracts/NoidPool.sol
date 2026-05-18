@@ -3,14 +3,9 @@ pragma solidity ^0.8.20;
 
 import "./NoidAccount.sol";
 import "./libraries/Interfaces.sol";
-
-
-interface IPoseidon {
-    function poseidon(
-        uint256[2] calldata input
-    ) external pure returns (uint256);
-}
-
+import "./libraries/poolLib.sol";
+import "./libraries/Types.sol";
+import "./NoidAccountManager.sol";
 /**
  * ShieldedPool
  *
@@ -26,6 +21,7 @@ interface IPoseidon {
  * On-chain logic only verifies cryptographic correctness.
  */
 contract NoidPool {
+    using PoolLib for PoolLib.Pool;
     /**
      * Wallet:
      *      Get signature from real wallet
@@ -34,13 +30,6 @@ contract NoidPool {
      *          zkPublicKey = Poseidon(PrivateKey) // used for transfer
      *          encPublicKey = EC_Derive(PrivateKey) // used for encrypting notes
      */
-
-    // constants
-    uint32 public constant TREE_DEPTH = 20;
-    uint32 public constant ROOT_HISTORY_SIZE = 10;
-    uint32 public constant MAX_LEAF = uint32(1) << TREE_DEPTH; // 2**20 value
-    uint32 constant MAX_INPUTS = 4;
-
     // zero commitment - used in the place of empty commitment (wallet must use same convention)
     bytes32 public constant ZERO_COMMITMENT = bytes32(0);
 
@@ -54,8 +43,11 @@ contract NoidPool {
     ITransferVerifier public immutable transferVerifier;
     IWithdrawVerifier public immutable withdrawVerifier;
     ICreateNoidAccountVerifier public immutable createNoidAccountVerifier;
-    INoidAccountOwnershipVerifier public immutable NoidAccountOwnershipVerifier;
+    INoidAccountOwnershipVerifier public immutable noidAccountOwnershipVerifier;
     IExecuteFunctionCallVerifier public immutable executeFunCallVerifier;
+
+
+    NoidAccountManager public immutable noidAccountManager;
 
     // poseidon
     IPoseidon public immutable poseidon;
@@ -78,62 +70,30 @@ contract NoidPool {
         address _transferVerifier,
         address _withdrawVerifier,
         address _createNoidAccountVerifier,
-        address _NoidAccountOwnershipVerifier,
+        address _noidAccountOwnershipVerifier,
         address _executeCallVerifier,
         address _poseidon,
         address _relayer,
-        uint256 _relayerZkPubkey
+        uint256 _relayerZkPubkey,
+        address _noidAccountManager
     ) {
         depositVerifier = IDepositVerifier(_depositVerifier);
         transferVerifier = ITransferVerifier(_transferVerifier);
         withdrawVerifier = IWithdrawVerifier(_withdrawVerifier);
         createNoidAccountVerifier = ICreateNoidAccountVerifier(_createNoidAccountVerifier);
-        NoidAccountOwnershipVerifier = INoidAccountOwnershipVerifier(_NoidAccountOwnershipVerifier);
+        noidAccountOwnershipVerifier = INoidAccountOwnershipVerifier(_noidAccountOwnershipVerifier);
         executeFunCallVerifier = IExecuteFunctionCallVerifier(_executeCallVerifier);
         poseidon = IPoseidon(_poseidon);
+        noidAccountManager =
+            NoidAccountManager(
+                _noidAccountManager
+            );
         relayer = _relayer;
         relayerZkPubkey = _relayerZkPubkey;
-        _createPool();
+        PoolLib.createPool(pools, poseidon);(pools, poseidon);
     }
 
-    struct Pool {
-        bytes32[TREE_DEPTH] zeros; // the zeros are used to know the value of Z0, Z1, Z2 (i.e the zero hash value of each level)
-        bytes32[TREE_DEPTH] filledSubtrees; // Stores the latest filled LEFT subtree hash at each tree level
-        // its an optimistic approach to compute the root
-        // explanantion of filled subtrees is provided at notes/filled_subtress.txt
-        bytes32 root; //the current root
-        bytes32[ROOT_HISTORY_SIZE] rootHistory; // stores the recent history of roots , so the system allows mempool delays to improve UX.
-        uint32 rootPtr; // where next root is to be inserted in the circular root history
-        uint32 nextIdx; // where next leaf insertion should happen
-        mapping(bytes32 => bool) validRoot; //fast membership check for acceptable roots
-        // O(1) lookup wether the root is still valid (i.e still in root history) or not
-    }
-
-    Pool[] public pools;
-
-    function _createPool() internal {
-        Pool storage p = pools.push();
-        bytes32 zero = bytes32(0);
-
-        for (uint8 i = 0; i < TREE_DEPTH; i++) {
-            p.zeros[i] = zero; // the Z0,Z1,Z2 ...
-            p.filledSubtrees[i] = zero; // inital zero tree
-            zero = bytes32(poseidon.poseidon([uint256(zero), uint256(zero)])); // Z1 = hash(Z0,Z0) ... Z20 = hash(Z19,Z19)
-        }
-
-        p.root = zero; // Z20
-        p.rootHistory[0] = zero;
-        p.rootPtr = 0;
-        p.nextIdx = 0;
-        p.validRoot[zero] = true;
-
-        emit NewPool(pools.length - 1);
-    }
-
-    // returns current pool
-    function _currentPool() internal view returns (Pool storage) {
-        return pools[pools.length - 1];
-    }
+    PoolLib.Pool[] public pools;
 
     // Depsoit
     //  * Public entry into the shielded pool.
@@ -207,11 +167,10 @@ contract NoidPool {
         }
     }
 
-    struct Inputs {
-        uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
-        bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
-        uint256[MAX_INPUTS] poolIds; // poolid of that root
-        bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
+    function verifyInputs( 
+        Inputs calldata inputs 
+    ) external view { 
+        _verifyInputs(inputs); 
     }
 
     // inputs validation helper function
@@ -225,7 +184,7 @@ contract NoidPool {
                 continue;
             }
             require(inputs.poolIds[i] < pools.length, "Invalid poolId");
-            Pool storage p = pools[inputs.poolIds[i]];
+            PoolLib.Pool storage p = pools[inputs.poolIds[i]];
             require(p.validRoot[inputs.roots[i]], "Invalid root");
 
             require(
@@ -243,41 +202,6 @@ contract NoidPool {
             }
         }
     }
-
-    // transfer call
-    struct TransferCall {
-        // zk proof
-        uint256[2] a;
-        uint256[2][2] b;
-        uint256[2] c;
-        //input details
-        Inputs inputs;
-        // outputs (maximum of 3)
-        bytes32 C1; // receiver commitment (Required)
-        bytes32 C2; // change commitment
-        bytes32 C3; // relayer commitment
-        bytes encryptedNote1; // receiver encrypted note
-        bytes encryptedNote2; // change encrypted note
-        bytes encryptedNote3; // relayer encrypted note
-    }
-
-    /*
-     * - Each TransferCall consumes between 1 and MAX_INPUTS private input notes
-     * - Multiple TransferCalls can be executed atomically in a single transaction
-     * - Later TransferCalls may spend commitments created by earlier TransferCalls
-     *   within the same transaction
-     * - This enables note aggregation and large fan-in transfers
-     *   while remaining atomic and private
-     */
-
-    /**
-     * Zk proof for transfer
-     * Consumes up to MAX_INPUTS (e.g. 16) private input notes
-     * belonging to a single owner and creates up to 3 new
-     * private output notes in one proof.
-     *
-     * For exact understanding Refer: notes/zk_proof_transfer.txt
-     */
 
     function transfer(TransferCall[] memory calls) external {
         for (uint256 i = 0; i < calls.length; i++) {
@@ -399,29 +323,6 @@ contract NoidPool {
         }
     }
 
-    // withdraw
-    /**
-     * input commiments are surrendered
-     * and the value of those inputs is transferred to the "To" account.
-     * in withdraw also we need 2 extra commitments because 1. change 2. relayer
-     */
-
-    struct WithdrawCall {
-        // zkproof
-        uint256[2] a;
-        uint256[2][2] b;
-        uint256[2] c;
-        // input details
-        Inputs inputs;
-        // output details
-        bytes32 C1; //change commitment
-        bytes32 C2; //relayer commitment
-        bytes encryptedNote1; // change encrypted note
-        bytes encryptedNote2; // relayer encrypted note
-        //withdraw amount for this call
-        uint256 withdrawAmount;
-    }
-
     function withdraw(
         WithdrawCall[] calldata calls,
         address payable to
@@ -529,22 +430,6 @@ contract NoidPool {
         }
     }
 
-    // private accounts creation
-    struct CreateNoidAccountCall {
-        // zk proof
-        uint256[2] a;
-        uint256[2][2] b;
-        uint256[2] c;
-        //input details
-        Inputs inputs;
-        // outputs (maximum of 2)
-        bytes32 C1; // change commitment
-        bytes32 C2; // relayer commitment
-        bytes encryptedNote1; // change encrypted note
-        bytes encryptedNote2; // relayer encrypted note
-    }
-
-
     // Cmx = Poseidon(4, zkPubKey, r)
     // r is stored in the encryptedNote
     function createNoidAccount(CreateNoidAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
@@ -553,7 +438,7 @@ contract NoidPool {
         for (uint8 i = 0; i < calls.length; i++ ) {
             _singleCreateNACall(calls[i], cmx);
         }
-        NoidAccount account = new NoidAccount(cmx , NoidAccountOwnershipVerifier);
+        NoidAccount account = new NoidAccount(cmx , noidAccountOwnershipVerifier);
         NoidAccounts[cmx] = address(account);
         emit NoidAccountCreated(cmx, eNote);
 
@@ -569,57 +454,7 @@ contract NoidPool {
             require(call.C1 != call.C2, "Duplicate commitments");
         }
 
-        // public signals to be added
-        // relayer, - 1
-        // enabled, - MAX_INPUTS
-        // roots,   - MAX_INPUTS
-        // nullifiers, - MAX_INPUTS
-        // out_enabled, - 2
-        // c_outs - 2
-        // cmx - 1
-
-        uint256[18] memory publicSignals;
-        uint8 idx = 0;
-        publicSignals[idx++] = relayerZkPubkey;
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.enabled[i]);
-        }
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.roots[i]);
-        }
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
-        }
-
-        // outputs enabled
-        bytes32[] memory tempOutCmx = new bytes32[](2);
-        uint8 cmxCount = 0;
-        if (call.C1 != ZERO_COMMITMENT) {
-            publicSignals[idx++] = 1;
-            tempOutCmx[cmxCount++] = call.C1;
-        } else {
-            publicSignals[idx++] = 0;
-        }
-
-        if (call.C2 != ZERO_COMMITMENT) {
-            publicSignals[idx++] = 1;
-            tempOutCmx[cmxCount++] = call.C2;
-        } else {
-            publicSignals[idx++] = 0;
-        }
-
-        // c_outs
-        publicSignals[idx++] = uint256(call.C1);
-        publicSignals[idx++] = uint256(call.C2);
-
-        // commitment of Noid Account
-        publicSignals[idx++] = uint256(cmx);
-
-        // proof verification
-        require(
-            createNoidAccountVerifier.verifyProof(call.a, call.b, call.c, publicSignals),
-            "Noid Account creation proof verification failed"
-        );
+        // call verify
 
         // add nullifiers to the pool
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
@@ -632,6 +467,7 @@ contract NoidPool {
             emit NullifierSpent(call.inputs.nullifiers[i]);
         }
 
+        (uint8 cmxCount, bytes32[] memory tempOutCmx) = noidAccountManager.verifyCreateAccount(call,cmx);
         // add commitments to the pool
         bytes32[] memory commitments = new bytes32[](cmxCount);
         for (uint8 i = 0; i < cmxCount; i++) {
@@ -654,181 +490,136 @@ contract NoidPool {
         }
     }
 
-    struct ExecuteFunctionCall {
-        // zk proof
-        uint256[2] a;
-        uint256[2][2] b;
-        uint256[2] c;
-        //input details
-        Inputs inputs;
-        // outputs (maximum of 2)
-        bytes32 C1; // change commitment
-        bytes32 C2; // relayer commitment
-        bytes encryptedNote1; // change encrypted note
-        bytes encryptedNote2; // relayer encrypted note
-        uint256 callValue; // portion of value from this call to the function call's value
-    }
+    // function executeFunction(
+    //     ExecuteFunctionCall[] calldata calls,
+    //     address target,
+    //     uint256 value,
+    //     bytes calldata data,
+    //     bytes32 commitment, // owndership commitment of the Noid account
+    //     bytes32 callCommitment,
+    //     // zkproof
+    //     uint256[2] calldata a,
+    //     uint256[2][2] calldata b,
+    //     uint256[2] calldata c,
+    //     address noidAccount
+    // ) external {
+    //     uint256 totalValue = 0;
+    //     for (uint8 i = 0; i < calls.length ; i++) {
+    //         totalValue += calls[i].callValue;
+    //         _singleExecuteFunction(calls[i]);
+    //     }
+    //     require(totalValue == value,"Values mismatched");
 
-    function executeFunction(
-        ExecuteFunctionCall[] calldata calls,
-        address target,
-        uint256 value,
-        bytes calldata data,
-        bytes32 commitment, // owndership commitment of the Noid account
-        bytes32 callCommitment,
-        // zkproof
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        address noidAccount
-    ) external {
-        uint256 totalValue = 0;
-        for (uint8 i = 0; i < calls.length ; i++) {
-            totalValue += calls[i].callValue;
-            _singleExecuteFunction(calls[i]);
-        }
-        require(totalValue == value,"Values mismatched");
+    //     require(NoidAccounts[commitment] == noidAccount , "Noid account mismatch");
 
-        require(NoidAccounts[commitment] == noidAccount , "Noid account mismatch");
+    //     NoidAccount(payable(noidAccount)).execute{value: value} (
+    //         target,
+    //         value,
+    //         data,
+    //         callCommitment,
+    //         a,
+    //         b,
+    //         c
+    //     );
+    // }
 
-        NoidAccount(payable(noidAccount)).execute{value: value} (
-            target,
-            value,
-            data,
-            callCommitment,
-            a,
-            b,
-            c
-        );
-    }
+    // function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal {
+    //     // validate the inputs
+    //     _verifyInputs(call.inputs);
 
-    function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal {
-        // validate the inputs
-        _verifyInputs(call.inputs);
+    //     //duplicate commitment check
+    //     if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
+    //         require(call.C1 != call.C2, "Duplicate commitments");
+    //     }
 
-        //duplicate commitment check
-        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
-            require(call.C1 != call.C2, "Duplicate commitments");
-        }
+    //     /* Public signals
+    //     relayer, - 1
+    //     enabled, - MAX_INPUTS
+    //     roots,   - MAX_INPUTS
+    //     nullifiers, - MAX_INPUTS
+    //     out_enabled, - 2
+    //     c_outs, - 2
+    //     callValue - 1
+    //     */
+    //     uint256[18] memory publicSignals;
+    //     uint8 idx = 0;
+    //     publicSignals[idx++] = relayerZkPubkey;
+    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
+    //         publicSignals[idx++] = uint256(call.inputs.enabled[i]);
+    //     }
+    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
+    //         publicSignals[idx++] = uint256(call.inputs.roots[i]);
+    //     }
+    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
+    //         publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
+    //     }
 
-        /* Public signals
-        relayer, - 1
-        enabled, - MAX_INPUTS
-        roots,   - MAX_INPUTS
-        nullifiers, - MAX_INPUTS
-        out_enabled, - 2
-        c_outs, - 2
-        callValue - 1
-        */
-        uint256[18] memory publicSignals;
-        uint8 idx = 0;
-        publicSignals[idx++] = relayerZkPubkey;
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.enabled[i]);
-        }
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.roots[i]);
-        }
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
-        }
+    //     // outputs enabled
+    //     bytes32[] memory tempOutCmx = new bytes32[](2);
+    //     uint8 cmxCount = 0;
+    //     if (call.C1 != ZERO_COMMITMENT) {
+    //         publicSignals[idx++] = 1;
+    //         tempOutCmx[cmxCount++] = call.C1;
+    //     } else {
+    //         publicSignals[idx++] = 0;
+    //     }
 
-        // outputs enabled
-        bytes32[] memory tempOutCmx = new bytes32[](2);
-        uint8 cmxCount = 0;
-        if (call.C1 != ZERO_COMMITMENT) {
-            publicSignals[idx++] = 1;
-            tempOutCmx[cmxCount++] = call.C1;
-        } else {
-            publicSignals[idx++] = 0;
-        }
+    //     if (call.C2 != ZERO_COMMITMENT) {
+    //         publicSignals[idx++] = 1;
+    //         tempOutCmx[cmxCount++] = call.C2;
+    //     } else {
+    //         publicSignals[idx++] = 0;
+    //     }
 
-        if (call.C2 != ZERO_COMMITMENT) {
-            publicSignals[idx++] = 1;
-            tempOutCmx[cmxCount++] = call.C2;
-        } else {
-            publicSignals[idx++] = 0;
-        }
+    //     // c_outs
+    //     publicSignals[idx++] = uint256(call.C1);
+    //     publicSignals[idx++] = uint256(call.C2);
 
-        // c_outs
-        publicSignals[idx++] = uint256(call.C1);
-        publicSignals[idx++] = uint256(call.C2);
+    //     // callValue
+    //     publicSignals[idx++] = call.callValue;
 
-        // callValue
-        publicSignals[idx++] = call.callValue;
+    //     require(executeFunCallVerifier.verifyProof(call.a, call.b, call.c, publicSignals),"Execute function call proof verification failed");
 
-        require(executeFunCallVerifier.verifyProof(call.a, call.b, call.c, publicSignals),"Execute function call proof verification failed");
+    //     // add nullifiers to the pool
+    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
+    //         if (call.inputs.enabled[i] == 0) continue;
+    //         require(
+    //             !nullifierSpent[call.inputs.nullifiers[i]],
+    //             "Nullifier already exists"
+    //         );
+    //         nullifierSpent[call.inputs.nullifiers[i]] = true;
+    //         emit NullifierSpent(call.inputs.nullifiers[i]);
+    //     }
 
-        // add nullifiers to the pool
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.inputs.enabled[i] == 0) continue;
-            require(
-                !nullifierSpent[call.inputs.nullifiers[i]],
-                "Nullifier already exists"
-            );
-            nullifierSpent[call.inputs.nullifiers[i]] = true;
-            emit NullifierSpent(call.inputs.nullifiers[i]);
-        }
+    //     // add commitments to the pool
+    //     bytes32[] memory commitments = new bytes32[](cmxCount);
+    //     for (uint8 i = 0; i < cmxCount; i++) {
+    //         commitments[i] = tempOutCmx[i];
+    //     }
+    //     InsertedNote[] memory insertedNotes = _insertBatch(commitments);
+    //     for (uint8 i = 0; i < insertedNotes.length; i++) {
+    //         bytes memory enc;
+    //         if (insertedNotes[i].commitment == call.C1)
+    //             enc = call.encryptedNote1;
+    //         else if (insertedNotes[i].commitment == call.C2)
+    //             enc = call.encryptedNote2;
+    //         else revert("Unknown commiment");
 
-        // add commitments to the pool
-        bytes32[] memory commitments = new bytes32[](cmxCount);
-        for (uint8 i = 0; i < cmxCount; i++) {
-            commitments[i] = tempOutCmx[i];
-        }
-        InsertedNote[] memory insertedNotes = _insertBatch(commitments);
-        for (uint8 i = 0; i < insertedNotes.length; i++) {
-            bytes memory enc;
-            if (insertedNotes[i].commitment == call.C1)
-                enc = call.encryptedNote1;
-            else if (insertedNotes[i].commitment == call.C2)
-                enc = call.encryptedNote2;
-            else revert("Unknown commiment");
+    //         emit NoteCreated(
+    //             insertedNotes[i].poolId,
+    //             insertedNotes[i].commitment,
+    //             enc
+    //         );
+    //     }
 
-            emit NoteCreated(
-                insertedNotes[i].poolId,
-                insertedNotes[i].commitment,
-                enc
-            );
-        }
+    // }
 
-    }
-
-
-
-    // helper functions
-    struct InsertedNote {
-        uint256 poolId;
-        bytes32 commitment;
-    }
-
-    //update pool for commitment
-    function _updatePool(Pool storage p, bytes32 commitment) internal {
-        bytes32 current = commitment;
-        uint256 idx = p.nextIdx;
-        require(p.nextIdx < MAX_LEAF, "Pool full");
-        p.nextIdx++; // update the next index
-        // compute the root
-        for (uint16 i = 0; i < TREE_DEPTH; i++) {
-            // idx & 1 -> extracts lsb and & 1 decides odd or even
-            if ((idx & 1) == 0) {
-                // even -> the current one is left
-                // so add it to the subtree, compute hash with zero[i](i.e Zi -> refere notes/filled_subtrees.txt)
-                p.filledSubtrees[i] = current;
-                current = bytes32(
-                    poseidon.poseidon([uint256(current), uint256(p.zeros[i])])
-                );
-            } else {
-                // odd -> the current one is right
-                // so hash it with present value of the subtree
-                current = bytes32(
-                    poseidon.poseidon(
-                        [uint256(p.filledSubtrees[i]), uint256(current)]
-                    )
-                );
-            }
-            idx >>= 1; // shifts 1 bit
-        }
-        p.root = current; //update root
+    function insertCommitments( 
+        bytes32[] calldata commitments 
+    ) external returns ( 
+        InsertedNote[] memory 
+    ) { 
+        return _insertBatch(commitments); 
     }
 
     // it inserts the group of commitments all at once.
@@ -841,13 +632,13 @@ contract NoidPool {
         uint256 total = commitments.length; // num of commitments
 
         while (idx < total) {
-            Pool storage pool = _currentPool();
+            PoolLib.Pool storage pool = PoolLib.currentPool(pools);
             uint256 poolId = pools.length - 1;
-            uint32 remaining = MAX_LEAF - pool.nextIdx; // how many can be inserted in this pool
+            uint32 remaining = PoolLib.MAX_LEAF - pool.nextIdx; // how many can be inserted in this pool
 
             // if there is no space in pool -> create pool
             if (remaining == 0) {
-                _createPool();
+                PoolLib.createPool(pools,poseidon);
                 continue;
             }
 
@@ -860,7 +651,7 @@ contract NoidPool {
                 require(!commitmentExists[C], "Commitment already exists");
                 commitmentExists[C] = true; //add commitment to commitment pool
                 // update pool for the commitment
-                _updatePool(pool, C);
+                PoolLib.updatePool(pool, C, poseidon);
                 inserted[outIdx++] = InsertedNote({
                     poolId: poolId,
                     commitment: C
@@ -868,20 +659,8 @@ contract NoidPool {
             }
 
             // push root only once for group of commitments
-            _pushRoot(pool, pool.root);
+            PoolLib.pushRoot(pool, pool.root);
         }
-    }
-
-    function _pushRoot(Pool storage p, bytes32 newRoot) internal {
-        // current root
-        bytes32 oldRoot = p.rootHistory[p.rootPtr]; // old root at that position
-        if (oldRoot != bytes32(0)) {
-            p.validRoot[oldRoot] = false; // old root no more a valid root
-        }
-
-        p.rootHistory[p.rootPtr] = newRoot; // store new root in the history
-        p.validRoot[newRoot] = true; // new root in valid roots
-        p.rootPtr = (p.rootPtr + 1) % ROOT_HISTORY_SIZE; // increament root ptr (i.e where next root will be inserted)
     }
 
     receive() external payable {}

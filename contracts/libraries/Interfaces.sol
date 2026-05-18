@@ -52,3 +52,9 @@ interface INoidAccountOwnershipVerifier {
         uint256[6] calldata publicSignals
     ) external view returns (bool);
 }
+
+interface IPoseidon {
+    function poseidon(
+        uint256[2] calldata input
+    ) external pure returns (uint256);
+}
