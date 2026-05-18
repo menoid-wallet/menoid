@@ -247,6 +247,43 @@ contract NoidPool {
         }
     }
 
+    struct Inputs {
+        uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
+        bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
+        uint256[MAX_INPUTS] poolIds; // poolid of that root
+        bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
+    }
+
+    // inputs validation helper function
+    function _verifyInputs(Inputs memory inputs) view internal {
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            require(
+                inputs.enabled[i] * (1 - inputs.enabled[i]) == 0,
+                "Invalid enable flag"
+            );
+            if (inputs.enabled[i] == 0) {
+                continue;
+            }
+            require(inputs.poolIds[i] < pools.length, "Invalid poolId");
+            Pool storage p = pools[inputs.poolIds[i]];
+            require(p.validRoot[inputs.roots[i]], "Invalid root");
+
+            require(
+                !nullifierSpent[inputs.nullifiers[i]],
+                "Nullifier already spent"
+            );
+            // all nullifiers in a Transfer inputs must be unique
+            for (uint8 j = 0; j < i; j++) {
+                if (inputs.enabled[j] == 0) continue;
+
+                require(
+                    inputs.nullifiers[i] != inputs.nullifiers[j],
+                    "Duplicate nullifier"
+                );
+            }
+        }
+    }
+
     // transfer call
     struct TransferCall {
         // zk proof
@@ -254,10 +291,7 @@ contract NoidPool {
         uint256[2][2] b;
         uint256[2] c;
         //input details
-        uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
-        bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
-        uint256[MAX_INPUTS] poolIds; // poolid of that root
-        bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
+        Inputs inputs;
         // outputs (maximum of 3)
         bytes32 C1; // receiver commitment (Required)
         bytes32 C2; // change commitment
@@ -293,32 +327,7 @@ contract NoidPool {
 
     function _singleTransfer(TransferCall memory call) internal {
         // validate the inputs
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            require(
-                call.enabled[i] * (1 - call.enabled[i]) == 0,
-                "Invalid enable flag"
-            );
-            if (call.enabled[i] == 0) {
-                continue;
-            }
-            require(call.poolIds[i] < pools.length, "Invalid poolId");
-            Pool storage p = pools[call.poolIds[i]];
-            require(p.validRoot[call.roots[i]], "Invalid root");
-
-            require(
-                !nullifierSpent[call.nullifiers[i]],
-                "Nullifier already spent"
-            );
-            // all nullifiers in a Transfer call must be unique
-            for (uint8 j = 0; j < i; j++) {
-                if (call.enabled[j] == 0) continue;
-
-                require(
-                    call.nullifiers[i] != call.nullifiers[j],
-                    "Duplicate nullifier"
-                );
-            }
-        }
+        _verifyInputs(call.inputs);
 
         // commitments duplicate check
         if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
@@ -347,13 +356,13 @@ contract NoidPool {
         uint8 idx = 0;
         publicSignals[idx++] = relayerZkPubkey;
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.enabled[i]);
+            publicSignals[idx++] = uint256(call.inputs.enabled[i]);
         }
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.roots[i]);
+            publicSignals[idx++] = uint256(call.inputs.roots[i]);
         }
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.nullifiers[i]);
+            publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
         }
 
         uint8 cmxCount = 0;
@@ -399,13 +408,13 @@ contract NoidPool {
 
         // add nullifiers to the pool
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.enabled[i] == 0) continue;
+            if (call.inputs.enabled[i] == 0) continue;
             require(
-                !nullifierSpent[call.nullifiers[i]],
+                !nullifierSpent[call.inputs.nullifiers[i]],
                 "Nullifier already exists"
             );
-            nullifierSpent[call.nullifiers[i]] = true;
-            emit NullifierSpent(call.nullifiers[i]);
+            nullifierSpent[call.inputs.nullifiers[i]] = true;
+            emit NullifierSpent(call.inputs.nullifiers[i]);
         }
 
         // add commitments to the pool
@@ -443,10 +452,7 @@ contract NoidPool {
         uint256[2][2] b;
         uint256[2] c;
         // input details
-        uint8[MAX_INPUTS] enabled; // decides that input presence
-        bytes32[MAX_INPUTS] roots; // roots of the commitments
-        uint256[MAX_INPUTS] poolIds; // pool ids of the commitments
-        bytes32[MAX_INPUTS] nullifiers; // nullifiers of that commitments
+        Inputs inputs;
         // output details
         bytes32 C1; //change commitment
         bytes32 C2; //relayer commitment
@@ -470,37 +476,8 @@ contract NoidPool {
     }
 
     function _singleWithdraw(WithdrawCall calldata call, address to) internal {
-        // to be implemented
-        // get all the inputs validated
-        // verify the proof
-        // add all the nullifiers to the pool
-        // add new commitements to the pool
-        // transfer
 
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            require(
-                (call.enabled[i] * (1 - call.enabled[i])) == 0,
-                "Invalid enabled flag"
-            );
-            if (call.enabled[i] == 0) continue;
-
-            require(call.poolIds[i] < pools.length, "Invalid poolId");
-            Pool storage p = pools[call.poolIds[i]];
-            require(p.validRoot[call.roots[i]], "Invalid root");
-
-            require(
-                !nullifierSpent[call.nullifiers[i]],
-                "Nullifier already exists"
-            );
-            for (uint8 j = 0; j < i; j++) {
-                if (call.enabled[j] == 0) continue;
-
-                require(
-                    call.nullifiers[i] != call.nullifiers[j],
-                    "Duplicate nullifier"
-                );
-            }
-        }
+        _verifyInputs(call.inputs);
 
         //duplicate commitment check
         if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
@@ -524,9 +501,9 @@ contract NoidPool {
 
         // enabled roots nullifier
         for (uint8 i = 2; i < MAX_INPUTS + 2; i++) {
-            publicSignals[i] = uint256(call.enabled[i - 2]);
-            publicSignals[i + 4] = uint256(call.roots[i - 2]);
-            publicSignals[i + 8] = uint256(call.nullifiers[i - 2]);
+            publicSignals[i] = uint256(call.inputs.enabled[i - 2]);
+            publicSignals[i + 4] = uint256(call.inputs.roots[i - 2]);
+            publicSignals[i + 8] = uint256(call.inputs.nullifiers[i - 2]);
         }
         // withdraw amount
         uint8 idx = 14;
@@ -561,13 +538,13 @@ contract NoidPool {
 
         // add nullifiers to the pool
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.enabled[i] == 0) continue;
+            if (call.inputs.enabled[i] == 0) continue;
             require(
-                !nullifierSpent[call.nullifiers[i]],
+                !nullifierSpent[call.inputs.nullifiers[i]],
                 "Nullifier already exists"
             );
-            nullifierSpent[call.nullifiers[i]] = true;
-            emit NullifierSpent(call.nullifiers[i]);
+            nullifierSpent[call.inputs.nullifiers[i]] = true;
+            emit NullifierSpent(call.inputs.nullifiers[i]);
         }
 
         // add commitments to the pool
@@ -599,10 +576,7 @@ contract NoidPool {
         uint256[2][2] b;
         uint256[2] c;
         //input details
-        uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
-        bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
-        uint256[MAX_INPUTS] poolIds; // poolid of that root
-        bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
+        Inputs inputs;
         // outputs (maximum of 2)
         bytes32 C1; // change commitment
         bytes32 C2; // relayer commitment
@@ -627,32 +601,7 @@ contract NoidPool {
 
     function _singleCreateNACall(CreateNoidAccountCall calldata call , bytes32 cmx) internal {
         // validate the inputs
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            require(
-                call.enabled[i] * (1 - call.enabled[i]) == 0,
-                "Invalid enable flag"
-            );
-            if (call.enabled[i] == 0) {
-                continue;
-            }
-            require(call.poolIds[i] < pools.length, "Invalid poolId");
-            Pool storage p = pools[call.poolIds[i]];
-            require(p.validRoot[call.roots[i]], "Invalid root");
-
-            require(
-                !nullifierSpent[call.nullifiers[i]],
-                "Nullifier already spent"
-            );
-            // all nullifiers in a Transfer call must be unique
-            for (uint8 j = 0; j < i; j++) {
-                if (call.enabled[j] == 0) continue;
-
-                require(
-                    call.nullifiers[i] != call.nullifiers[j],
-                    "Duplicate nullifier"
-                );
-            }
-        }
+        _verifyInputs(call.inputs);
 
 
         //duplicate commitment check
@@ -673,13 +622,13 @@ contract NoidPool {
         uint8 idx = 0;
         publicSignals[idx++] = relayerZkPubkey;
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.enabled[i]);
+            publicSignals[idx++] = uint256(call.inputs.enabled[i]);
         }
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.roots[i]);
+            publicSignals[idx++] = uint256(call.inputs.roots[i]);
         }
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.nullifiers[i]);
+            publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
         }
 
         // outputs enabled
@@ -714,13 +663,13 @@ contract NoidPool {
 
         // add nullifiers to the pool
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.enabled[i] == 0) continue;
+            if (call.inputs.enabled[i] == 0) continue;
             require(
-                !nullifierSpent[call.nullifiers[i]],
+                !nullifierSpent[call.inputs.nullifiers[i]],
                 "Nullifier already exists"
             );
-            nullifierSpent[call.nullifiers[i]] = true;
-            emit NullifierSpent(call.nullifiers[i]);
+            nullifierSpent[call.inputs.nullifiers[i]] = true;
+            emit NullifierSpent(call.inputs.nullifiers[i]);
         }
 
         // add commitments to the pool
@@ -751,10 +700,7 @@ contract NoidPool {
         uint256[2][2] b;
         uint256[2] c;
         //input details
-        uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
-        bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
-        uint256[MAX_INPUTS] poolIds; // poolid of that root
-        bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
+        Inputs inputs;
         // outputs (maximum of 2)
         bytes32 C1; // change commitment
         bytes32 C2; // relayer commitment
@@ -798,32 +744,7 @@ contract NoidPool {
 
     function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal {
         // validate the inputs
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            require(
-                call.enabled[i] * (1 - call.enabled[i]) == 0,
-                "Invalid enable flag"
-            );
-            if (call.enabled[i] == 0) {
-                continue;
-            }
-            require(call.poolIds[i] < pools.length, "Invalid poolId");
-            Pool storage p = pools[call.poolIds[i]];
-            require(p.validRoot[call.roots[i]], "Invalid root");
-
-            require(
-                !nullifierSpent[call.nullifiers[i]],
-                "Nullifier already spent"
-            );
-            // all nullifiers in a Transfer call must be unique
-            for (uint8 j = 0; j < i; j++) {
-                if (call.enabled[j] == 0) continue;
-
-                require(
-                    call.nullifiers[i] != call.nullifiers[j],
-                    "Duplicate nullifier"
-                );
-            }
-        }
+        _verifyInputs(call.inputs);
 
         //duplicate commitment check
         if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
@@ -843,13 +764,13 @@ contract NoidPool {
         uint8 idx = 0;
         publicSignals[idx++] = relayerZkPubkey;
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.enabled[i]);
+            publicSignals[idx++] = uint256(call.inputs.enabled[i]);
         }
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.roots[i]);
+            publicSignals[idx++] = uint256(call.inputs.roots[i]);
         }
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.nullifiers[i]);
+            publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
         }
 
         // outputs enabled
@@ -880,13 +801,13 @@ contract NoidPool {
 
         // add nullifiers to the pool
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.enabled[i] == 0) continue;
+            if (call.inputs.enabled[i] == 0) continue;
             require(
-                !nullifierSpent[call.nullifiers[i]],
+                !nullifierSpent[call.inputs.nullifiers[i]],
                 "Nullifier already exists"
             );
-            nullifierSpent[call.nullifiers[i]] = true;
-            emit NullifierSpent(call.nullifiers[i]);
+            nullifierSpent[call.inputs.nullifiers[i]] = true;
+            emit NullifierSpent(call.inputs.nullifiers[i]);
         }
 
         // add commitments to the pool
