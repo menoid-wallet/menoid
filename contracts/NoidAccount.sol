@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
+import "./libraries/Interfaces.sol";
 
 /* 
 NoidAccount is the Private Identity of the user. 
@@ -22,14 +23,6 @@ Testing NoidAccount,
 For now its only public owner. 
 */
 
-interface INoidAccountOwnershipVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[6] calldata publicSignals
-    ) external view returns (bool);
-}
 
 contract NoidAccount is IERC721Receiver, IERC1155Receiver {
     bytes32 public commitment;

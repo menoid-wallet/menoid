@@ -2,48 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "./NoidAccount.sol";
-interface IDepositVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[4] calldata publicSignals
-    ) external view returns (bool);
-}
-interface ITransferVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[19] calldata publicSignals
-    ) external view returns (bool);
-}
+import "./libraries/Interfaces.sol";
 
-interface IWithdrawVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[19] calldata publicSignals
-    ) external view returns (bool);
-}
-
-interface ICreateNoidAccountVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[18] calldata publicSignals
-    ) external view returns (bool);
-}
-interface IExecuteFunctionCallVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[18] calldata publicSignals
-    ) external view returns (bool);
-}
 
 interface IPoseidon {
     function poseidon(
