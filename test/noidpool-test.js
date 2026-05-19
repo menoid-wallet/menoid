@@ -101,6 +101,12 @@ async function rebuildWalletState() {
             privatePool.filters.NullifierSpent()
         );
 
+
+    const noidAccountEvents =
+        await privatePool.queryFilter(
+            privatePool.filters.NoidAccountCreated()
+        );
+
     for (const poolId of Object.keys(poolStates)) {
 
         const poseidon =
@@ -133,6 +139,7 @@ async function rebuildWalletState() {
     for (const key of Object.keys(walletStates)) {
 
         walletStates[key].notes = [];
+        walletStates[key].accounts = [];
         walletStates[key].balance =
             ethers.BigNumber.from(0);
     }
@@ -241,6 +248,91 @@ async function rebuildWalletState() {
                 console.log(`\n${name} FOUND NOTE`);
 
                 console.log(parsed);
+
+            } catch (_) {
+
+            }
+        }
+    }
+
+
+    // rebuild noid accounts
+    for (const event of noidAccountEvents) {
+
+        const cmx = ethers.BigNumber.from(event.args.commitment).toString();
+        const encryptedNote =
+            event.args.encryptedNote;
+
+        for (const [name, wallet] of Object.entries(walletStates)) {
+            try {
+                const decrypted =
+                    decryptMessage(
+                        encryptedNote,
+                        wallet.wallet.privateWallet.privateKey
+                    );
+
+                const parsed =
+                    JSON.parse(decrypted);
+
+                console.log(
+                    "\nparsed noid account:",
+                    parsed
+                );
+
+                const poseidon =
+                    await circomlibjs.buildPoseidon();
+
+                const computedCmx =
+                    poseidon.F.toString(
+                        poseidon([
+                            4,
+                            wallet.wallet.zk.publicKey,
+                            parsed.randomness
+                        ])
+                    );
+                console.log(`computed cmx: ${computedCmx}; present cmx: ${cmx}`)
+
+                if (
+                    computedCmx !== cmx
+                ) {
+                    continue;
+                }
+
+                const accountAddress =
+                    await privatePool.NoidAccounts(
+                        ethers.utils.hexZeroPad(
+                            ethers.BigNumber
+                                .from(cmx)
+                                .toHexString(),
+                            32
+                        )
+                    );
+
+                wallet.accounts.push({
+
+                    commitment:
+                        cmx,
+
+                    randomness:
+                        parsed.randomness,
+
+                    zkPublicKey:
+                        wallet.wallet.zk.publicKey,
+
+                    account:
+                        accountAddress
+                });
+
+                console.log(
+                    `\n${name} FOUND NOID ACCOUNT`
+                );
+
+                console.log({
+
+                    cmx,
+                    account:
+                        accountAddress
+                });
 
             } catch (_) {
 
