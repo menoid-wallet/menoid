@@ -47,7 +47,7 @@ contract NoidPool {
     IExecuteFunctionCallVerifier public immutable executeFunCallVerifier;
 
 
-    NoidAccountManager public immutable noidAccountManager;
+    NoidAccountManager public noidAccountManager;
 
     // poseidon
     IPoseidon public immutable poseidon;
@@ -74,8 +74,7 @@ contract NoidPool {
         address _executeCallVerifier,
         address _poseidon,
         address _relayer,
-        uint256 _relayerZkPubkey,
-        address _noidAccountManager
+        uint256 _relayerZkPubkey
     ) {
         depositVerifier = IDepositVerifier(_depositVerifier);
         transferVerifier = ITransferVerifier(_transferVerifier);
@@ -84,13 +83,17 @@ contract NoidPool {
         noidAccountOwnershipVerifier = INoidAccountOwnershipVerifier(_noidAccountOwnershipVerifier);
         executeFunCallVerifier = IExecuteFunctionCallVerifier(_executeCallVerifier);
         poseidon = IPoseidon(_poseidon);
-        noidAccountManager =
-            NoidAccountManager(
-                _noidAccountManager
-            );
+
         relayer = _relayer;
         relayerZkPubkey = _relayerZkPubkey;
-        PoolLib.createPool(pools, poseidon);(pools, poseidon);
+        PoolLib.createPool(pools, poseidon);
+    }
+
+    function setNoidAccountManager(address _manager) 
+    external { 
+        require(msg.sender == relayer, "Not relayer"); 
+        require(address(noidAccountManager) == address(0), "Already set"); 
+        noidAccountManager = NoidAccountManager(_manager); 
     }
 
     PoolLib.Pool[] public pools;
@@ -430,65 +433,35 @@ contract NoidPool {
         }
     }
 
-    // Cmx = Poseidon(4, zkPubKey, r)
-    // r is stored in the encryptedNote
-    function createNoidAccount(CreateNoidAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
-    
-        require(NoidAccounts[cmx] == address(0), "NoidAccount already exists");
-        for (uint8 i = 0; i < calls.length; i++ ) {
-            _singleCreateNACall(calls[i], cmx);
-        }
-        NoidAccount account = new NoidAccount(cmx , noidAccountOwnershipVerifier);
-        NoidAccounts[cmx] = address(account);
+    function setNoidAccount(bytes32 cmx, address account, bytes memory eNote) external {
+        require(msg.sender == address(noidAccountManager),"Not allowed");
+        NoidAccounts[cmx] = account;
         emit NoidAccountCreated(cmx, eNote);
-
     }
 
-    function _singleCreateNACall(CreateNoidAccountCall calldata call , bytes32 cmx) internal {
-        // validate the inputs
-        _verifyInputs(call.inputs);
-
-
-        //duplicate commitment check
-        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
-            require(call.C1 != call.C2, "Duplicate commitments");
-        }
-
-        // call verify
-
-        // add nullifiers to the pool
+    function addNullifiersSpent(Inputs memory input) external {
+        require(msg.sender == address(noidAccountManager),"Not allowed");
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.inputs.enabled[i] == 0) continue;
+            if (input.enabled[i] == 0) continue;
             require(
-                !nullifierSpent[call.inputs.nullifiers[i]],
+                !nullifierSpent[input.nullifiers[i]],
                 "Nullifier already exists"
             );
-            nullifierSpent[call.inputs.nullifiers[i]] = true;
-            emit NullifierSpent(call.inputs.nullifiers[i]);
-        }
-
-        (uint8 cmxCount, bytes32[] memory tempOutCmx) = noidAccountManager.verifyCreateAccount(call,cmx);
-        // add commitments to the pool
-        bytes32[] memory commitments = new bytes32[](cmxCount);
-        for (uint8 i = 0; i < cmxCount; i++) {
-            commitments[i] = tempOutCmx[i];
-        }
-        InsertedNote[] memory insertedNotes = _insertBatch(commitments);
-        for (uint8 i = 0; i < insertedNotes.length; i++) {
-            bytes memory enc;
-            if (insertedNotes[i].commitment == call.C1)
-                enc = call.encryptedNote1;
-            else if (insertedNotes[i].commitment == call.C2)
-                enc = call.encryptedNote2;
-            else revert("Unknown commiment");
-
-            emit NoteCreated(
-                insertedNotes[i].poolId,
-                insertedNotes[i].commitment,
-                enc
-            );
+            nullifierSpent[input.nullifiers[i]] = true;
+            emit NullifierSpent(input.nullifiers[i]);
         }
     }
+
+    function noteCreated(uint256 poolId, bytes32 commitment , bytes memory enc) external{
+        require(msg.sender == address(noidAccountManager),"Not allowed");
+    
+        emit NoteCreated(
+            poolId,
+            commitment,
+            enc
+        );
+    }
+
 
     // function executeFunction(
     //     ExecuteFunctionCall[] calldata calls,

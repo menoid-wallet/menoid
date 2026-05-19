@@ -58,19 +58,62 @@ contract NoidAccountManager {
         relayerZkPubkey = _relayerZkPubkey;
     }
 
+    // Cmx = Poseidon(4, zkPubKey, r)
+    // r is stored in the encryptedNote
+    function createNoidAccount(CreateNoidAccountCall[] calldata calls, bytes32 cmx, bytes calldata eNote) external {
+    
+        require(noidPool.NoidAccounts(cmx) == address(0), "NoidAccount already exists");
+        for (uint8 i = 0; i < calls.length; i++ ) {
+            _singleCreateNACall(calls[i], cmx);
+        }
+        NoidAccount account = new NoidAccount(cmx , noidAccountOwnershipVerifier);
+        noidPool.setNoidAccount(cmx,address(account), eNote);
+    }
+
+
+
     function _singleCreateNACall(
         CreateNoidAccountCall calldata call, 
         bytes32 cmx
     ) 
     internal 
     {
+        noidPool.verifyInputs(call.inputs);
         
-     }
+        //duplicate commitment check
+        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
+            require(call.C1 != call.C2, "Duplicate commitments");
+        }
+
+        (uint8 cmxCount, bytes32[] memory tempOutCmx) = verifyCreateAccount(call,cmx);
+
+        // add nullifiers 
+        noidPool.addNullifiersSpent(call.inputs);
+
+        // add commitments
+        // add commitments to the pool
+        bytes32[] memory commitments = new bytes32[](cmxCount);
+        for (uint8 i = 0; i < cmxCount; i++) {
+            commitments[i] = tempOutCmx[i];
+        }
+        InsertedNote[] memory insertedNotes = noidPool.insertCommitments(commitments);
+        for (uint8 i = 0; i < insertedNotes.length; i++) {
+            bytes memory enc;
+            if (insertedNotes[i].commitment == call.C1)
+                enc = call.encryptedNote1;
+            else if (insertedNotes[i].commitment == call.C2)
+                enc = call.encryptedNote2;
+            else revert("Unknown commiment");
+
+            noidPool.noteCreated(insertedNotes[i].poolId,insertedNotes[i].commitment,enc);
+        }
+
+    }
 
     function verifyCreateAccount(
         CreateNoidAccountCall calldata call ,
         bytes32 cmx
-    ) external view returns (uint8, bytes32[] memory) {
+    ) internal view returns (uint8, bytes32[] memory) {
         // public signals to be added
         // relayer, - 1
         // enabled, - MAX_INPUTS
