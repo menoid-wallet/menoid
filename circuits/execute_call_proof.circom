@@ -4,20 +4,7 @@ include "../node_modules/circomlib/circuits/poseidon.circom";
 include "./merkle_path.circom";
 include "./range_check.circom";
 
-/**
- * Create Noir Account proof
- *
- * Consumes up to MAX_INPUTS (e.g. 4) private input notes
- * belonging to a single owner and creates up to 2 new
- * private output notes in one proof.
- *
- * Input notes are masked using an `enabled[]` flag, allowing
- * dummy slots to be ignored while keeping the circuit size fixed.
- *
- * All value conservation, ownership checks, Merkle inclusion,
- * and nullifier correctness are enforced inside the ZK circuit.
- *
- */
+
 
  template ExecuteCallProof (max_inputs, depth) {
     // ownership

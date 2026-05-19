@@ -180,4 +180,4 @@ component main {public [
     out_enabled,
     c_outs,
     cmx_noirAccount
-]} = CreateNoirAccountProof(4,20);
+]} = CreateNoidAccountProof(4,20);

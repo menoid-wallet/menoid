@@ -549,7 +549,7 @@ describe("PriFi Wallet Architecture", function () {
 
                 "build/deposit_proof_js/deposit_proof.wasm",
 
-                "build/deposit_final.zkey"
+                "build/deposit_proof_final.zkey"
             );
 
 
@@ -649,7 +649,7 @@ describe("PriFi Wallet Architecture", function () {
     });
 
 
-    it("Should deposit privately", async function () {
+    it("Should deposit ", async function () {
 
         const user =
             userWallets[0];
@@ -661,7 +661,7 @@ describe("PriFi Wallet Architecture", function () {
         // -------------------------
 
         const depositAmount =
-            ethers.utils.parseEther("1");
+            ethers.utils.parseEther("10");
 
         const fee =
             ethers.utils.parseEther("0.01");
@@ -819,7 +819,7 @@ describe("PriFi Wallet Architecture", function () {
 
                 "build/deposit_proof_js/deposit_proof.wasm",
 
-                "build/deposit_final.zkey"
+                "build/deposit_proof_final.zkey"
             );
 
 
@@ -1427,7 +1427,7 @@ describe("PriFi Wallet Architecture", function () {
 
             "build/transfer_proof_js/transfer_proof.wasm",
 
-            "build/transfer_final.zkey"
+            "build/transfer_proof_final.zkey"
         );
 
     console.log("\n========== PUBLIC SIGNALS ==========");
@@ -1788,7 +1788,7 @@ describe("PriFi Wallet Architecture", function () {
 
                 "build/withdraw_proof_js/withdraw_proof.wasm",
 
-                "build/withdraw_final.zkey"
+                "build/withdraw_proof_final.zkey"
             );
 
         console.log("\n========== PUBLIC SIGNALS ==========");
@@ -2212,7 +2212,7 @@ describe("PriFi Wallet Architecture", function () {
 
                 input,
 
-                "build/create_noir_account_js/create_noir_account.wasm",
+                "build/create_noid_account_js/create_noid_account.wasm",
 
                 "build/create_noid_account_final.zkey"
             );

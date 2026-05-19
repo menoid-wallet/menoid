@@ -2,7 +2,7 @@ pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 
-template NoirAccountOwnership(){
+template NoidAccountOwnership(){
     // commitment
     signal input commitment; // public
     signal input randomness; // private
@@ -59,4 +59,4 @@ nonce,
 target,
 value,
 dataHash
-]} = NoirAccountOwnership();
+]} = NoidAccountOwnership();
