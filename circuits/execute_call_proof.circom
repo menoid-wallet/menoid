@@ -2,7 +2,7 @@ pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "./merkle_path.circom";
-
+include "./range_check.circom";
 
 /**
  * Create Noir Account proof
@@ -19,7 +19,7 @@ include "./merkle_path.circom";
  *
  */
 
- template CreateNoirAccountProof (max_inputs, depth) {
+ template ExecuteCallProof (max_inputs, depth) {
     // ownership
     // private inputs
     signal input sk;    // PrivateKey of the wallet
@@ -67,6 +67,7 @@ include "./merkle_path.circom";
     component hasher[max_inputs];
     component merklePath[max_inputs];
     component nullHasher[max_inputs];
+    component inputRangeChecks[max_inputs];
 
     // note: in circom we cannot to circular addition like sum <== sum + amount;
     //       thats why we are using sum array.
@@ -74,6 +75,10 @@ include "./merkle_path.circom";
     for (var i = 0; i < max_inputs; i++) {
         // enable flag constraint
         enabled[i] * (1 - enabled[i]) === 0;
+
+        // input amount range constraint
+        inputRangeChecks[i] = RangeCheck(128);
+        inputRangeChecks[i].in <== a_ins[i];
 
         // amount summation
         x[i] <== enabled[i] * a_ins[i];
@@ -119,6 +124,13 @@ include "./merkle_path.circom";
     signal input r_outs[2]; // private
     signal input c_outs[2]; // public
     signal input receivers[2]; // private
+    signal input callValue; // public
+
+
+    component callValueRangeCheck = RangeCheck(128);
+    callValueRangeCheck.in <== callValue;
+
+
 
     receivers[0] === pk;
     receivers[1] === relayer;
@@ -128,10 +140,15 @@ include "./merkle_path.circom";
     outSum[0] <== 0;
 
     component outHasher[2];
+    component outputRangeChecks[2];
 
     for(var i = 0; i < 2; i++){
         // output enabled signal
         out_enabled[i] * (1 - out_enabled[i]) === 0;
+
+        // output amount range constraint 
+        outputRangeChecks[i] = RangeCheck(128); 
+        outputRangeChecks[i].in <== a_outs[i];
 
         y[i] <== out_enabled[i] * a_outs[i];
         outSum[i + 1] <== outSum[i] + y[i];
@@ -148,26 +165,15 @@ include "./merkle_path.circom";
     }
  
     // Input Summation == Output Summation constraint
-    sum[max_inputs] === outSum[2];
-
-    // NOTE CREATION CHECK
-    signal input r_noirAccount; // private input
-    signal input cmx_noirAccount; // public input
-
-    component noirAccountHasher = Poseidon(3);
-    noirAccountHasher.inputs[0] <== 4;
-    noirAccountHasher.inputs[1] <== pk;
-    noirAccountHasher.inputs[2] <== r_noirAccount;
-
-    cmx_noirAccount === noirAccountHasher.out;
+    sum[max_inputs] === outSum[2] + callValue;
  }
 
 component main {public [
-    relayer,
-    enabled,
-    roots,
-    nullifiers,
-    out_enabled,
-    c_outs,
-    cmx_noirAccount
-]} = CreateNoirAccountProof(4,20);
+relayer,
+enabled,
+roots,
+nullifiers,
+out_enabled,
+c_outs,
+callValue
+]} = ExecuteCallProof(4,20);

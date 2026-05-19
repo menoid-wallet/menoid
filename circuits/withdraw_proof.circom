@@ -2,7 +2,7 @@ pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "./merkle_path.circom";
-
+include "./range_check.circom";
 /**
  * Withdraw
  *
@@ -68,18 +68,15 @@ template WithdrawProof(max_inputs, depth) {
     component comHasher[max_inputs];
     component merklePath[max_inputs];
     component nullHasher[max_inputs];
+    component inputRangeChecks[max_inputs];
 
     for(var i = 0; i < max_inputs ; i++){
         // enable constraint
         enabled[i] * (1 - enabled[i]) === 0;
 
-        // ** wrong ways to find sum **
-
-        // // sum <== sum + a_ins[i] ❌ because its circular (Note: signal is wire not value)
-
-        // // signal x;
-        // // x <== sum; 
-        // // sum <== x + a_ins[i] ❌ circular again
+        // amount range constraint
+        inputRangeChecks[i] = RangeCheck(128);
+        inputRangeChecks[i].in <== a_ins[i];
 
         // correct way to find sum
         x[i] <== enabled[i] * a_ins[i];
@@ -123,6 +120,9 @@ template WithdrawProof(max_inputs, depth) {
     // withdraw amount
     signal input withdrawAmount;
 
+    component withdrawRangeCheck = RangeCheck(128);
+    withdrawRangeCheck.in <== withdrawAmount;
+
     // output commitments check
     signal input out_enabled[2]; //public
     signal input a_outs[2]; // private
@@ -139,10 +139,15 @@ template WithdrawProof(max_inputs, depth) {
     outSum[0] <== 0;
 
     component outHasher[2];
+    component outputRangeChecks[2];
 
     for(var i = 0; i < 2; i++){
         // output enabled signal
         out_enabled[i] * (1 - out_enabled[i]) === 0;
+
+        // output amount range constraint
+        outputRangeChecks[i] = RangeCheck(128);
+        outputRangeChecks[i].in <== a_outs[i];
 
         y[i] <== out_enabled[i] * a_outs[i];
         outSum[i + 1] <== outSum[i] + y[i];

@@ -316,7 +316,7 @@ describe("PriFi Wallet Architecture", function () {
         privatePool =
             await ethers.getContractAt(
                 "NoidPool",
-                "0x610178dA211FEF7D417bC0e6FeD39F05609AD788"
+                "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"
             );
         console.log(
             "Pool Address:",
@@ -417,7 +417,7 @@ describe("PriFi Wallet Architecture", function () {
         const depositVerifier =
         await ethers.getContractAt(
             "DepositVerifier",
-            "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+            "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
         );
         const code =
             await ethers.provider.getCode(
@@ -1922,4 +1922,439 @@ describe("PriFi Wallet Architecture", function () {
         // rebuild latest state
         await rebuildWalletState();
     });
+
+
+    it("Should create private Noid Smart Account", async function () {
+
+        const sender =
+            userWallets[0];
+
+        // attach manager
+        const noidAccountManager =
+            await ethers.getContractAt(
+                "NoidAccountManager",
+                "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318"
+            );
+
+        // rebuild wallet state
+        await rebuildWalletState();
+
+        // use first available sender note
+        const inputNote =
+            walletStates["user1"].notes[0];
+
+        console.log("\n========== CREATE ACCOUNT INPUT NOTE ==========");
+
+        console.log(inputNote);
+
+        // pool state
+        const state =
+            poolStates[inputNote.poolId];
+
+        // merkle proof
+        const merkleProof =
+            state.tree.createProof(
+                inputNote.leafIndex
+            );
+
+        console.log("\n========== MERKLE PROOF ==========");
+
+        console.log(merkleProof);
+
+        // -----------------------------------
+        // ACCOUNT COMMITMENT
+        // -----------------------------------
+
+        const poseidon =
+            await circomlibjs.buildPoseidon();
+
+        // account randomness
+        const rAccount =
+            ethers.BigNumber.from(
+                ethers.utils.randomBytes(31)
+            ).toString();
+
+        // cmx = Poseidon(4, zkPubKey, r)
+        const cmx =
+            poseidon.F.toString(
+                poseidon([
+                    4,
+                    sender.zk.publicKey,
+                    rAccount
+                ])
+            );
+
+        console.log("\n========== ACCOUNT COMMITMENT ==========");
+
+        console.log(cmx);
+
+        // -----------------------------------
+        // VALUES
+        // -----------------------------------
+
+        const fee =
+            ethers.utils.parseEther("0.01");
+
+        const inputAmount =
+            ethers.BigNumber.from(
+                inputNote.amount
+            );
+
+        const change =
+            inputAmount.sub(fee);
+
+        // -----------------------------------
+        // RANDOMNESS
+        // -----------------------------------
+
+        const rChange =
+            ethers.BigNumber.from(
+                ethers.utils.randomBytes(31)
+            ).toString();
+
+        const rRelayer =
+            ethers.BigNumber.from(
+                ethers.utils.randomBytes(31)
+            ).toString();
+
+        // -----------------------------------
+        // OUTPUT COMMITMENTS
+        // -----------------------------------
+
+        const changeCommitment =
+            await createCommitment(
+                change.toString(),
+                rChange,
+                sender.zk.publicKey
+            );
+
+        const relayerCommitment =
+            await createCommitment(
+                fee.toString(),
+                rRelayer,
+                relayerWallet.zk.publicKey
+            );
+
+        console.log("\n========== OUTPUT COMMITMENTS ==========");
+
+        console.log(changeCommitment);
+
+        console.log(relayerCommitment);
+
+        // -----------------------------------
+        // NULLIFIER
+        // -----------------------------------
+
+        const nullifier =
+            poseidon.F.toString(
+                poseidon([
+                    2,
+                    inputNote.commitment,
+                    inputNote.randomness,
+                    sender.zk.secretKey
+                ])
+            );
+
+        console.log("\n========== NULLIFIER ==========");
+
+        console.log(nullifier);
+
+        // -----------------------------------
+        // ENCRYPTED NOTES
+        // -----------------------------------
+
+        const encryptedNote1 =
+            encryptMessage(
+                JSON.stringify({
+                    amount:
+                        change.toString(),
+                    randomness:
+                        rChange
+                }),
+                sender.privateWallet.publicKey
+            );
+
+        const encryptedNote2 =
+            encryptMessage(
+                JSON.stringify({
+                    amount:
+                        fee.toString(),
+                    randomness:
+                        rRelayer
+                }),
+                relayerWallet.privateWallet.publicKey
+            );
+
+        // encrypted account note
+        const encryptedAccountNote =
+            encryptMessage(
+                JSON.stringify({
+                    randomness:
+                        rAccount,
+                    zkPublicKey:
+                        sender.zk.publicKey
+                }),
+                sender.privateWallet.publicKey
+            );
+
+        // -----------------------------------
+        // CIRCOM INPUT
+        // -----------------------------------
+
+        const input = {
+
+            sk:
+                sender.zk.secretKey,
+
+            pk:
+                sender.zk.publicKey,
+
+            relayer:
+                relayerWallet.zk.publicKey,
+
+            enabled:
+                [1,0,0,0],
+
+            c_ins: [
+                inputNote.commitment,
+                0,
+                0,
+                0
+            ],
+
+            a_ins: [
+                inputNote.amount,
+                0,
+                0,
+                0
+            ],
+
+            r_ins: [
+                inputNote.randomness,
+                0,
+                0,
+                0
+            ],
+
+            roots: [
+                state.tree.root.toString(),
+                0,
+                0,
+                0
+            ],
+
+            pathElements: [
+                merkleProof.siblings.map(
+                    x => x[0].toString()
+                ),
+                Array(20).fill(0),
+                Array(20).fill(0),
+                Array(20).fill(0)
+            ],
+
+            pathIndices: [
+                merkleProof.pathIndices,
+                Array(20).fill(0),
+                Array(20).fill(0),
+                Array(20).fill(0)
+            ],
+
+            nullifiers: [
+                nullifier,
+                0,
+                0,
+                0
+            ],
+
+            out_enabled:
+                [1,1],
+
+            c_outs: [
+                changeCommitment.decimal,
+                relayerCommitment.decimal
+            ],
+
+            a_outs: [
+                change.toString(),
+                fee.toString()
+            ],
+
+            r_outs: [
+                rChange,
+                rRelayer
+            ],
+
+            receivers: [
+                sender.zk.publicKey,
+                relayerWallet.zk.publicKey
+            ],
+
+            cmx_noirAccount:
+                cmx,
+
+            r_noirAccount:
+                rAccount
+        };
+
+        console.log("\n========== CREATE ACCOUNT INPUT ==========");
+
+        console.log(input);
+
+        // -----------------------------------
+        // GENERATE PROOF
+        // -----------------------------------
+
+        const {
+            proof: zkProof,
+            publicSignals
+        } =
+            await snarkjs.groth16.fullProve(
+
+                input,
+
+                "build/create_noir_account_js/create_noir_account.wasm",
+
+                "build/create_noid_account_final.zkey"
+            );
+
+        console.log("\n========== PUBLIC SIGNALS ==========");
+
+        console.log(publicSignals);
+
+        // -----------------------------------
+        // FORMAT CALLDATA
+        // -----------------------------------
+
+        const calldata =
+            await snarkjs.groth16.exportSolidityCallData(
+                zkProof,
+                publicSignals
+            );
+
+        const argv =
+            calldata
+                .replace(/["[\]\s]/g, "")
+                .split(",");
+
+        const a = [
+            argv[0],
+            argv[1]
+        ];
+
+        const b = [
+            [argv[2], argv[3]],
+            [argv[4], argv[5]]
+        ];
+
+        const c = [
+            argv[6],
+            argv[7]
+        ];
+
+        // -----------------------------------
+        // ROOT HEX
+        // -----------------------------------
+
+        const rootHex =
+            ethers.utils.hexZeroPad(
+                ethers.BigNumber
+                    .from(state.tree.root.toString())
+                    .toHexString(),
+                32
+            );
+
+        // -----------------------------------
+        // EXECUTE CREATE ACCOUNT
+        // -----------------------------------
+
+        const tx =
+            await noidAccountManager
+                .connect(relayerSigner)
+                .createNoidAccount(
+                    [{
+                        a,
+                        b,
+                        c,
+
+                        inputs: {
+                            enabled:
+                                [1,0,0,0],
+
+                            roots: [
+                                rootHex,
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero
+                            ],
+
+                            poolIds:
+                                [0,0,0,0],
+
+                            nullifiers: [
+                                ethers.utils.hexZeroPad(
+                                    ethers.BigNumber
+                                        .from(nullifier)
+                                        .toHexString(),
+                                    32
+                                ),
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero
+                            ]
+                        },
+
+                        C1:
+                            changeCommitment.bytes32,
+
+                        C2:
+                            relayerCommitment.bytes32,
+
+                        encryptedNote1,
+                        encryptedNote2
+                    }],
+                    ethers.utils.hexZeroPad(
+                        ethers.BigNumber
+                            .from(cmx)
+                            .toHexString(),
+                        32
+                    ),
+                    encryptedAccountNote
+                );
+
+        const receipt =
+            await tx.wait();
+
+        console.log("\n========== CREATE ACCOUNT RECEIPT ==========");
+
+        console.log(receipt);
+
+        // -----------------------------------
+        // VERIFY ACCOUNT EXISTS
+        // -----------------------------------
+
+        const deployedAccount =
+            await privatePool.NoidAccounts(
+                ethers.utils.hexZeroPad(
+                    ethers.BigNumber
+                        .from(cmx)
+                        .toHexString(),
+                    32
+                )
+            );
+
+        console.log("\n========== DEPLOYED ACCOUNT ==========");
+
+        console.log(deployedAccount);
+
+        expect(
+            deployedAccount
+        ).to.not.equal(
+            ethers.constants.AddressZero
+        );
+
+        // rebuild state
+        await rebuildWalletState();
+    });
+
+
 });

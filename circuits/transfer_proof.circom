@@ -2,7 +2,7 @@ pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "./merkle_path.circom";
-
+include "./range_check.circom";
 /**
  * Transfer
  *
@@ -69,6 +69,7 @@ template TransferProof(max_inputs,  depth) {
     component hasher[max_inputs];
     component merklePath[max_inputs];
     component nullHasher[max_inputs];
+    component inputRangeChecks[max_inputs];
 
     // note: in circom we cannot to circular addition like sum <== sum + amount;
     //       thats why we are using sum array.
@@ -76,6 +77,10 @@ template TransferProof(max_inputs,  depth) {
     for (var i = 0; i < max_inputs; i++) {
         // enable flag constraint
         enabled[i] * (1 - enabled[i]) === 0;
+
+        // amount range constraint 
+        inputRangeChecks[i] = RangeCheck(128); 
+        inputRangeChecks[i].in <== a_ins[i];
 
         // amount summation
         x[i] <== enabled[i] * a_ins[i];
@@ -128,6 +133,7 @@ template TransferProof(max_inputs,  depth) {
     receivers[2] === relayer;
 
     component outHasher[3];
+    component outputRangeChecks[3];
 
     signal out_sum[4];
     out_sum[0] <== 0;
@@ -135,6 +141,10 @@ template TransferProof(max_inputs,  depth) {
     for (var i = 0 ; i < 3 ; i++){
         // output enabled flag constraint
         output_enabled[i] * (1 - output_enabled[i]) === 0;
+
+        // output amount range constraint 
+        outputRangeChecks[i] = RangeCheck(128); 
+        outputRangeChecks[i].in <== a_outs[i];
 
         //output commitment checkup
         outHasher[i] = Poseidon(4);
