@@ -1,111 +1,300 @@
-Folder Structure
+```text
 project/
 │
 ├── circuits/
-│   ├── merkle_path.circom
+│   ├── create_noir_account.circom
 │   ├── deposit_proof.circom
+│   ├── execte_call_proof.circom
+│   ├── merkle_path.circom
+│   ├── noir_account_ownership.circom
 │   ├── transfer_proof.circom
 │   └── withdraw_proof.circom
 │
 ├── build/
 ├── ptau/
 └── contracts/
+```
 
-STEP 1 — Download PTAU (ONLY ONCE)
-    mkdir ptau
+# STEP 1 — Install circom + snarkjs
+
+```bash
+npm install -g snarkjs
+```
+
+Install circom:
+https://docs.circom.io/getting-started/installation/
+
+Verify:
+
+```bash
+circom --version
+snarkjs --version
+```
+
+---
+
+# STEP 2 — Download PTAU (ONLY ONCE)
+
+```bash
+mkdir ptau
+```
 
 Download:
-    curl -L \
-    https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_17.ptau \
-    -o ptau/powersOfTau28_hez_final_17.ptau
 
-DEPOSIT CIRCUIT
+```bash
+curl -L \
+https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_17.ptau \
+-o ptau/powersOfTau28_hez_final_17.ptau
+```
 
-STEP 2 — Compile Deposit Circuit
-    circom circuits/deposit_proof.circom \
-        --r1cs \
-        --wasm \
-        --sym \
-        -o build
+---
 
-STEP 3 — Generate Deposit ZKey
-    snarkjs groth16 setup \
-        build/deposit_proof.r1cs \
-        ptau/powersOfTau28_hez_final_17.ptau \
-        build/deposit_0000.zkey
+# DEPOSIT CIRCUIT
 
-STEP 4 — Finalize Deposit ZKey
-    snarkjs zkey contribute \
-        build/deposit_0000.zkey \
-        build/deposit_final.zkey \
-        --name="mahesh"
+## STEP 3 — Compile Deposit Circuit
 
-STEP 5 — Export Deposit Verifier
-    snarkjs zkey export solidityverifier \
-        build/deposit_final.zkey \
-        contracts/DepositVerifier.sol
+```bash
+circom circuits/deposit_proof.circom \
+    --r1cs \
+    --wasm \
+    --sym \
+    -o build
+```
 
-DONE.
+## STEP 4 — Generate Deposit ZKey
 
-TRANSFER CIRCUIT
+```bash
+snarkjs groth16 setup \
+    build/deposit_proof.r1cs \
+    ptau/powersOfTau28_hez_final_17.ptau \
+    build/deposit_0000.zkey
+```
 
-STEP 6 — Compile Transfer Circuit
-    circom circuits/transfer_proof.circom \
-        --r1cs \
-        --wasm \
-        --sym \
-        -o build
+## STEP 5 — Finalize Deposit ZKey
 
-STEP 7 — Generate Transfer ZKey
+```bash
+snarkjs zkey contribute \
+    build/deposit_0000.zkey \
+    build/deposit_final.zkey \
+    --name="mahesh"
+```
 
-    snarkjs groth16 setup \
-        build/transfer_proof.r1cs \
-        ptau/powersOfTau28_hez_final_17.ptau \
-        build/transfer_0000.zkey
+## STEP 6 — Export Deposit Verifier
 
-STEP 8 — Finalize Transfer ZKey
-    snarkjs zkey contribute \
-        build/transfer_0000.zkey \
-        build/transfer_final.zkey \
-        --name="mahesh"
-
-STEP 9 — Export Transfer Verifier
-    snarkjs zkey export solidityverifier \
-        build/transfer_final.zkey \
-        contracts/TransferVerifier.sol
+```bash
+snarkjs zkey export solidityverifier \
+    build/deposit_final.zkey \
+    contracts/DepositVerifier.sol
+```
 
 DONE.
 
-WITHDRAW CIRCUIT
+---
 
-STEP 10 — Compile Withdraw Circuit
-    circom circuits/withdraw_proof.circom \
-        --r1cs \
-        --wasm \
-        --sym \
-        -o build
+# TRANSFER CIRCUIT
 
-STEP 11 — Generate Withdraw ZKey
-    snarkjs groth16 setup \
-        build/withdraw_proof.r1cs \
-        ptau/powersOfTau28_hez_final_17.ptau \
-        build/withdraw_0000.zkey
+## STEP 7 — Compile Transfer Circuit
 
-STEP 12 — Finalize Withdraw ZKey
-    snarkjs zkey contribute \
-        build/withdraw_0000.zkey \
-        build/withdraw_final.zkey \
-        --name="mahesh"
+```bash
+circom circuits/transfer_proof.circom \
+    --r1cs \
+    --wasm \
+    --sym \
+    -o build
+```
 
-STEP 13 — Export Withdraw Verifier
-    snarkjs zkey export solidityverifier \
-        build/withdraw_final.zkey \
-        contracts/WithdrawVerifier.sol
+## STEP 8 — Generate Transfer ZKey
+
+```bash
+snarkjs groth16 setup \
+    build/transfer_proof.r1cs \
+    ptau/powersOfTau28_hez_final_17.ptau \
+    build/transfer_0000.zkey
+```
+
+## STEP 9 — Finalize Transfer ZKey
+
+```bash
+snarkjs zkey contribute \
+    build/transfer_0000.zkey \
+    build/transfer_final.zkey \
+    --name="mahesh"
+```
+
+## STEP 10 — Export Transfer Verifier
+
+```bash
+snarkjs zkey export solidityverifier \
+    build/transfer_final.zkey \
+    contracts/TransferVerifier.sol
+```
 
 DONE.
 
-Final Output
-    contracts/
-        ├── DepositVerifier.sol
-        ├── TransferVerifier.sol
-        └── WithdrawVerifier.sol
+---
+
+# WITHDRAW CIRCUIT
+
+## STEP 11 — Compile Withdraw Circuit
+
+```bash
+circom circuits/withdraw_proof.circom \
+    --r1cs \
+    --wasm \
+    --sym \
+    -o build
+```
+
+## STEP 12 — Generate Withdraw ZKey
+
+```bash
+snarkjs groth16 setup \
+    build/withdraw_proof.r1cs \
+    ptau/powersOfTau28_hez_final_17.ptau \
+    build/withdraw_0000.zkey
+```
+
+## STEP 13 — Finalize Withdraw ZKey
+
+```bash
+snarkjs zkey contribute \
+    build/withdraw_0000.zkey \
+    build/withdraw_final.zkey \
+    --name="mahesh"
+```
+
+## STEP 14 — Export Withdraw Verifier
+
+```bash
+snarkjs zkey export solidityverifier \
+    build/withdraw_final.zkey \
+    contracts/WithdrawVerifier.sol
+```
+
+DONE.
+
+---
+
+# CREATE NOID ACCOUNT CIRCUIT
+
+## STEP 15 — Compile Create Noid Account Circuit
+
+```bash
+circom circuits/create_noir_account.circom \
+    --r1cs \
+    --wasm \
+    --sym \
+    -o build
+```
+
+## STEP 16 — Generate Create Noid Account ZKey
+
+```bash
+snarkjs groth16 setup \
+    build/create_noir_account.r1cs \
+    ptau/powersOfTau28_hez_final_17.ptau \
+    build/create_noid_account_0000.zkey
+```
+
+## STEP 17 — Finalize Create Noid Account ZKey
+
+```bash
+snarkjs zkey contribute \
+    build/create_noid_account_0000.zkey \
+    build/create_noid_account_final.zkey \
+    --name="mahesh"
+```
+
+## STEP 18 — Export Create Noid Account Verifier
+
+```bash
+snarkjs zkey export solidityverifier \
+    build/create_noid_account_final.zkey \
+    contracts/CreateNoidAccountVerifier.sol
+```
+
+DONE.
+
+---
+
+# EXECUTE CALL CIRCUIT
+
+## STEP 19 — Compile Execute Call Circuit
+
+```bash
+circom circuits/execte_call_proof.circom \
+    --r1cs \
+    --wasm \
+    --sym \
+    -o build
+```
+
+## STEP 20 — Generate Execute Call ZKey
+
+```bash
+snarkjs groth16 setup \
+    build/execte_call_proof.r1cs \
+    ptau/powersOfTau28_hez_final_17.ptau \
+    build/execute_call_0000.zkey
+```
+
+## STEP 21 — Finalize Execute Call ZKey
+
+```bash
+snarkjs zkey contribute \
+    build/execute_call_0000.zkey \
+    build/execute_call_final.zkey \
+    --name="mahesh"
+```
+
+## STEP 22 — Export Execute Call Verifier
+
+```bash
+snarkjs zkey export solidityverifier \
+    build/execute_call_final.zkey \
+    contracts/ExecuteFunctionCallVerifier.sol
+```
+
+DONE.
+
+---
+
+# NOID ACCOUNT OWNERSHIP CIRCUIT
+
+## STEP 23 — Compile Ownership Circuit
+
+```bash
+circom circuits/noir_account_ownership.circom \
+    --r1cs \
+    --wasm \
+    --sym \
+    -o build
+```
+
+## STEP 24 — Generate Ownership ZKey
+
+```bash
+snarkjs groth16 setup \
+    build/noir_account_ownership.r1cs \
+    ptau/powersOfTau28_hez_final_17.ptau \
+    build/noid_account_ownership_0000.zkey
+```
+
+## STEP 25 — Finalize Ownership ZKey
+
+```bash
+snarkjs zkey contribute \
+    build/noid_account_ownership_0000.zkey \
+    build/noid_account_ownership_final.zkey \
+    --name="mahesh"
+```
+
+## STEP 26 — Export Ownership Verifier
+
+```bash
+snarkjs zkey export solidityverifier \
+    build/noid_account_ownership_final.zkey \
+    contracts/NoidAccountOwnershipVerifier.sol
+```
+
+DONE.
