@@ -159,7 +159,7 @@ Users should be able to:
 
 ### 🌐 Private Execution Layer
 
-Menoid introduces a private execution architecture where users interact with protocols through private smart execution accounts ( Noid Smart Accounts).
+Menoid introduces a private execution architecture where users interact with protocols through private smart execution accounts called Noid Smart Accounts (Unlinkable pseudonymous execution).
 
 Instead of directly exposing wallet activity publicly, Menoid abstracts:
 
@@ -170,7 +170,7 @@ Instead of directly exposing wallet activity publicly, Menoid abstracts:
 
 through zk-based execution authorization.
 
-The long-term goal is to make:
+The goal is to make:
 
 - 🔄 Private swaps
 - 🌊 Stealth liquidity positions

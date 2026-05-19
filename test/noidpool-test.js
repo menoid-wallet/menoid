@@ -2449,4 +2449,554 @@ describe("PriFi Wallet Architecture", function () {
     });
 
 
+    it("Should execute shopping interaction privately through NoidAccount", async function () {
+
+        const sender =
+            userWallets[0];
+
+        // -----------------------------------
+        // ATTACH MANAGER
+        // -----------------------------------
+
+        const noidAccountManager =
+            await ethers.getContractAt(
+                "NoidAccountManager",
+                "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318"
+            );
+
+        // -----------------------------------
+        // REBUILD STATE
+        // -----------------------------------
+
+        await rebuildWalletState();
+
+        // private input note
+        const inputNote =
+            walletStates["user1"].notes[0];
+
+        // noid account
+        const noidAccountState =
+            walletStates["user1"].accounts[0];
+
+        console.log("\n========== EXECUTION ACCOUNT ==========");
+
+        console.log(noidAccountState);
+
+        const noidAccount =
+            await ethers.getContractAt(
+                "NoidAccount",
+                noidAccountState.account
+            );
+
+        // -----------------------------------
+        // SHOPPING CONTRACT
+        // -----------------------------------
+
+        const DemoContract1 =
+            await ethers.getContractFactory(
+                "DemoContract1"
+            );
+
+        const shop =
+            await DemoContract1.deploy();
+
+        await shop.deployed();
+
+        // admin add products
+        await shop.addProduct(
+            "Laptop",
+            ethers.utils.parseEther("1")
+        );
+
+        // -----------------------------------
+        // CALLDATA
+        // -----------------------------------
+
+        const createOrderData =
+            shop.interface.encodeFunctionData(
+                "createOrder",
+                [0]
+            );
+
+        const target =
+            shop.address;
+
+        const value =
+            ethers.utils.parseEther("1");
+
+        const data =
+            createOrderData;
+
+        // -----------------------------------
+        // INPUT NOTE
+        // -----------------------------------
+
+        const state =
+            poolStates[inputNote.poolId];
+
+        const merkleProof =
+            state.tree.createProof(
+                inputNote.leafIndex
+            );
+
+        // -----------------------------------
+        // VALUES
+        // -----------------------------------
+
+        const fee =
+            ethers.utils.parseEther("0.01");
+
+        const inputAmount =
+            ethers.BigNumber.from(
+                inputNote.amount
+            );
+
+        const change =
+            inputAmount
+                .sub(value)
+                .sub(fee);
+
+        // -----------------------------------
+        // RANDOMNESS
+        // -----------------------------------
+
+        const rChange =
+            ethers.BigNumber.from(
+                ethers.utils.randomBytes(31)
+            ).toString();
+
+        const rRelayer =
+            ethers.BigNumber.from(
+                ethers.utils.randomBytes(31)
+            ).toString();
+
+        // -----------------------------------
+        // OUTPUT COMMITMENTS
+        // -----------------------------------
+
+        const changeCommitment =
+            await createCommitment(
+                change.toString(),
+                rChange,
+                sender.zk.publicKey
+            );
+
+        const relayerCommitment =
+            await createCommitment(
+                fee.toString(),
+                rRelayer,
+                relayerWallet.zk.publicKey
+            );
+
+        // -----------------------------------
+        // NULLIFIER
+        // -----------------------------------
+
+        const poseidon =
+            await circomlibjs.buildPoseidon();
+
+        const nullifier =
+            poseidon.F.toString(
+                poseidon([
+                    2,
+                    inputNote.commitment,
+                    inputNote.randomness,
+                    sender.zk.secretKey
+                ])
+            );
+
+        // -----------------------------------
+        // ENCRYPTED NOTES
+        // -----------------------------------
+
+        const encryptedNote1 =
+            encryptMessage(
+                JSON.stringify({
+                    amount:
+                        change.toString(),
+                    randomness:
+                        rChange
+                }),
+                sender.privateWallet.publicKey
+            );
+
+        const encryptedNote2 =
+            encryptMessage(
+                JSON.stringify({
+                    amount:
+                        fee.toString(),
+                    randomness:
+                        rRelayer
+                }),
+                relayerWallet.privateWallet.publicKey
+            );
+
+        // -----------------------------------
+        // EXECUTE CALL PROOF INPUT
+        // -----------------------------------
+
+        const executeInput = {
+
+            sk:
+                sender.zk.secretKey,
+
+            pk:
+                sender.zk.publicKey,
+
+            relayer:
+                relayerWallet.zk.publicKey,
+
+            enabled:
+                [1,0,0,0],
+
+            c_ins: [
+                inputNote.commitment,
+                0,
+                0,
+                0
+            ],
+
+            a_ins: [
+                inputNote.amount,
+                0,
+                0,
+                0
+            ],
+
+            r_ins: [
+                inputNote.randomness,
+                0,
+                0,
+                0
+            ],
+
+            roots: [
+                state.tree.root.toString(),
+                0,
+                0,
+                0
+            ],
+
+            pathElements: [
+                merkleProof.siblings.map(
+                    x => x[0].toString()
+                ),
+                Array(20).fill(0),
+                Array(20).fill(0),
+                Array(20).fill(0)
+            ],
+
+            pathIndices: [
+                merkleProof.pathIndices,
+                Array(20).fill(0),
+                Array(20).fill(0),
+                Array(20).fill(0)
+            ],
+
+            nullifiers: [
+                nullifier,
+                0,
+                0,
+                0
+            ],
+
+            out_enabled:
+                [1,1],
+
+            c_outs: [
+                changeCommitment.decimal,
+                relayerCommitment.decimal
+            ],
+
+            a_outs: [
+                change.toString(),
+                fee.toString()
+            ],
+
+            r_outs: [
+                rChange,
+                rRelayer
+            ],
+
+            receivers: [
+                sender.zk.publicKey,
+                relayerWallet.zk.publicKey
+            ],
+
+            callValue:
+                value.toString()
+        };
+
+        // -----------------------------------
+        // GENERATE EXECUTION PROOF
+        // -----------------------------------
+
+        const {
+            proof: executeProof,
+            publicSignals: executeSignals
+        } =
+            await snarkjs.groth16.fullProve(
+
+                executeInput,
+
+                "build/execute_call_proof_js/execute_call_proof.wasm",
+
+                "build/execute_call_proof_final.zkey"
+            );
+
+        const executeCalldata =
+            await snarkjs.groth16.exportSolidityCallData(
+                executeProof,
+                executeSignals
+            );
+
+        const executeArgv =
+            executeCalldata
+                .replace(/["[\]\s]/g, "")
+                .split(",");
+
+        const executeA = [
+            executeArgv[0],
+            executeArgv[1]
+        ];
+
+        const executeB = [
+            [executeArgv[2], executeArgv[3]],
+            [executeArgv[4], executeArgv[5]]
+        ];
+
+        const executeC = [
+            executeArgv[6],
+            executeArgv[7]
+        ];
+
+        // -----------------------------------
+        // OWNERSHIP PROOF
+        // -----------------------------------
+
+        const nonce =
+            await noidAccount.nonce();
+
+        const dataHash =
+            ethers.BigNumber.from(
+                ethers.utils.keccak256(data)
+            )
+            .mod(
+                "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+            )
+            .toString();
+
+        const actionHash =
+            poseidon.F.toString(
+                poseidon([
+                    target,
+                    value.toString(),
+                    dataHash
+                ])
+            );
+
+        const callCommitment =
+            poseidon.F.toString(
+                poseidon([
+                    noidAccountState.commitment,
+                    nonce.toString(),
+                    actionHash
+                ])
+            );
+
+        const ownershipInput = {
+
+            commitment:
+                noidAccountState.commitment,
+
+            randomness:
+                noidAccountState.randomness,
+
+            callCommitment,
+
+            nonce:
+                nonce.toString(),
+
+            target:
+                ethers.BigNumber
+                    .from(target)
+                    .toString(),
+
+            value:
+                value.toString(),
+
+            dataHash,
+
+            sk:
+                sender.zk.secretKey,
+
+            pk:
+                sender.zk.publicKey
+        };
+
+        const {
+            proof: ownershipProof,
+            publicSignals: ownershipSignals
+        } =
+            await snarkjs.groth16.fullProve(
+
+                ownershipInput,
+
+                "build/noid_account_ownership_js/noid_account_ownership.wasm",
+
+                "build/noid_account_ownership_final.zkey"
+            );
+
+        const ownershipCalldata =
+            await snarkjs.groth16.exportSolidityCallData(
+                ownershipProof,
+                ownershipSignals
+            );
+
+        const ownershipArgv =
+            ownershipCalldata
+                .replace(/["[\]\s]/g, "")
+                .split(",");
+
+        const ownershipA = [
+            ownershipArgv[0],
+            ownershipArgv[1]
+        ];
+
+        const ownershipB = [
+            [ownershipArgv[2], ownershipArgv[3]],
+            [ownershipArgv[4], ownershipArgv[5]]
+        ];
+
+        const ownershipC = [
+            ownershipArgv[6],
+            ownershipArgv[7]
+        ];
+
+        // -----------------------------------
+        // ROOT HEX
+        // -----------------------------------
+
+        const rootHex =
+            ethers.utils.hexZeroPad(
+                ethers.BigNumber
+                    .from(state.tree.root.toString())
+                    .toHexString(),
+                32
+            );
+
+        // -----------------------------------
+        // EXECUTE PRIVATELY
+        // -----------------------------------
+
+        const tx =
+            await noidAccountManager
+                .connect(relayerSigner)
+                .executeFunction(
+
+                    [{
+                        a:
+                            executeA,
+
+                        b:
+                            executeB,
+
+                        c:
+                            executeC,
+
+                        inputs: {
+
+                            enabled:
+                                [1,0,0,0],
+
+                            roots: [
+                                rootHex,
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero
+                            ],
+
+                            poolIds:
+                                [0,0,0,0],
+
+                            nullifiers: [
+                                ethers.utils.hexZeroPad(
+                                    ethers.BigNumber
+                                        .from(nullifier)
+                                        .toHexString(),
+                                    32
+                                ),
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero,
+                                ethers.constants.HashZero
+                            ]
+                        },
+
+                        C1:
+                            changeCommitment.bytes32,
+
+                        C2:
+                            relayerCommitment.bytes32,
+
+                        encryptedNote1,
+                        encryptedNote2,
+
+                        callValue:
+                            value.toString()
+                    }],
+
+                    target,
+                    value,
+                    data,
+
+                    ethers.utils.hexZeroPad(
+                        ethers.BigNumber
+                            .from(noidAccountState.commitment)
+                            .toHexString(),
+                        32
+                    ),
+
+                    ethers.utils.hexZeroPad(
+                        ethers.BigNumber
+                            .from(callCommitment)
+                            .toHexString(),
+                        32
+                    ),
+
+                    ownershipA,
+                    ownershipB,
+                    ownershipC,
+
+                    noidAccount.address
+                );
+
+        await tx.wait();
+
+        // -----------------------------------
+        // VERIFY ORDER CREATED
+        // -----------------------------------
+
+        const order =
+            await shop.orders(0);
+
+        expect(
+            order.buyer
+        ).to.equal(
+            noidAccount.address
+        );
+
+        // -----------------------------------
+        // VERIFY NONCE UPDATED
+        // -----------------------------------
+
+        expect(
+            await noidAccount.nonce()
+        ).to.equal(1);
+
+        // rebuild state
+        await rebuildWalletState();
+    });
+
+
+
 });
