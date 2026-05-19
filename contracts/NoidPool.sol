@@ -434,12 +434,14 @@ contract NoidPool {
     }
 
     function setNoidAccount(bytes32 cmx, address account, bytes memory eNote) external {
+        require(msg.sender != address(0),"Didnt set noid account manager address");
         require(msg.sender == address(noidAccountManager),"Not allowed");
         NoidAccounts[cmx] = account;
         emit NoidAccountCreated(cmx, eNote);
     }
 
     function addNullifiersSpent(Inputs memory input) external {
+        require(msg.sender != address(0),"Didnt set noid account manager address");
         require(msg.sender == address(noidAccountManager),"Not allowed");
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
             if (input.enabled[i] == 0) continue;
@@ -453,6 +455,7 @@ contract NoidPool {
     }
 
     function noteCreated(uint256 poolId, bytes32 commitment , bytes memory enc) external{
+        require(msg.sender != address(0),"Didnt set noid account manager address");
         require(msg.sender == address(noidAccountManager),"Not allowed");
     
         emit NoteCreated(
@@ -462,130 +465,33 @@ contract NoidPool {
         );
     }
 
+    function executeNoidAccountFunction(
+        address target,
+        uint256 value,
+        bytes calldata data,
+        bytes32 commitment, // owndership commitment of the Noid account
+        bytes32 callCommitment,
+        // zkproof
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        address noidAccount
+    ) external {
+        require(msg.sender != address(0),"Didnt set noid account manager address");
+        require(msg.sender == address(noidAccountManager),"Not allowed");
 
-    // function executeFunction(
-    //     ExecuteFunctionCall[] calldata calls,
-    //     address target,
-    //     uint256 value,
-    //     bytes calldata data,
-    //     bytes32 commitment, // owndership commitment of the Noid account
-    //     bytes32 callCommitment,
-    //     // zkproof
-    //     uint256[2] calldata a,
-    //     uint256[2][2] calldata b,
-    //     uint256[2] calldata c,
-    //     address noidAccount
-    // ) external {
-    //     uint256 totalValue = 0;
-    //     for (uint8 i = 0; i < calls.length ; i++) {
-    //         totalValue += calls[i].callValue;
-    //         _singleExecuteFunction(calls[i]);
-    //     }
-    //     require(totalValue == value,"Values mismatched");
+        require(NoidAccounts[commitment] == noidAccount , "Noid account mismatch");
 
-    //     require(NoidAccounts[commitment] == noidAccount , "Noid account mismatch");
-
-    //     NoidAccount(payable(noidAccount)).execute{value: value} (
-    //         target,
-    //         value,
-    //         data,
-    //         callCommitment,
-    //         a,
-    //         b,
-    //         c
-    //     );
-    // }
-
-    // function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal {
-    //     // validate the inputs
-    //     _verifyInputs(call.inputs);
-
-    //     //duplicate commitment check
-    //     if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
-    //         require(call.C1 != call.C2, "Duplicate commitments");
-    //     }
-
-    //     /* Public signals
-    //     relayer, - 1
-    //     enabled, - MAX_INPUTS
-    //     roots,   - MAX_INPUTS
-    //     nullifiers, - MAX_INPUTS
-    //     out_enabled, - 2
-    //     c_outs, - 2
-    //     callValue - 1
-    //     */
-    //     uint256[18] memory publicSignals;
-    //     uint8 idx = 0;
-    //     publicSignals[idx++] = relayerZkPubkey;
-    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
-    //         publicSignals[idx++] = uint256(call.inputs.enabled[i]);
-    //     }
-    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
-    //         publicSignals[idx++] = uint256(call.inputs.roots[i]);
-    //     }
-    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
-    //         publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
-    //     }
-
-    //     // outputs enabled
-    //     bytes32[] memory tempOutCmx = new bytes32[](2);
-    //     uint8 cmxCount = 0;
-    //     if (call.C1 != ZERO_COMMITMENT) {
-    //         publicSignals[idx++] = 1;
-    //         tempOutCmx[cmxCount++] = call.C1;
-    //     } else {
-    //         publicSignals[idx++] = 0;
-    //     }
-
-    //     if (call.C2 != ZERO_COMMITMENT) {
-    //         publicSignals[idx++] = 1;
-    //         tempOutCmx[cmxCount++] = call.C2;
-    //     } else {
-    //         publicSignals[idx++] = 0;
-    //     }
-
-    //     // c_outs
-    //     publicSignals[idx++] = uint256(call.C1);
-    //     publicSignals[idx++] = uint256(call.C2);
-
-    //     // callValue
-    //     publicSignals[idx++] = call.callValue;
-
-    //     require(executeFunCallVerifier.verifyProof(call.a, call.b, call.c, publicSignals),"Execute function call proof verification failed");
-
-    //     // add nullifiers to the pool
-    //     for (uint8 i = 0; i < MAX_INPUTS; i++) {
-    //         if (call.inputs.enabled[i] == 0) continue;
-    //         require(
-    //             !nullifierSpent[call.inputs.nullifiers[i]],
-    //             "Nullifier already exists"
-    //         );
-    //         nullifierSpent[call.inputs.nullifiers[i]] = true;
-    //         emit NullifierSpent(call.inputs.nullifiers[i]);
-    //     }
-
-    //     // add commitments to the pool
-    //     bytes32[] memory commitments = new bytes32[](cmxCount);
-    //     for (uint8 i = 0; i < cmxCount; i++) {
-    //         commitments[i] = tempOutCmx[i];
-    //     }
-    //     InsertedNote[] memory insertedNotes = _insertBatch(commitments);
-    //     for (uint8 i = 0; i < insertedNotes.length; i++) {
-    //         bytes memory enc;
-    //         if (insertedNotes[i].commitment == call.C1)
-    //             enc = call.encryptedNote1;
-    //         else if (insertedNotes[i].commitment == call.C2)
-    //             enc = call.encryptedNote2;
-    //         else revert("Unknown commiment");
-
-    //         emit NoteCreated(
-    //             insertedNotes[i].poolId,
-    //             insertedNotes[i].commitment,
-    //             enc
-    //         );
-    //     }
-
-    // }
+        NoidAccount(payable(noidAccount)).execute{value: value} (
+            target,
+            value,
+            data,
+            callCommitment,
+            a,
+            b,
+            c
+        );
+    }
 
     function insertCommitments( 
         bytes32[] calldata commitments 

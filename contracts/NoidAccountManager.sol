@@ -90,7 +90,6 @@ contract NoidAccountManager {
         // add nullifiers 
         noidPool.addNullifiersSpent(call.inputs);
 
-        // add commitments
         // add commitments to the pool
         bytes32[] memory commitments = new bytes32[](cmxCount);
         for (uint8 i = 0; i < cmxCount; i++) {
@@ -167,5 +166,118 @@ contract NoidAccountManager {
         );
 
         return (cmxCount,tempOutCmx);
+    }
+
+
+    function executeFunction(
+        ExecuteFunctionCall[] calldata calls,
+        address target,
+        uint256 value,
+        bytes calldata data,
+        bytes32 commitment, // owndership commitment of the Noid account
+        bytes32 callCommitment,
+        // zkproof
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        address noidAccount
+    ) external {
+        uint256 totalValue = 0;
+        for (uint8 i = 0; i < calls.length ; i++) {
+            totalValue += calls[i].callValue;
+            _singleExecuteFunction(calls[i]);
+        }
+        require(totalValue == value,"Values mismatched");
+
+        noidPool.executeNoidAccountFunction(
+            target, 
+            value, 
+            data, 
+            commitment, 
+            callCommitment, 
+            a, 
+            b, 
+            c, 
+            noidAccount
+        );
+
+    }
+
+    function _singleExecuteFunction(ExecuteFunctionCall calldata call) internal { 
+        // validate the inputs
+        noidPool.verifyInputs(call.inputs);
+
+        //duplicate commitment check
+        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
+            require(call.C1 != call.C2, "Duplicate commitments");
+        }
+
+        /* Public signals
+            relayer, - 1
+            enabled, - MAX_INPUTS
+            roots,   - MAX_INPUTS
+            nullifiers, - MAX_INPUTS
+            out_enabled, - 2
+            c_outs, - 2
+            callValue - 1
+        */
+        uint256[18] memory publicSignals;
+        uint8 idx = 0;
+        publicSignals[idx++] = relayerZkPubkey;
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.inputs.enabled[i]);
+        }
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.inputs.roots[i]);
+        }
+        for (uint8 i = 0; i < MAX_INPUTS; i++) {
+            publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
+        }
+
+        // outputs enabled
+        bytes32[] memory tempOutCmx = new bytes32[](2);
+        uint8 cmxCount = 0;
+        if (call.C1 != ZERO_COMMITMENT) {
+            publicSignals[idx++] = 1;
+            tempOutCmx[cmxCount++] = call.C1;
+        } else {
+            publicSignals[idx++] = 0;
+        }
+
+        if (call.C2 != ZERO_COMMITMENT) {
+            publicSignals[idx++] = 1;
+            tempOutCmx[cmxCount++] = call.C2;
+        } else {
+            publicSignals[idx++] = 0;
+        }
+
+        // c_outs
+        publicSignals[idx++] = uint256(call.C1);
+        publicSignals[idx++] = uint256(call.C2);
+
+        // callValue
+        publicSignals[idx++] = call.callValue;
+
+        require(executeFunCallVerifier.verifyProof(call.a, call.b, call.c, publicSignals),"Execute function call proof verification failed");
+
+        // add nullifiers 
+        noidPool.addNullifiersSpent(call.inputs);
+
+        // add commitments to the pool
+        bytes32[] memory commitments = new bytes32[](cmxCount);
+        for (uint8 i = 0; i < cmxCount; i++) {
+            commitments[i] = tempOutCmx[i];
+        }
+        InsertedNote[] memory insertedNotes = noidPool.insertCommitments(commitments);
+        for (uint8 i = 0; i < insertedNotes.length; i++) {
+            bytes memory enc;
+            if (insertedNotes[i].commitment == call.C1)
+                enc = call.encryptedNote1;
+            else if (insertedNotes[i].commitment == call.C2)
+                enc = call.encryptedNote2;
+            else revert("Unknown commiment");
+
+            noidPool.noteCreated(insertedNotes[i].poolId,insertedNotes[i].commitment,enc);
+        }
     }
 }
