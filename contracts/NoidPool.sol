@@ -42,9 +42,7 @@ contract NoidPool {
     IDepositVerifier public immutable depositVerifier;
     ITransferVerifier public immutable transferVerifier;
     IWithdrawVerifier public immutable withdrawVerifier;
-    ICreateNoidAccountVerifier public immutable createNoidAccountVerifier;
-    INoidAccountOwnershipVerifier public immutable noidAccountOwnershipVerifier;
-    IExecuteFunctionCallVerifier public immutable executeFunCallVerifier;
+
 
 
     NoidAccountManager public noidAccountManager;
@@ -69,9 +67,6 @@ contract NoidPool {
         address _depositVerifier,
         address _transferVerifier,
         address _withdrawVerifier,
-        address _createNoidAccountVerifier,
-        address _noidAccountOwnershipVerifier,
-        address _executeCallVerifier,
         address _poseidon,
         address _relayer,
         uint256 _relayerZkPubkey
@@ -79,9 +74,6 @@ contract NoidPool {
         depositVerifier = IDepositVerifier(_depositVerifier);
         transferVerifier = ITransferVerifier(_transferVerifier);
         withdrawVerifier = IWithdrawVerifier(_withdrawVerifier);
-        createNoidAccountVerifier = ICreateNoidAccountVerifier(_createNoidAccountVerifier);
-        noidAccountOwnershipVerifier = INoidAccountOwnershipVerifier(_noidAccountOwnershipVerifier);
-        executeFunCallVerifier = IExecuteFunctionCallVerifier(_executeCallVerifier);
         poseidon = IPoseidon(_poseidon);
 
         relayer = _relayer;
