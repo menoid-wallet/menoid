@@ -1,12 +1,12 @@
 const { ethers } = require("ethers");
 const circomlibjs = require("circomlibjs");
 
-async function generatePrivateWallet(signature) {
+async function generatePrivateWallet(seedInput) {
 
     const poseidon = await circomlibjs.buildPoseidon();
 
     // deterministic seed
-    const seed = ethers.utils.keccak256(signature);
+    const seed = ethers.utils.keccak256(ethers.utils.toUtf8Bytes( seedInput ));
 
     // derived private wallet
     const privateWallet = new ethers.Wallet(seed);

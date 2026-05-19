@@ -6,15 +6,57 @@ const {
     generatePrivateWallet
 } = require("../helpers/wallets");
 
+
+
+// =========================
+// Deployment Logger
+// =========================
+
+async function logDeployment(
+    name,
+    contract
+) {
+
+    const receipt =
+        await contract.deployTransaction.wait();
+
+    const deployment = {
+
+        address:
+            contract.address,
+
+        txHash:
+            contract.deployTransaction.hash,
+
+        blockNumber:
+            receipt.blockNumber
+    };
+
+    console.log(`\n${name}`);
+    console.log(deployment);
+
+    return deployment;
+}
+
+
+
 async function main() {
 
-    // provider
+    // =========================
+    // Provider
+    // =========================
+
     const provider =
         new hre.ethers.providers.JsonRpcProvider(
             "https://testnet-rpc.monad.xyz"
         );
 
-    // relayer signer from .env
+
+
+    // =========================
+    // Relayer Signer
+    // =========================
+
     const relayerSigner =
         new hre.ethers.Wallet(
             process.env.PRIVATE_KEY,
@@ -26,7 +68,12 @@ async function main() {
         relayerSigner.address
     );
 
-    // balance
+
+
+    // =========================
+    // Balance
+    // =========================
+
     const balance =
         await provider.getBalance(
             relayerSigner.address
@@ -38,26 +85,31 @@ async function main() {
         "MON"
     );
 
-    // derive deterministic relayer wallet
-    const relayerSignature =
-        await relayerSigner.signMessage(
-            "PriFi private financial dapp"
-        );
+
+
+    // =========================
+    // Generate Relayer Wallet
+    // =========================
 
     const relayerWallet =
         await generatePrivateWallet(
-            relayerSignature
+
+            process.env.PRIVATE_KEY +
+            "Menoid wallet"
         );
 
-    console.log("\n========== RELAYER ==========");
+    console.log(
+        "\n========== RELAYER =========="
+    );
+
     console.log(relayerWallet);
 
 
 
 
-    // ================================
-    // PoseidonT3 Library
-    // ================================
+    // =========================
+    // PoseidonT3
+    // =========================
 
     const PoseidonT3 =
         await hre.ethers.getContractFactory(
@@ -70,17 +122,18 @@ async function main() {
 
     await poseidonLib.deployed();
 
-    console.log(
-        "\nPoseidonT3:",
-        poseidonLib.address
-    );
+    const poseidonLibInfo =
+        await logDeployment(
+            "PoseidonT3",
+            poseidonLib
+        );
 
 
 
 
-    // ================================
+    // =========================
     // PoseidonHasher
-    // ================================
+    // =========================
 
     const PoseidonHasher =
         await hre.ethers.getContractFactory(
@@ -99,17 +152,18 @@ async function main() {
 
     await poseidon.deployed();
 
-    console.log(
-        "PoseidonHasher:",
-        poseidon.address
-    );
+    const poseidonInfo =
+        await logDeployment(
+            "PoseidonHasher",
+            poseidon
+        );
 
 
 
 
-    // ================================
+    // =========================
     // DepositVerifier
-    // ================================
+    // =========================
 
     const DepositVerifier =
         await hre.ethers.getContractFactory(
@@ -122,17 +176,18 @@ async function main() {
 
     await depositVerifier.deployed();
 
-    console.log(
-        "DepositVerifier:",
-        depositVerifier.address
-    );
+    const depositVerifierInfo =
+        await logDeployment(
+            "DepositVerifier",
+            depositVerifier
+        );
 
 
 
 
-    // ================================
+    // =========================
     // TransferVerifier
-    // ================================
+    // =========================
 
     const TransferVerifier =
         await hre.ethers.getContractFactory(
@@ -145,17 +200,18 @@ async function main() {
 
     await transferVerifier.deployed();
 
-    console.log(
-        "TransferVerifier:",
-        transferVerifier.address
-    );
+    const transferVerifierInfo =
+        await logDeployment(
+            "TransferVerifier",
+            transferVerifier
+        );
 
 
 
 
-    // ================================
+    // =========================
     // WithdrawVerifier
-    // ================================
+    // =========================
 
     const WithdrawVerifier =
         await hre.ethers.getContractFactory(
@@ -168,26 +224,99 @@ async function main() {
 
     await withdrawVerifier.deployed();
 
-    console.log(
-        "WithdrawVerifier:",
-        withdrawVerifier.address
-    );
+    const withdrawVerifierInfo =
+        await logDeployment(
+            "WithdrawVerifier",
+            withdrawVerifier
+        );
 
 
 
 
-    // ================================
-    // PrivatePool
-    // ================================
+    // =========================
+    // CreateNoidAccountVerifier
+    // =========================
 
-    const PrivatePool =
+    const CreateNoidAccountVerifier =
         await hre.ethers.getContractFactory(
-            "PrivatePool",
+            "CreateNoidAccountVerifier",
             relayerSigner
         );
 
-    const privatePool =
-        await PrivatePool.deploy(
+    const createNoidAccountVerifier =
+        await CreateNoidAccountVerifier.deploy();
+
+    await createNoidAccountVerifier.deployed();
+
+    const createNoidAccountVerifierInfo =
+        await logDeployment(
+            "CreateNoidAccountVerifier",
+            createNoidAccountVerifier
+        );
+
+
+
+
+    // =========================
+    // ExecuteFunctionCallVerifier
+    // =========================
+
+    const ExecuteFunctionCallVerifier =
+        await hre.ethers.getContractFactory(
+            "ExecuteFunctionCallVerifier",
+            relayerSigner
+        );
+
+    const executeFunctionCallVerifier =
+        await ExecuteFunctionCallVerifier.deploy();
+
+    await executeFunctionCallVerifier.deployed();
+
+    const executeFunctionCallVerifierInfo =
+        await logDeployment(
+            "ExecuteFunctionCallVerifier",
+            executeFunctionCallVerifier
+        );
+
+
+
+
+    // =========================
+    // NoidAccountOwnershipVerifier
+    // =========================
+
+    const NoidAccountOwnershipVerifier =
+        await hre.ethers.getContractFactory(
+            "NoidAccountOwnershipVerifier",
+            relayerSigner
+        );
+
+    const noidAccountOwnershipVerifier =
+        await NoidAccountOwnershipVerifier.deploy();
+
+    await noidAccountOwnershipVerifier.deployed();
+
+    const noidAccountOwnershipVerifierInfo =
+        await logDeployment(
+            "NoidAccountOwnershipVerifier",
+            noidAccountOwnershipVerifier
+        );
+
+
+
+
+    // =========================
+    // NoidPool
+    // =========================
+
+    const NoidPool =
+        await hre.ethers.getContractFactory(
+            "NoidPool",
+            relayerSigner
+        );
+
+    const noidPool =
+        await NoidPool.deploy(
 
             depositVerifier.address,
 
@@ -204,39 +333,122 @@ async function main() {
             relayerWallet.zk.publicKey
         );
 
-    await privatePool.deployed();
+    await noidPool.deployed();
+
+    const noidPoolInfo =
+        await logDeployment(
+            "NoidPool",
+            noidPool
+        );
+
+
+
+
+    // =========================
+    // NoidAccountManager
+    // =========================
+
+    const NoidAccountManager =
+        await hre.ethers.getContractFactory(
+            "NoidAccountManager",
+            relayerSigner
+        );
+
+    const noidAccountManager =
+        await NoidAccountManager.deploy(
+
+            noidPool.address,
+
+            createNoidAccountVerifier.address,
+
+            executeFunctionCallVerifier.address,
+
+            noidAccountOwnershipVerifier.address,
+
+            relayerWallet.zk.publicKey
+        );
+
+    await noidAccountManager.deployed();
+
+    const noidAccountManagerInfo =
+        await logDeployment(
+            "NoidAccountManager",
+            noidAccountManager
+        );
+
+
+
+
+    // =========================
+    // Set Manager In Pool
+    // =========================
+
+    const tx =
+        await noidPool.setNoidAccountManager(
+            noidAccountManager.address
+        );
+
+    const setManagerReceipt =
+        await tx.wait();
 
     console.log(
-        "PrivatePool:",
-        privatePool.address
+        "\nNoidAccountManager linked to NoidPool"
     );
 
+    console.log({
+
+        txHash:
+            tx.hash,
+
+        blockNumber:
+            setManagerReceipt.blockNumber
+    });
 
 
 
-    console.log("\n========== DEPLOYMENT COMPLETE ==========");
+
+    // =========================
+    // Deployment Summary
+    // =========================
+
+    console.log(
+        "\n========== DEPLOYMENT COMPLETE =========="
+    );
 
     console.log({
 
         PoseidonT3:
-            poseidonLib.address,
+            poseidonLibInfo,
 
         PoseidonHasher:
-            poseidon.address,
+            poseidonInfo,
 
         DepositVerifier:
-            depositVerifier.address,
+            depositVerifierInfo,
 
         TransferVerifier:
-            transferVerifier.address,
+            transferVerifierInfo,
 
         WithdrawVerifier:
-            withdrawVerifier.address,
+            withdrawVerifierInfo,
 
-        PrivatePool:
-            privatePool.address
+        CreateNoidAccountVerifier:
+            createNoidAccountVerifierInfo,
+
+        ExecuteFunctionCallVerifier:
+            executeFunctionCallVerifierInfo,
+
+        NoidAccountOwnershipVerifier:
+            noidAccountOwnershipVerifierInfo,
+
+        NoidPool:
+            noidPoolInfo,
+
+        NoidAccountManager:
+            noidAccountManagerInfo
     });
 }
+
 
 
 main()
@@ -249,22 +461,59 @@ main()
     });
 
 
-/* 
-
-PoseidonT3: 0x543e455C08c399a46228923CD1CC88241505B0a2
-PoseidonHasher: 0x929Cb58a2739DC7F0a864Da92c742A9E190937b4
-DepositVerifier: 0x034202222a529209439B11dA98aa19C6083b1dA3
-TransferVerifier: 0x2e1a8D27829cD7b18C6838CD10e37267da4d65B1
-WithdrawVerifier: 0x31c2A4DCe7563E007f5F81Bd212bbDceE5964752
-PrivatePool: 0xCa9D63A1c7b102E46771640D28FA032BAA3dd3b5
-
+/*
 ========== DEPLOYMENT COMPLETE ==========
 {
-  PoseidonT3: '0x543e455C08c399a46228923CD1CC88241505B0a2',
-  PoseidonHasher: '0x929Cb58a2739DC7F0a864Da92c742A9E190937b4',
-  DepositVerifier: '0x034202222a529209439B11dA98aa19C6083b1dA3',
-  TransferVerifier: '0x2e1a8D27829cD7b18C6838CD10e37267da4d65B1',
-  WithdrawVerifier: '0x31c2A4DCe7563E007f5F81Bd212bbDceE5964752',
-  PrivatePool: '0xCa9D63A1c7b102E46771640D28FA032BAA3dd3b5'
+  PoseidonT3: {
+    address: '0x14e774B1973Fa30D8CB7Bd744048FbeAbc528334',
+    txHash: '0x8df759631386470acde4766f8df8e948e8cff4b1a3cee21546c6da9a5aebca5e',
+    blockNumber: 32790173
+  },
+  PoseidonHasher: {
+    address: '0x8324e9DE2C8c48282697deD5E33C5BCF058E3392',
+    txHash: '0x3859a5865f7294758284a520d82df5a12e45ae85bc55e3556d74b4298f4cf389',
+    blockNumber: 32790180
+  },
+  DepositVerifier: {
+    address: '0xF088a71aB6e83A60e752D3d881d259de8848Fc07',
+    txHash: '0x183ac406eb59d863f3f59dc357a26a95d2dd9b07ab69a043d0ee422e07a5af35',
+    blockNumber: 32790196
+  },
+  TransferVerifier: {
+    address: '0x23Dcab364680c35d9eA9471987C51E19d75f098d',
+    txHash: '0x142f15dbc57a1b1cf3044f3c712f9974525e2b54933aef1567c4ce121af40249',
+    blockNumber: 32790203
+  },
+  WithdrawVerifier: {
+    address: '0x6f9ECFB4e81Ea842f270a3eA2dEeB30f04DaA7c9',
+    txHash: '0xa35be2b6757d12abb777839d9baee6008c9da88ba99b599d7d91b73eb9a9e43c',
+    blockNumber: 32790219
+  },
+  CreateNoidAccountVerifier: {
+    address: '0xe0B4c4F731b4D913ae95031BE2d5277B4019c487',
+    txHash: '0x24ffa3a89728869772a8ce1eadf7933f93323d4e07fbeac03483b21069208f55',
+    blockNumber: 32790226
+  },
+  ExecuteFunctionCallVerifier: {
+    address: '0x320D75d60759Ed7B95917F97925375c3855feeF4',
+    txHash: '0x12b4d12f273453388f94bd5d240b39eba9948062d3a1e6504341eaccc2e70965',
+    blockNumber: 32790232
+  },
+  NoidAccountOwnershipVerifier: {
+    address: '0xAae171c7de409f6c37BA92a6c3B83d52bd5dEac5',
+    txHash: '0xb854c5901182c627db3be0a9879657bdef1849e4f2265242a771818b60c8fa54',
+    blockNumber: 32790238
+  },
+  NoidPool: {
+    address: '0xCc0857d3526674048235948d0d250F812b938751',
+    txHash: '0xe539f8ce7c4fceef01ad3787f54a402dea0b4f4592db40b04a372ab66ffe0007',
+    blockNumber: 32790244
+  },
+  NoidAccountManager: {
+    address: '0xD184D35c4Fe39ecC2aE86a9E34f0Fb9a40198E02',
+    txHash: '0xbde7faf85bd2bfac455b9cf80d1251388d539bb35a63790931867edb97e2cd67',
+    blockNumber: 32790252
+  }
 }
+
 */
