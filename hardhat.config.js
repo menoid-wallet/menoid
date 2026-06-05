@@ -25,6 +25,16 @@ module.exports = {
         monad: {
             url: "https://testnet-rpc.monad.xyz",
             accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
+        },
+        
+        sepolia: {
+            url: process.env.SEPOLIA_RPC_URL,
+            accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
+        },
+
+        baseSepolia: {
+            url: process.env.BASE_SEPOLIA_RPC_URL,
+            accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
         }
     }
 };
