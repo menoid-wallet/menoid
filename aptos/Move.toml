@@ -1,0 +1,22 @@
+[package]
+name = "menoid_aptos"
+version = "1.0.0"
+authors = []
+
+[addresses]
+noid = "0xe2cf0e9e22ab6717fdff560a19e4faad1f46143902a0f104431ca990d5bfe42f"
+
+[dev-addresses]
+noid = "0xe2cf0e9e22ab6717fdff560a19e4faad1f46143902a0f104431ca990d5bfe42f"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "mainnet"
+subdir = "aptos-framework"
+
+[dependencies.AptosStdlib]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "mainnet"
+subdir = "aptos-stdlib"
+
+[dev-dependencies]

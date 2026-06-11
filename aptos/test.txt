@@ -1,0 +1,29 @@
+local net server:
+aptos node run-local-testnet --with-faucet --faucet-port 8081 --force-restart --assume-yes
+
+Terminal 2:
+aptos account fund-with-faucet --profile noid-local --faucet-url http://127.0.0.1:8081 --amount 100000000000
+
+aptos move publish \
+  --profile noid-local \
+  --named-addresses noid=adress \
+  --package-dir . --max-gas 200000 --assume-yes
+
+
+  aptos move run --profile noid-local \
+  --function-id "address::pool::initialize" \
+  --args "u256:relayerZkPubkey" \
+         "address:address" \
+  --max-gas 100000 --assume-yes
+
+APTOS_NODE_URL=http://127.0.0.1:8080/v1 \
+APTOS_FAUCET_URL=http://127.0.0.1:8081 \
+NOID_MODULE_ADDR=address \
+DEPLOYER_PRIVATE_KEY=privatekey of deployer \
+npx ts-node scripts/register_vks.ts
+
+APTOS_NODE_URL=http://127.0.0.1:8080/v1 \
+APTOS_FAUCET_URL=http://127.0.0.1:8081 \
+NOID_MODULE_ADDR=address \
+DEPLOYER_PRIVATE_KEY=privatekey of deployer \
+npx ts-node noid_pool.devnet.test.ts
