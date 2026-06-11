@@ -488,43 +488,55 @@ async function submitRelayer(
 }
 
 /**
- * Submit a SPONSORED (fee-payer) transaction.
+ * Submit the deposit transaction using MULTI-AGENT + FEE-PAYER pattern.
  *
- * Architecture:
- *   sender   — pays the APT being deposited; sequence number is incremented
- *   feePayer — pays gas (the relayer)
+ * Why this pattern:
+ *   • Simple fee-payer (withFeePayer:true on build.simple) exposes the fee-payer
+ *     ONLY as a gas payer — it does NOT appear as a &signer in the Move function.
+ *     The Move entry function would see only one &signer (Alice), causing
+ *     NUMBER_OF_SIGNER_ARGUMENTS_MISMATCH for a two-&signer function.
  *
- * SDK steps (from official docs):
- *   1. Build with withFeePayer: true
- *   2. sender signs with .sign()
- *   3. feePayer signs with .signAsFeePayer()
- *   4. Submit with both authenticators
+ *   • Multi-agent + fee-payer exposes the relayer as BOTH:
+ *       - A secondary signer → appears as the second &signer in Move (relayer: &signer)
+ *       - The fee-payer      → pays gas, no extra APT needed beyond gas
+ *
+ * Signing steps:
+ *   1. Build as multi-agent with relayer as secondary signer + fee-payer
+ *   2. Alice signs the tx body (she is the sender, signer[0])
+ *   3. Relayer signs as secondary signer (signer[1] → relayer: &signer in Move)
+ *   4. Relayer also signs as fee-payer (gas payment)
+ *   5. Submit with all three authenticators
  */
-async function submitSponsored(
-  sender:   Account,
-  feePayer: Account,
+async function submitDeposit(
+  alice:    Account,
+  relayer:  Account,
   payload:  InputGenerateTransactionPayloadData,
   gasLimit: number = 2_000_000,
 ) {
-  // Step 1: Build — mark as fee-payer transaction
-  const tx = await aptos.transaction.build.simple({
-    sender:      sender.accountAddress,
-    withFeePayer: true,
-    data:         payload,
+  // Step 1: Build multi-agent tx — relayer is secondary signer AND fee-payer
+  const tx = await aptos.transaction.build.multiAgent({
+    sender:                   alice.accountAddress,
+    secondarySignerAddresses: [relayer.accountAddress],
+    withFeePayer:             true,
+    data:                     payload,
     options: { maxGasAmount: gasLimit, gasUnitPrice: 100 },
   });
 
-  // Step 2: Sender signs (Alice)
-  const senderAuth = await aptos.transaction.sign({ signer: sender, transaction: tx });
+  // Step 2: Alice signs as the primary sender (provides APT)
+  const aliceAuth = await aptos.transaction.sign({ signer: alice, transaction: tx });
 
-  // Step 3: Fee payer signs AS fee payer (Relayer)
-  const feePayerAuth = await aptos.transaction.signAsFeePayer({ signer: feePayer, transaction: tx });
+  // Step 3: Relayer signs as secondary signer (appears as second &signer in Move)
+  const relayerSecondaryAuth = await aptos.transaction.sign({ signer: relayer, transaction: tx });
 
-  // Step 4: Submit with both signatures
-  const result = await aptos.transaction.submit.simple({
-    transaction:          tx,
-    senderAuthenticator:  senderAuth,
-    feePayerAuthenticator: feePayerAuth,
+  // Step 4: Relayer also signs as fee-payer (pays gas)
+  const relayerFeePayerAuth = await aptos.transaction.signAsFeePayer({ signer: relayer, transaction: tx });
+
+  // Step 5: Submit with all authenticators
+  const result = await aptos.transaction.submit.multiAgent({
+    transaction:              tx,
+    senderAuthenticator:      aliceAuth,
+    additionalSignersAuthenticators: [relayerSecondaryAuth],
+    feePayerAuthenticator:    relayerFeePayerAuth,
   });
 
   const receipt = await aptos.waitForTransaction({ transactionHash: result.hash });
@@ -709,14 +721,18 @@ async function main() {
     console.log(`\nDeposit roots: root1=${root1!}  root2=${root2!}`);
 
     console.log(`\nSubmitting SPONSORED deposit tx to ${NET_LABEL}...`);
-    console.log(`  Alice (sender): ${aliceSigner.accountAddress}`);
-    console.log(`  Relayer (fee payer): ${relayerSigner.accountAddress}`);
+    console.log(`  Alice (sender/signer[0]): ${aliceSigner.accountAddress}`);
+    console.log(`  Relayer (fee-payer/signer[1]): ${relayerSigner.accountAddress}`);
 
-    // Alice is sender (she provides the APT).
-    // Relayer is fee-payer (it pays gas via withFeePayer:true pattern).
-    const receipt = await submitSponsored(
-      aliceSigner,   // sender — Alice pays APT
-      relayerSigner, // fee payer — relayer pays gas
+    // Two-signer deposit (fee-payer transaction):
+    //   Alice   = tx sender + signer[0] in Move (caller: &signer) — provides APT
+    //   Relayer = secondary signer[1] in Move (relayer: &signer) + fee-payer — pays gas
+    //
+    // submitDeposit uses build.multiAgent with relayer as secondarySigner AND feePayer
+    // so the relayer appears as a &signer in the Move function AND pays gas.
+    const receipt = await submitDeposit(
+      aliceSigner,   // sender — Alice pays APT, Move's caller &signer
+      relayerSigner, // secondary signer + fee-payer — Move's relayer &signer
       {
         function:      `${MODULE_ADDR}::pool::deposit`,
         typeArguments: [],
@@ -792,7 +808,7 @@ async function main() {
         100_000_000n, existingC1, c2_new.decimal, relayerWallet.zk.publicKey,
         90_000_000n, randomField(), userWallets[0].zk.publicKey, 10_000_000n, r_new,
       );
-      await submitSponsored(
+      await submitDeposit(
         aliceSigner,
         relayerSigner,
         {

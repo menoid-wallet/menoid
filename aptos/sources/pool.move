@@ -5,14 +5,13 @@
 ///      A SignerCapability is stored inside PoolState so the module can sign on
 ///      behalf of the pool address at withdraw time without needing the admin key.
 ///
-///   2. DEPOSIT: Alice (the user) is the transaction SENDER and pays the APT.
-///      The relayer is the FEE-PAYER (sponsored/fee-payer transaction) and pays gas.
-///      Alice calls deposit() directly; the relayer co-signs only for gas.
-///      We no longer assert_relayer on the caller for deposit — the ZK proof
-///      already binds relayer_zk_pubkey into the circuit, which is on-chain state.
-///      Access control for Merkle root supply is: only the relayer address may call
-///      transfer() and withdraw() (which do mutate internal state without a ZK root
-///      commitment from Alice directly).
+///   2. DEPOSIT: Two-signer sponsored transaction.
+///      Alice (the user) is the transaction SENDER — she provides the APT.
+///      The relayer is the FEE-PAYER and a required co-signer — it pays gas
+///      AND supplies the Merkle roots (new_root_1/2). assert_relayer() is
+///      called on the relayer &signer to ensure only the registered relayer
+///      can supply roots. The ZK proof further binds relayer_zk_pubkey so
+///      neither the roots nor the proof can be faked by an outsider.
 ///
 ///   3. TRANSFER / WITHDRAW: still relayer-only (they supply roots + proof).
 ///      Withdraw sends APT from the pool resource account to the receiver.
@@ -148,9 +147,23 @@ module noid::pool {
     }
 
     // ── DEPOSIT ───────────────────────────────────────────────────────────────
+    //
+    // Architecture (two-signer sponsored transaction):
+    //   • caller  — Alice (the user). She is the transaction SENDER.
+    //               Her APT is transferred to the pool resource account.
+    //               She signs the tx body (sequence number incremented on her account).
+    //   • relayer — The relayer. It is the FEE-PAYER and a required co-signer.
+    //               It pays gas AND supplies the Merkle roots (new_root_1/2).
+    //               assert_relayer() ensures only the registered relayer can co-sign,
+    //               preventing a rogue caller from supplying fake roots.
+    //
+    // In Aptos's fee-payer / multi-agent pattern, the fee-payer's signer is
+    // accessible as the second &signer parameter in the Move entry function.
+    // submitSponsored() in the TypeScript SDK passes both signers automatically.
 
     public entry fun deposit(
-        caller:          &signer,
+        caller:          &signer,   // Alice — provides the APT (tx sender)
+        relayer:         &signer,   // Relayer — fee-payer, supplies roots, must be registered
         pool_addr:       address,
         a_bytes:         vector<u8>,
         b_bytes:         vector<u8>,
@@ -172,6 +185,10 @@ module noid::pool {
 
         let state = borrow_global_mut<PoolState>(pool_addr);
 
+        // Ensure the co-signer is the registered relayer.
+        // This prevents anyone other than the relayer from supplying Merkle roots.
+        assert_relayer(relayer, state);
+
         assert!(
             !table::contains(&state.commitments, c1),
             error::already_exists(E_COMMITMENT_EXISTS)
@@ -192,6 +209,7 @@ module noid::pool {
             error::invalid_argument(E_PROOF_FAILED)
         );
 
+        // Alice transfers APT to the pool resource account.
         coin::transfer<AptosCoin>(caller, state.pool_resource_addr, amount);
         state.locked_balance = state.locked_balance + amount;
 
