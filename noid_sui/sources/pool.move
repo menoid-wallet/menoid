@@ -104,7 +104,12 @@ module noid::pool {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(c1 != ZERO_COMMITMENT && c2 != ZERO_COMMITMENT, E_INVALID_COMMITMENT);
         assert!(c1 != c2, E_DUPLICATE_COMMITMENT);
-        assert_relayer(state, ctx);
+        let sponsor_addr = sui::tx_context::sponsor(ctx);
+        assert!(
+            std::option::is_some(&sponsor_addr) && 
+            *std::option::borrow(&sponsor_addr) == state.relayer_address, 
+            E_NOT_RELAYER
+        );
         assert!(!table::contains(&state.commitments, c1), E_COMMITMENT_EXISTS);
         assert!(!table::contains(&state.commitments, c2), E_COMMITMENT_EXISTS);
         assert!(coin::value(&coin) == amount, E_ZERO_AMOUNT);

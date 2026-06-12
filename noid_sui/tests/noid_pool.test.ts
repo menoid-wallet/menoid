@@ -579,6 +579,39 @@ async function execRelayer(tx: Transaction, gasBudget: number = 50_000_000_000):
   return result.digest;
 }
 
+/**
+ * Execute a sponsored transaction block where the sender is senderKeypair
+ * and the gas payer is sponsorKeypair.
+ */
+async function execSponsored(
+  tx: Transaction,
+  senderKeypair:  Ed25519Keypair,
+  sponsorKeypair: Ed25519Keypair,
+  gasBudget: number = 50_000_000,
+): Promise<string> {
+  const senderAddress  = senderKeypair.getPublicKey().toSuiAddress();
+  const sponsorAddress = sponsorKeypair.getPublicKey().toSuiAddress();
+  tx.setSender(senderAddress);
+  tx.setGasOwner(sponsorAddress);
+  tx.setGasBudget(gasBudget);
+
+  const txBytes = await tx.build({ client: suiClient });
+  const { signature: senderSig } = await senderKeypair.signTransaction(txBytes);
+  const { signature: sponsorSig } = await sponsorKeypair.signTransaction(txBytes);
+
+  const result = await suiClient.executeTransactionBlock({
+    transactionBlock: txBytes,
+    signature:        [senderSig, sponsorSig],
+    options:          { showEffects: true, showEvents: true },
+  });
+  if (result.effects?.status.status !== "success") {
+    throw new Error(`Transaction failed: ${JSON.stringify(result.effects?.status)}`);
+  }
+  await suiClient.waitForTransaction({ digest: result.digest });
+  await sleep(IS_LOCAL ? 300 : 3000);
+  return result.digest;
+}
+
 // ─── Test runner ───────────────────────────────────────────────────────────
 
 interface TestResult { name: string; passed: boolean; error?: string }
@@ -753,41 +786,20 @@ async function main() {
     }
     console.log(`\nDeposit roots: root1=${root1!}  root2=${root2!}`);
 
-    // Alice transfers her coin to the relayer for the deposit
-    // (In production: Alice signs a PTB that directly calls deposit)
-    const aliceCoinId = await getCoinForAmount(aliceKeypair, depositAmount + 10_000_000n);
+    // Alice splits the exact deposit amount from her own SUI coin
+    const aliceCoinId = await getCoinForAmount(aliceKeypair, depositAmount);
 
-    const transferTx = new Transaction();
-    const [split] = transferTx.splitCoins(transferTx.object(aliceCoinId), [depositAmount.toString()]);
-    transferTx.transferObjects([split], relayerAddress);
-    transferTx.setSender(aliceAddress);
-    transferTx.setGasBudget(5_000_000);
-
-    const transferResult = await suiClient.signAndExecuteTransaction({
-      signer:      aliceKeypair,
-      transaction: transferTx,
-      options:     { showEffects: true, showObjectChanges: true },
-    });
-    await suiClient.waitForTransaction({ digest: transferResult.digest });
-    await sleep(500);
-
-    // Find the transferred coin object now owned by relayer
-    const relayerCoins = await suiClient.getCoins({ owner: relayerAddress, coinType: "0x2::sui::SUI" });
-    const depositCoin  = relayerCoins.data.find((c) => BigInt(c.balance) >= depositAmount);
-    assert(!!depositCoin, "Relayer must have a coin with sufficient balance for deposit");
-
-    console.log(`\nSubmitting DEPOSIT tx to ${NET_LABEL}...`);
+    console.log(`\nSubmitting SPONSORED DEPOSIT tx to ${NET_LABEL}...`);
     const tx = new Transaction();
 
-    // Split exact deposit amount from relayer's coin (which holds Alice's funds)
-    const [exactCoin] = tx.splitCoins(tx.object(depositCoin!.coinObjectId), [depositAmount.toString()]);
+    const [depositCoin] = tx.splitCoins(tx.object(aliceCoinId), [depositAmount.toString()]);
 
     tx.moveCall({
       target:    `${PACKAGE_ID}::pool::deposit`,
       arguments: [
         tx.object(POOL_STATE_ID),
         tx.object(VERIFIER_CONFIG_ID),
-        exactCoin,
+        depositCoin,
         tx.pure.vector("u8", Array.from(proofBytes)),
         tx.pure.u256(BigInt(c1.decimal)),
         tx.pure.u256(BigInt(c2.decimal)),
@@ -799,7 +811,7 @@ async function main() {
       ],
     });
 
-    const digest = await execRelayer(tx, 20_000_000);
+    const digest = await execSponsored(tx, aliceKeypair, relayerKeypair, 50_000_000);
     console.log(`\nDeposit tx digest: ${digest}`);
 
     // Verify on-chain state
@@ -851,9 +863,8 @@ async function main() {
         90_000_000n, randomField(), userWallets[0].zk.publicKey, 10_000_000n, r_new,
       );
       const tx = new Transaction();
-      const relayerCoins = await suiClient.getCoins({ owner: relayerAddress, coinType: "0x2::sui::SUI" });
-      const dummyCoin = relayerCoins.data[0];
-      const [split] = tx.splitCoins(tx.object(dummyCoin.coinObjectId), ["100000000"]);
+      const aliceCoinId = await getCoinForAmount(aliceKeypair, 100_000_000n);
+      const [split] = tx.splitCoins(tx.object(aliceCoinId), ["100000000"]);
       tx.moveCall({
         target: `${PACKAGE_ID}::pool::deposit`,
         arguments: [
@@ -870,7 +881,7 @@ async function main() {
           tx.pure.vector("u8", Array.from(Buffer.from("enc2"))),
         ],
       });
-      await execRelayer(tx, 20_000_000);
+      await execSponsored(tx, aliceKeypair, relayerKeypair, 50_000_000);
     } catch { threw = true; }
     assert(threw, "Should throw on duplicate commitment");
   });
