@@ -1,0 +1,24 @@
+{
+  "name": "noid-sui-tests",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "ts-node tests/noid_pool.test.ts",
+    "test:localnet": "SUI_RPC_URL=http://127.0.0.1:9000 SUI_FAUCET_URL=http://127.0.0.1:9123/gas ts-node tests/noid_pool.test.ts"
+  },
+  "dependencies": {
+    "@mysten/sui": "^1.0.0",
+    "@zk-kit/incremental-merkle-tree": "^1.0.0",
+    "circomlib": "^2.0.5",
+    "circomlibjs": "^0.1.7",
+    "dotenv": "^17.4.2",
+    "eciesjs": "^0.5.0",
+    "ffjavascript": "^0.3.1",
+    "snarkjs": "^0.7.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  }
+}
