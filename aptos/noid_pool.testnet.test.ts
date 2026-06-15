@@ -3,7 +3,7 @@
  *
  * Full integration test for the Aptos NoidPool on DEVNET.
  * Same structure as the Ethereum NoidPool test — helpers for wallets,
- * encryption (eciesjs), commitments (circomlibjs), and Merkle trees
+ * encryption (Curve25519/nacl box), commitments (circomlibjs), and Merkle trees
  * (@zk-kit/incremental-merkle-tree) are identical to the Ethereum version.
  *
  * Key devnet differences vs local testnet:

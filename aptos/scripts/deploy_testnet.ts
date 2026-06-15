@@ -35,6 +35,7 @@ function writeLE(buf: Uint8Array, value: bigint, offset: number, len: number) {
   }
 }
 
+// G1/G2 formats matching Aptos Move.
 function g1ToBytes(point: string[]): Uint8Array {
   const buf = new Uint8Array(64);
   writeLE(buf, BigInt(point[0]), 0,  32);
@@ -96,25 +97,9 @@ async function main() {
   const deployer = Account.fromPrivateKey({ privateKey: deployerPrivateKey });
   console.log(`Deployer address: ${deployer.accountAddress.toString()}`);
   
-  // 1. Publish package using Aptos CLI
-  console.log("\n[1/4] Publishing package on Aptos Testnet...");
-  const publishCmd = "aptos move publish --max-gas 3000000 --assume-yes";
-  console.log(`Running: ${publishCmd}`);
-  
-  try {
-    const output = execSync(publishCmd, { cwd: path.join(__dirname, ".."), stdio: "inherit" });
-  } catch (err: any) {
-    console.error("Publish failed:", err.message);
-    process.exit(1);
-  }
-  
-  // 2. Generate private wallet ZK keypair
-  console.log("\n[2/4] Generating private wallet ZK keypair...");
-  const msgBytes = Buffer.from("PriFi private financial dapp");
-  const signature = deployerPrivateKey.sign(msgBytes);
-  const signatureHex = Buffer.from(signature.toUint8Array()).toString("hex");
-  
-  const relayerWallet = await generatePrivateWallet(signatureHex);
+  // 1. Generate private wallet ZK keypair with new seed (DEPLOYER_PRIVATE_KEY + "Menoid wallet")
+  console.log("\nGenerating private wallet ZK keypair...");
+  const relayerWallet = await generatePrivateWallet(deployerPkHex + "Menoid wallet");
   console.log("Derived ZK Relayer Wallet:");
   console.log(JSON.stringify(relayerWallet, null, 2));
   
@@ -140,46 +125,86 @@ async function main() {
     }
   };
   
-  // 3. Register verification keys
-  console.log("\n[3/4] Registering VKs...");
-  const depVK = JSON.parse(fs.readFileSync(path.join(circuitDir, "deposit_verification_key.json"), "utf8"));
-  const traVK = JSON.parse(fs.readFileSync(path.join(circuitDir, "transfer_verification_key.json"), "utf8"));
-  const witVK = JSON.parse(fs.readFileSync(path.join(circuitDir, "withdraw_verification_key.json"), "utf8"));
+  // Check if pool is already initialized
+  let alreadyInitialized = false;
+  try {
+    const [resAddr] = await aptos.view({
+      payload: {
+        function: `${moduleAddr}::pool::pool_resource_addr`,
+        typeArguments: [],
+        functionArguments: [deployer.accountAddress.toString()],
+      },
+    });
+    console.log(`Pool resource account already exists: ${resAddr}`);
+    alreadyInitialized = true;
+  } catch (err) {
+    console.log("Pool not yet initialized.");
+  }
   
-  const vkArgs = [
-    // Deposit VK
-    toMoveArg(g1ToBytes(depVK.vk_alpha_1)),
-    toMoveArg(g2ToBytes(depVK.vk_beta_2)),
-    toMoveArg(g2ToBytes(depVK.vk_gamma_2)),
-    toMoveArg(g2ToBytes(depVK.vk_delta_2)),
-    toMoveArg(icToBytes(depVK.IC)),
-    // Transfer VK
-    toMoveArg(g1ToBytes(traVK.vk_alpha_1)),
-    toMoveArg(g2ToBytes(traVK.vk_beta_2)),
-    toMoveArg(g2ToBytes(traVK.vk_gamma_2)),
-    toMoveArg(g2ToBytes(traVK.vk_delta_2)),
-    toMoveArg(icToBytes(traVK.IC)),
-    // Withdraw VK
-    toMoveArg(g1ToBytes(witVK.vk_alpha_1)),
-    toMoveArg(g2ToBytes(witVK.vk_beta_2)),
-    toMoveArg(g2ToBytes(witVK.vk_gamma_2)),
-    toMoveArg(g2ToBytes(witVK.vk_delta_2)),
-    toMoveArg(icToBytes(witVK.IC)),
-  ];
-  
-  await execTx("verifier::initialize_vks", vkArgs);
-  console.log("VKs successfully registered!");
-  
-  // 4. Initialize pool state
-  console.log("\n[4/4] Initializing Pool State...");
-  const poolArgs = [
-    BigInt(relayerWallet.zk.publicKey),
-    deployer.accountAddress.toString(),
-    toMoveArg(Buffer.from("noid-pool-seed-v1")),
-  ];
-  
-  await execTx("pool::initialize", poolArgs);
-  console.log("Pool successfully initialized!");
+  if (!alreadyInitialized) {
+    // 2. Publish package using Aptos CLI
+    console.log("\n[1/4] Publishing package on Aptos Testnet...");
+    const publishCmd = "aptos move publish --max-gas 3000000 --assume-yes";
+    console.log(`Running: ${publishCmd}`);
+    
+    try {
+      execSync(publishCmd, { cwd: path.join(__dirname, ".."), stdio: "inherit" });
+    } catch (err: any) {
+      console.error("Publish failed:", err.message);
+      process.exit(1);
+    }
+    
+    // 3. Register verification keys
+    console.log("\n[2/4] Registering VKs...");
+    const depVK = JSON.parse(fs.readFileSync(path.join(circuitDir, "deposit_verification_key.json"), "utf8"));
+    const traVK = JSON.parse(fs.readFileSync(path.join(circuitDir, "transfer_verification_key.json"), "utf8"));
+    const witVK = JSON.parse(fs.readFileSync(path.join(circuitDir, "withdraw_verification_key.json"), "utf8"));
+    
+    const vkArgs = [
+      // Deposit VK
+      toMoveArg(g1ToBytes(depVK.vk_alpha_1)),
+      toMoveArg(g2ToBytes(depVK.vk_beta_2)),
+      toMoveArg(g2ToBytes(depVK.vk_gamma_2)),
+      toMoveArg(g2ToBytes(depVK.vk_delta_2)),
+      toMoveArg(icToBytes(depVK.IC)),
+      // Transfer VK
+      toMoveArg(g1ToBytes(traVK.vk_alpha_1)),
+      toMoveArg(g2ToBytes(traVK.vk_beta_2)),
+      toMoveArg(g2ToBytes(traVK.vk_gamma_2)),
+      toMoveArg(g2ToBytes(traVK.vk_delta_2)),
+      toMoveArg(icToBytes(traVK.IC)),
+      // Withdraw VK
+      toMoveArg(g1ToBytes(witVK.vk_alpha_1)),
+      toMoveArg(g2ToBytes(witVK.vk_beta_2)),
+      toMoveArg(g2ToBytes(witVK.vk_gamma_2)),
+      toMoveArg(g2ToBytes(witVK.vk_delta_2)),
+      toMoveArg(icToBytes(witVK.IC)),
+    ];
+    
+    await execTx("verifier::initialize_vks", vkArgs);
+    console.log("VKs successfully registered!");
+    
+    // 4. Initialize pool state
+    console.log("\n[3/4] Initializing Pool State...");
+    const poolArgs = [
+      BigInt(relayerWallet.zk.publicKey),
+      deployer.accountAddress.toString(),
+      toMoveArg(Buffer.from("noid-pool-seed-v1")),
+    ];
+    
+    await execTx("pool::initialize", poolArgs);
+    console.log("Pool successfully initialized!");
+  } else {
+    // 2. Call set_relayer
+    console.log("\nUpdating Relayer State on-chain...");
+    const poolArgs = [
+      deployer.accountAddress.toString(), // pool_addr
+      BigInt(relayerWallet.zk.publicKey),  // relayer_zk_pubkey
+      deployer.accountAddress.toString(), // relayer_address
+    ];
+    await execTx("pool::set_relayer", poolArgs);
+    console.log("Pool relayer successfully updated!");
+  }
 }
 
 main().catch((err) => {

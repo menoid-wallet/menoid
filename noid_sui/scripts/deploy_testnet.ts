@@ -102,40 +102,9 @@ async function main() {
   
   const suiClient = new SuiClient({ url: rpcUrl });
   
-  // 1. Publish package using Sui CLI
-  console.log("\n[1/4] Publishing package on Sui Testnet...");
-  const publishCmd = "sui client publish --gas-budget 300000000 --json";
-  console.log(`Running: ${publishCmd}`);
-  
-  let publishJson: any;
-  try {
-    const output = execSync(publishCmd, { cwd: path.join(__dirname, ".."), stdio: "pipe" }).toString();
-    publishJson = JSON.parse(output);
-  } catch (err: any) {
-    console.error("Publish failed:", err.message);
-    if (err.stderr) console.error(err.stderr.toString());
-    if (err.stdout) console.error(err.stdout.toString());
-    process.exit(1);
-  }
-  
-  if (publishJson.effects?.status?.status !== "success") {
-    throw new Error(`Publish transaction failed on-chain: ${JSON.stringify(publishJson.effects?.status)}`);
-  }
-  
-  const packageChange = publishJson.objectChanges.find((c: any) => c.type === "published");
-  if (!packageChange) {
-    throw new Error("Could not find published package ID in transaction output");
-  }
-  const packageId = packageChange.packageId;
-  console.log(`Sui Package Published! ID: ${packageId}`);
-  
-  // 2. Generate private wallet via signing message
-  console.log("\n[2/4] Generating private wallet ZK keypair...");
-  const msgBytes = Buffer.from("PriFi private financial dapp");
-  const signRes = await keypair.signPersonalMessage(msgBytes);
-  const signatureHex = Buffer.from(signRes.signature, "base64").toString("hex");
-  
-  const relayerWallet = await generatePrivateWallet(signatureHex);
+  // 1. Generate private wallet ZK keypair with new seed (DEPLOYER_SECRET_KEY + "Menoid wallet")
+  console.log("\nGenerating private wallet ZK keypair...");
+  const relayerWallet = await generatePrivateWallet(deployerSk + "Menoid wallet");
   console.log("Derived ZK Relayer Wallet:");
   console.log(JSON.stringify(relayerWallet, null, 2));
   
@@ -155,45 +124,90 @@ async function main() {
     return r;
   };
   
-  // 3. Initialize verification keys
-  console.log("\n[3/4] Initializing VerifierConfig...");
-  const depVk = loadVkBytes(circuitDir, "deposit_verification_key.json");
-  const traVk = loadVkBytes(circuitDir, "transfer_verification_key.json");
-  const witVk = loadVkBytes(circuitDir, "withdraw_verification_key.json");
+  let packageId = process.env.NOID_PACKAGE_ID;
+  let psId = process.env.POOL_STATE_ID;
+  let vcId = process.env.VERIFIER_CONFIG_ID;
   
-  const vkTx = new Transaction();
-  vkTx.moveCall({
-    target: `${packageId}::verifier::initialize_vks`,
-    arguments: [
-      vkTx.pure.vector("u8", depVk),
-      vkTx.pure.vector("u8", traVk),
-      vkTx.pure.vector("u8", witVk),
-    ],
-  });
-  const vkResult = await execTx(vkTx);
-  const vcId = vkResult.objectChanges?.find(
-    (c: any) => c.type === "created" && c.objectType?.includes("VerifierConfig")
-  )?.objectId;
-  console.log(`VerifierConfig Object ID: ${vcId}`);
-  
-  // 4. Initialize pool state
-  console.log("\n[4/4] Initializing PoolState...");
-  const poolTx = new Transaction();
-  poolTx.moveCall({
-    target: `${packageId}::pool::initialize`,
-    arguments: [
-      poolTx.pure.u256(BigInt(relayerWallet.zk.publicKey)),
-      poolTx.pure.address(deployer),
-    ],
-  });
-  const poolResult = await execTx(poolTx);
-  const psId = poolResult.objectChanges?.find(
-    (c: any) => c.type === "created" && c.objectType?.includes("PoolState")
-  )?.objectId;
-  console.log(`PoolState Object ID: ${psId}`);
-  
-  // Write variables back to noid_sui/.env
-  const envContent = `DEPLOYER_SECRET_KEY=${deployerSk}
+  if (packageId && psId && vcId) {
+    console.log(`\nProgram already deployed at package: ${packageId}, pool: ${psId}. Updating relayer ZK pubkey...`);
+    const poolTx = new Transaction();
+    poolTx.moveCall({
+      target: `${packageId}::pool::set_relayer`,
+      arguments: [
+        poolTx.object(psId),
+        poolTx.pure.u256(BigInt(relayerWallet.zk.publicKey)),
+        poolTx.pure.address(deployer),
+      ],
+    });
+    const poolResult = await execTx(poolTx);
+    console.log(`Relayer updated! Transaction digest: ${poolResult.digest}`);
+  } else {
+    // Publish package using Sui CLI
+    console.log("\n[1/4] Publishing package on Sui Testnet...");
+    const publishCmd = "sui client publish --gas-budget 300000000 --json";
+    console.log(`Running: ${publishCmd}`);
+    
+    let publishJson: any;
+    try {
+      const output = execSync(publishCmd, { cwd: path.join(__dirname, ".."), stdio: "pipe" }).toString();
+      publishJson = JSON.parse(output);
+    } catch (err: any) {
+      console.error("Publish failed:", err.message);
+      if (err.stderr) console.error(err.stderr.toString());
+      if (err.stdout) console.error(err.stdout.toString());
+      process.exit(1);
+    }
+    
+    if (publishJson.effects?.status?.status !== "success") {
+      throw new Error(`Publish transaction failed on-chain: ${JSON.stringify(publishJson.effects?.status)}`);
+    }
+    
+    const packageChange = publishJson.objectChanges.find((c: any) => c.type === "published");
+    if (!packageChange) {
+      throw new Error("Could not find published package ID in transaction output");
+    }
+    packageId = packageChange.packageId;
+    console.log(`Sui Package Published! ID: ${packageId}`);
+    
+    // Initialize verification keys
+    console.log("\n[2/4] Initializing VerifierConfig...");
+    const depVk = loadVkBytes(circuitDir, "deposit_verification_key.json");
+    const traVk = loadVkBytes(circuitDir, "transfer_verification_key.json");
+    const witVk = loadVkBytes(circuitDir, "withdraw_verification_key.json");
+    
+    const vkTx = new Transaction();
+    vkTx.moveCall({
+      target: `${packageId}::verifier::initialize_vks`,
+      arguments: [
+        vkTx.pure.vector("u8", depVk),
+        vkTx.pure.vector("u8", traVk),
+        vkTx.pure.vector("u8", witVk),
+      ],
+    });
+    const vkResult = await execTx(vkTx);
+    vcId = vkResult.objectChanges?.find(
+      (c: any) => c.type === "created" && c.objectType?.includes("VerifierConfig")
+    )?.objectId;
+    console.log(`VerifierConfig Object ID: ${vcId}`);
+    
+    // Initialize pool state
+    console.log("\n[3/4] Initializing PoolState...");
+    const poolTx = new Transaction();
+    poolTx.moveCall({
+      target: `${packageId}::pool::initialize`,
+      arguments: [
+        poolTx.pure.u256(BigInt(relayerWallet.zk.publicKey)),
+        poolTx.pure.address(deployer),
+      ],
+    });
+    const poolResult = await execTx(poolTx);
+    psId = poolResult.objectChanges?.find(
+      (c: any) => c.type === "created" && c.objectType?.includes("PoolState")
+    )?.objectId;
+    console.log(`PoolState Object ID: ${psId}`);
+    
+    // Write variables back to noid_sui/.env
+    const envContent = `DEPLOYER_SECRET_KEY=${deployerSk}
 CIRCUIT_DIR=./zk_build
 SUI_RPC_URL=${rpcUrl}
 SUI_FAUCET_URL=${process.env.SUI_FAUCET_URL || "https://faucet.testnet.sui.io/gas"}
@@ -201,8 +215,9 @@ NOID_PACKAGE_ID=${packageId}
 POOL_STATE_ID=${psId}
 VERIFIER_CONFIG_ID=${vcId}
 `;
-  fs.writeFileSync(path.join(__dirname, "../.env"), envContent);
-  console.log("\nSuccessfully updated noid_sui/.env with package and object IDs!");
+    fs.writeFileSync(path.join(__dirname, "../.env"), envContent);
+    console.log("\nSuccessfully updated noid_sui/.env with package and object IDs!");
+  }
 }
 
 main().catch(err => {

@@ -15,7 +15,7 @@ noid_solana = "3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

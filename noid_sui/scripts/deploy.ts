@@ -30,6 +30,7 @@
 import { SuiClient } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
 import { fromBase64 } from "@mysten/sui/utils";
 import * as fs from "fs";
 import * as path from "path";
@@ -40,7 +41,9 @@ const CIRCUIT_DIR = process.env.CIRCUIT_DIR    ?? path.join(__dirname, "../zk_bu
 const DEPLOYER_SK = process.env.DEPLOYER_SECRET_KEY ?? (() => { throw new Error("Set DEPLOYER_SECRET_KEY"); })();
 
 const suiClient = new SuiClient({ url: RPC_URL });
-const keypair   = Ed25519Keypair.fromSecretKey(fromBase64(DEPLOYER_SK));
+const keypair   = DEPLOYER_SK.startsWith("suiprivkey")
+  ? Ed25519Keypair.fromSecretKey(decodeSuiPrivateKey(DEPLOYER_SK).secretKey)
+  : Ed25519Keypair.fromSecretKey(fromBase64(DEPLOYER_SK));
 const deployer  = keypair.getPublicKey().toSuiAddress();
 const IS_LOCAL  = RPC_URL.includes("127.0.0.1") || RPC_URL.includes("localhost");
 

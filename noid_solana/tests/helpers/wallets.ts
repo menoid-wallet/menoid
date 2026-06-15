@@ -1,15 +1,13 @@
 // @ts-ignore
 import { buildPoseidon } from "circomlibjs";
 import { createHash } from "crypto";
-import pkg from "elliptic";
-const EC = pkg.ec;
-
-const secp256k1 = new EC("secp256k1");
+import { Keypair } from "@solana/web3.js";
+import bs58 from "bs58";
 
 export interface PrivateWallet {
   address: string;
-  privateKey: string; // 0x-prefixed hex, 32 bytes
-  publicKey: string;  // 0x-prefixed hex, 65 bytes uncompressed
+  privateKey: string; // base58 encoded 64-byte secret key
+  publicKey: string;  // base58 encoded 32-byte public key
 }
 
 export interface ZkKeys {
@@ -31,19 +29,15 @@ export async function generatePrivateWallet(
 ): Promise<GeneratedWallet> {
   const poseidon = await buildPoseidon();
 
-  // Deterministic 32-byte private key via keccak256 of seed
+  // Deterministic 32-byte private key via sha256 of seed
   const hash = createHash("sha256").update(seedInput).digest();
   const privateKeyHex = "0x" + hash.toString("hex");
 
-  // Derive secp256k1 key pair for ECIES
-  const keyPair = secp256k1.keyFromPrivate(hash);
-  const publicKeyHex =
-    "0x" + keyPair.getPublic(false, "hex"); // uncompressed, 65 bytes
-
-  // Deterministic address = last 20 bytes of keccak256(pubkey[1:])
-  const pubBytes = Buffer.from(keyPair.getPublic(false, "hex").slice(2), "hex");
-  const addrHash = createHash("sha256").update(pubBytes).digest();
-  const address = "0x" + addrHash.slice(12).toString("hex");
+  // Derive Solana Ed25519 Keypair
+  const keypair = Keypair.fromSeed(hash);
+  const address = keypair.publicKey.toBase58();
+  const privateKey = bs58.encode(keypair.secretKey);
+  const publicKey = keypair.publicKey.toBase58();
 
   // ZK secret key = private key interpreted as a decimal BigInt
   const sk = BigInt(privateKeyHex).toString(10);
@@ -55,8 +49,8 @@ export async function generatePrivateWallet(
   return {
     privateWallet: {
       address,
-      privateKey: privateKeyHex,
-      publicKey: publicKeyHex,
+      privateKey,
+      publicKey,
     },
     zk: {
       secretKey: sk,

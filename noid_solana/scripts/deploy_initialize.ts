@@ -42,12 +42,8 @@ async function main() {
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
   anchor.setProvider(provider);
   
-  // 1. Sign message to generate ZK wallet
-  const message = Buffer.from("PriFi private financial dapp");
-  const signature = nacl.sign.detached(message, deployerKeypair.secretKey);
-  const signatureHex = Buffer.from(signature).toString("hex");
-  
-  const relayerWallet = await generatePrivateWallet(signatureHex);
+  // 1. Generate ZK wallet with new seed (PRIVATE_KEY + "Menoid wallet")
+  const relayerWallet = await generatePrivateWallet(deployerKey + "Menoid wallet");
   console.log("\n========== DERIVED RELAYER WALLET ==========");
   console.log(JSON.stringify(relayerWallet, null, 2));
   console.log("============================================\n");
@@ -78,8 +74,9 @@ async function main() {
     console.log("Pool State does not exist. Initializing pool state...");
   }
   
+  const relayerZkPubkeyBytes = Array.from(toBE32(relayerWallet.zk.publicKey));
+  
   if (!alreadyInitialized) {
-    const relayerZkPubkeyBytes = Array.from(toBE32(relayerWallet.zk.publicKey));
     const tx = await program.methods
       .initialize(relayerZkPubkeyBytes, deployerKeypair.publicKey)
       .accounts({
@@ -90,14 +87,27 @@ async function main() {
       .rpc();
       
     console.log(`Initialization transaction successful! Tx signature: ${tx}`);
-    
-    // Fetch and print initialized state
-    const poolState = await program.account.poolState.fetch(poolStatePda);
-    console.log("Successfully initialized Pool State!");
-    console.log(`Admin: ${poolState.admin.toBase58()}`);
-    console.log(`Relayer: ${poolState.relayerAddress.toBase58()}`);
-    console.log(`Locked Balance: ${poolState.lockedBalance.toString()} lamports`);
+  } else {
+    console.log("Updating relayer configuration via set_relayer...");
+    const tx = await program.methods
+      .setRelayer(relayerZkPubkeyBytes, deployerKeypair.publicKey)
+      .accounts({
+        admin: deployerKeypair.publicKey,
+      })
+      .signers([deployerKeypair])
+      .rpc();
+      
+    console.log(`set_relayer transaction successful! Tx signature: ${tx}`);
   }
+  
+  // Fetch and print final state
+  const poolState = await program.account.poolState.fetch(poolStatePda);
+  console.log("\n========== FINAL ON-CHAIN POOL STATE ==========");
+  console.log(`Admin: ${poolState.admin.toBase58()}`);
+  console.log(`Relayer: ${poolState.relayerAddress.toBase58()}`);
+  console.log(`Relayer ZK Pubkey (decimal): ${BigInt("0x" + Buffer.from(poolState.relayerZkPubkey).toString("hex")).toString(10)}`);
+  console.log(`Locked Balance: ${poolState.lockedBalance.toString()} lamports`);
+  console.log("===============================================\n");
 }
 
 main()

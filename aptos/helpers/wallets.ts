@@ -1,26 +1,12 @@
-/**
- * helpers/wallets.ts
- *
- * Deterministic private wallet + ZK key generation.
- * Mirrors the Ethereum helpers/wallets.js exactly, adapted for TypeScript.
- *
- * sk  = keccak256(seedInput) interpreted as BN254 scalar
- * pk  = Poseidon(3, sk)
- * encPubKey = secp256k1 pubkey derived from sk  (for ECIES encryption)
- */
-
 // @ts-ignore
 import { buildPoseidon } from "circomlibjs";
-import { createHash, createPrivateKey } from "crypto";
-// @ts-ignore
-import { ec as EC } from "elliptic";
-
-const secp256k1 = new EC("secp256k1");
+import { createHash } from "crypto";
+import { Account, Ed25519PrivateKey } from "@aptos-labs/ts-sdk";
 
 export interface PrivateWallet {
   address: string;
   privateKey: string; // 0x-prefixed hex, 32 bytes
-  publicKey: string;  // 0x-prefixed hex, 65 bytes uncompressed
+  publicKey: string;  // 0x-prefixed hex, 32 bytes public key
 }
 
 export interface ZkKeys {
@@ -42,19 +28,24 @@ export async function generatePrivateWallet(
 ): Promise<GeneratedWallet> {
   const poseidon = await buildPoseidon();
 
-  // Deterministic 32-byte private key via keccak256 of seed
+  // Deterministic 32-byte private key via sha256 of seed
   const hash = createHash("sha256").update(seedInput).digest();
   const privateKeyHex = "0x" + hash.toString("hex");
 
-  // Derive secp256k1 key pair for ECIES
-  const keyPair = secp256k1.keyFromPrivate(hash);
-  const publicKeyHex =
-    "0x" + keyPair.getPublic(false, "hex"); // uncompressed, 65 bytes
+  // Derive Aptos Ed25519 Keypair
+  const privateKeyObj = new Ed25519PrivateKey(hash);
+  const account = Account.fromPrivateKey({ privateKey: privateKeyObj });
+  const address = account.accountAddress.toString();
 
-  // Deterministic address = last 20 bytes of keccak256(pubkey[1:])
-  const pubBytes = Buffer.from(keyPair.getPublic(false, "hex").slice(2), "hex");
-  const addrHash = createHash("sha256").update(pubBytes).digest();
-  const address = "0x" + addrHash.slice(12).toString("hex");
+  // NOTE: Ed25519PrivateKey.toString() / Ed25519PublicKey.toString() return
+  // AIP-80-prefixed strings ("ed25519-priv-0x..." / "0x..." — the public key
+  // string is unprefixed but the private key string is NOT). Use
+  // toUint8Array() + manual hex encoding so both privateKey and publicKey are
+  // plain "0x"-prefixed hex with no AIP-80 prefix, as required by
+  // helpers/encryption.ts's hexToBytes().
+  const toHex = (bytes: Uint8Array) => "0x" + Buffer.from(bytes).toString("hex");
+  const privateKey = toHex(privateKeyObj.toUint8Array());
+  const publicKey = toHex(privateKeyObj.publicKey().toUint8Array());
 
   // ZK secret key = private key interpreted as a decimal BigInt
   const sk = BigInt(privateKeyHex).toString(10);
@@ -66,8 +57,8 @@ export async function generatePrivateWallet(
   return {
     privateWallet: {
       address,
-      privateKey: privateKeyHex,
-      publicKey: publicKeyHex,
+      privateKey,
+      publicKey,
     },
     zk: {
       secretKey: sk,

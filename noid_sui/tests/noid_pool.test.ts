@@ -37,6 +37,7 @@ import {
   fromBase64,
   toHex,
 } from "@mysten/sui/utils";
+import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
 // @ts-ignore
 import * as snarkjs from "snarkjs";
 // @ts-ignore
@@ -119,7 +120,9 @@ const emittedNullifierEvents: Array<{ nullifier: string }> = [];
 // ─── Keypairs ──────────────────────────────────────────────────────────────
 
 // Relayer = deployer keypair
-const relayerKeypair = Ed25519Keypair.fromSecretKey(fromBase64(DEPLOYER_SK));
+const relayerKeypair = DEPLOYER_SK.startsWith("suiprivkey")
+  ? Ed25519Keypair.fromSecretKey(decodeSuiPrivateKey(DEPLOYER_SK).secretKey)
+  : Ed25519Keypair.fromSecretKey(fromBase64(DEPLOYER_SK));
 
 // Alice and Bob are generated fresh each run (funded from faucet)
 const aliceKeypair   = new Ed25519Keypair();
