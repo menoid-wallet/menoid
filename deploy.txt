@@ -1,0 +1,43 @@
+================================================================================
+                                SOLANA (DEVNET)
+================================================================================
+Program ID: 3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC
+Pool State PDA: AsND4jSJBC9t7kwRqD4R6gkwnF4kibVuyGvSNTD1S7QG
+Deployer Address (Relayer Address): 7s3XTUSX4VCQw7QKfba4oGUh5bE9n1gqVNGFrNGrnFW4
+
+Derived ZK Relayer Wallet:
+  - Private Wallet Address: 0xfa646b4e659a14a70d9b658074a2ab861631f936
+  - Private Key: 0x4609c76ff10ca5ab1513ca045654aca796f505458f1715f9fdd622dff8b6c230
+  - Public Key: 0x041fbc7776d7c45d07c278b94a502f3373df2538a560257e33a41945cacb22f8c48ce2cc213621d16222cb4a7460b5b7e8b4a87c0d7592265c92ff63ba5eba7e4f
+  - ZK Secret Key (sk): 31679177489874209045486416635814893090124016921190798160806865019347739787824
+  - ZK Public Key (pk): 5373450086299519693233763606064799776647898093319658482698051739322944606633
+
+================================================================================
+                                 SUI (TESTNET)
+================================================================================
+Package ID: 0x8eb346e371efef3b48d51cc76ef00a10875fffc800a966df25b4ddf024ae9d55
+PoolState Object ID: 0x4b4aecb18020a1bd7f22dfc03f30cb10526fa167d02e40683197c334f9791a33
+VerifierConfig Object ID: 0x19a4ed9c23910e00887a2f73efffd29c45e4deed6da98261370601b314030e7a
+Deployer Address (Relayer Address): 0xe80cb32c8d5940d1dabc8e7b2463c8a0f4fd367345b969e9ce6850d5fec2ab80
+
+Derived ZK Relayer Wallet:
+  - Private Wallet Address: 0x7d12611838a331838bfbeb0617a4f4dd796490be
+  - Private Key: 0x570b320d24c3942c900d17ce796a172ec8de9b9fb5c7d161b2d98bb1b62c8071
+  - Public Key: 0x04c41b937e42f8341f337400f81d809c5168d2831c4397a04b8c31eb37d2fd0ea4de2dda2648dbba2cc304a1b3617c3258b5c52123adcfa6db6148b696a089193e
+  - ZK Secret Key (sk): 39370998586125083171044925266639693974778579324201431267792263536347613790321
+  - ZK Public Key (pk): 5204368206018344404800394577551743830850347246379239097442928139004113165786
+
+================================================================================
+                                APTOS (TESTNET)
+================================================================================
+Module Address (noid): 0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
+Pool Resource Account: 0x8f041f33125b093d771c93ea8f311a34b679e18ce7682c4724c62cff8728a08c
+Deployer Address (Relayer Address): 0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
+
+Derived ZK Relayer Wallet:
+  - Private Wallet Address: 0x75cab9b917c3030fbe0bd2d3957643feea3fb470
+  - Private Key: 0x84310e60892100db558cae6bf37017ac2881d90fe31a55ea8ec72ddd026f9549
+  - Public Key: 0x04626096482e105db3d51a17dcc2cdb0f44deb047a58dd260552c2838d5481117c1f411aaf5204b334f86fceddd125c7786f53c622d70f054a24ea33170e79c86e
+  - ZK Secret Key (sk): 59791970746210399959755998204861839634777196100571761731750792775989214549321
+  - ZK Public Key (pk): 9056676966985989424725984537770182233544397119782663727537493907121487503024
+================================================================================
