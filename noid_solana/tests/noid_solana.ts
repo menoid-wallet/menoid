@@ -114,16 +114,6 @@ describe("noid_solana", () => {
     poolStates[poolId] = { tree, roots: [], latestRoot: null, leafToIndex: {} };
   }
 
-  async function buildSyncTree(): Promise<InstanceType<typeof IncrementalMerkleTree>> {
-    const poseidon = await getPoseidon();
-    const hash = (inputs: bigint[]) => BigInt(poseidon.F.toString(poseidon(inputs)));
-    const tree = new IncrementalMerkleTree(hash, 20, BigInt(0), 2);
-    for (const ev of emittedNoteEvents) {
-      tree.insert(BigInt(ev.commitment));
-    }
-    return tree;
-  }
-
   async function rebuildWalletState() {
     console.log("\n========== REBUILDING WALLET STATE ==========");
     const poseidon = await getPoseidon();
@@ -330,6 +320,8 @@ describe("noid_solana", () => {
         admin: admin.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
+      // initialize now computes the 20 zero-subtree hashes on-chain (Poseidon syscall)
+      .preInstructions([anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })])
       .signers([admin])
       .rpc();
 
@@ -366,13 +358,6 @@ describe("noid_solana", () => {
       userAmount, r1, user.zk.publicKey, fee, r2,
     );
 
-    let root1: string, root2: string;
-    {
-      const syncTree = await buildSyncTree();
-      syncTree.insert(BigInt(c1.decimal)); root1 = syncTree.root.toString();
-      syncTree.insert(BigInt(c2.decimal)); root2 = syncTree.root.toString();
-    }
-
     const [commitment1Pda] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("commitment"), toBE32(c1.decimal)],
       program.programId
@@ -382,19 +367,18 @@ describe("noid_solana", () => {
       program.programId
     );
 
-    // Call deposit instruction
+    // Call deposit instruction.
+    // Roots are now recomputed on-chain, so root1/root2 are no longer passed.
+    // Deposit is permissionless and signed by the user alone (no relayer co-signer).
     await program.methods
       .deposit(
         proofA, proofB, proofC,
         new anchor.BN(depositAmount.toString()),
         Array.from(toBE32(c1.decimal)),
         Array.from(toBE32(c2.decimal)),
-        Array.from(toBE32(root1)),
-        Array.from(toBE32(root2)),
       )
       .accounts({
         user: alice.publicKey,
-        relayer: relayer.publicKey,
         poolState: poolStatePda,
         vault: vaultPda,
         commitment1: commitment1Pda,
@@ -402,7 +386,7 @@ describe("noid_solana", () => {
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .preInstructions([anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 1000000 })])
-      .signers([alice, relayer])
+      .signers([alice])
       .rpc();
 
     const poolState = await program.account.poolState.fetch(poolStatePda);
@@ -453,12 +437,9 @@ describe("noid_solana", () => {
           new anchor.BN("1000000000"),
           Array.from(toBE32(existingC1)),
           Array.from(toBE32(c2_new.decimal)),
-          Array.from(toBE32("0")),
-          Array.from(toBE32("0")),
         )
         .accounts({
           user: alice.publicKey,
-          relayer: relayer.publicKey,
           poolState: poolStatePda,
           vault: vaultPda,
           commitment1: commitment1Pda,
@@ -466,7 +447,7 @@ describe("noid_solana", () => {
           systemProgram: anchor.web3.SystemProgram.programId,
         })
         .preInstructions([anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 1000000 })])
-        .signers([alice, relayer])
+        .signers([alice])
         .rpc();
     } catch {
       threw = true;
@@ -516,15 +497,6 @@ describe("noid_solana", () => {
       relayerWallet.privateWallet.publicKey
     );
 
-    // Compute output roots
-    let tRoot1: string, tRoot2: string, tRoot3: string;
-    {
-      const traTree = await buildSyncTree();
-      traTree.insert(BigInt(receiverCmx.decimal)); tRoot1 = traTree.root.toString();
-      traTree.insert(BigInt(changeCmx.decimal));   tRoot2 = traTree.root.toString();
-      traTree.insert(BigInt(relayerCmx.decimal));  tRoot3 = traTree.root.toString();
-    }
-
     // Prepare dynamic accounts for remaining accounts
     const [nullifierPda] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("nullifier"), toBE32(nullifier)],
@@ -550,7 +522,8 @@ describe("noid_solana", () => {
       { pubkey: relayerCmxPda, isWritable: true, isSigner: false },
     ];
 
-    // Submit transfer transaction
+    // Submit transfer transaction.
+    // output_roots removed (computed on-chain). Permissionless, but signed by the relayer.
     await program.methods
       .transfer(
         proof.proofA, proof.proofB, proof.proofC,
@@ -559,10 +532,9 @@ describe("noid_solana", () => {
         [Array.from(toBE32(nullifier)), Array.from(toBE32("0")), Array.from(toBE32("0")), Array.from(toBE32("0"))],
         [1, 1, 1],
         [Array.from(toBE32(receiverCmx.decimal)), Array.from(toBE32(changeCmx.decimal)), Array.from(toBE32(relayerCmx.decimal))],
-        [Array.from(toBE32(tRoot1)), Array.from(toBE32(tRoot2)), Array.from(toBE32(tRoot3))],
       )
       .accounts({
-        relayer: relayer.publicKey,
+        payer: relayer.publicKey,
         poolState: poolStatePda,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
@@ -599,10 +571,9 @@ describe("noid_solana", () => {
           [Array.from(toBE32(spentNull)), Array(32).fill(0), Array(32).fill(0), Array(32).fill(0)],
           [1, 0, 0],
           [Array.from(toBE32(fakeC.decimal)), Array(32).fill(0), Array(32).fill(0)],
-          [Array(32).fill(0), Array(32).fill(0), Array(32).fill(0)],
         )
         .accounts({
-          relayer: relayer.publicKey,
+          payer: relayer.publicKey,
           poolState: poolStatePda,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
@@ -656,13 +627,6 @@ describe("noid_solana", () => {
       relayerWallet.privateWallet.publicKey
     );
 
-    let wRoots = ["0", "0"];
-    {
-      const witTree = await buildSyncTree();
-      witTree.insert(BigInt(changeCmx.decimal)); wRoots[0] = witTree.root.toString();
-      witTree.insert(BigInt(relayerCmx.decimal)); wRoots[1] = witTree.root.toString();
-    }
-
     const [nullifierPda] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("nullifier"), toBE32(nullifier)],
       program.programId
@@ -684,7 +648,8 @@ describe("noid_solana", () => {
 
     const bobBalanceBefore = await provider.connection.getBalance(bob.publicKey);
 
-    // Call withdraw instruction
+    // Call withdraw instruction.
+    // output_roots removed (computed on-chain). Permissionless, but signed by the relayer.
     await program.methods
       .withdraw(
         proof.proofA, proof.proofB, proof.proofC,
@@ -695,10 +660,9 @@ describe("noid_solana", () => {
         new anchor.BN(withdrawAmt.toString()),
         [1, 1],
         [Array.from(toBE32(changeCmx.decimal)), Array.from(toBE32(relayerCmx.decimal))],
-        [Array.from(toBE32(wRoots[0])), Array.from(toBE32(wRoots[1]))],
       )
       .accounts({
-        relayer: relayer.publicKey,
+        payer: relayer.publicKey,
         poolState: poolStatePda,
         vault: vaultPda,
         receiver: bob.publicKey,

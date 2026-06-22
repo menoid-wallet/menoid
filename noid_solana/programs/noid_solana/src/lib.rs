@@ -1,12 +1,25 @@
 use anchor_lang::prelude::*;
 use groth16_solana::groth16::Groth16Verifier;
 use num_bigint::BigUint;
+use solana_poseidon::{hashv, Endianness, Parameters};
 
 pub mod verifying_keys;
 use verifying_keys::{DEPOSIT_VK, TRANSFER_VK, WITHDRAW_VK};
 
 declare_id!("3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC");
 
+// ── Merkle tree parameters (must match the Ethereum poolLib.sol + circom MerklePath) ──
+/// Tree depth — 20 levels, so each pool holds up to 2^20 leaves.
+pub const TREE_DEPTH: usize = 20;
+/// Circular root-history length. A root stays "known" for this many inserts.
+pub const ROOT_HISTORY_SIZE: u64 = 100;
+/// Maximum number of leaves in a single tree (2^TREE_DEPTH).
+pub const MAX_LEAF: u64 = 1u64 << TREE_DEPTH;
+
+/// Root of an empty depth-20 tree (Z20) under circomlib Poseidon with zero leaves.
+/// Recomputed on-chain in `initialize` and asserted against this constant so that any
+/// mismatch between the on-chain sol_poseidon syscall and the off-chain circomlibjs
+/// hash is caught immediately at init time instead of surfacing later as InvalidRoot.
 pub const EMPTY_ROOT: [u8; 32] = [
     0x21, 0x34, 0xe7, 0x6a, 0xc5, 0xd2, 0x1a, 0xab, 0x18, 0x6c, 0x2b, 0xe1, 0xdd, 0x8f, 0x84, 0xee,
     0x88, 0x0a, 0x1e, 0x46, 0xea, 0xf7, 0x12, 0xf9, 0xd3, 0x71, 0xb6, 0xdf, 0x22, 0x19, 0x1f, 0x3e
@@ -26,10 +39,25 @@ pub mod noid_solana {
         pool_state.relayer_address = relayer_address;
         pool_state.relayer_zk_pubkey = relayer_zk_pubkey;
         pool_state.locked_balance = 0;
-        pool_state.root_history = vec![EMPTY_ROOT; 100];
+
+        // Build the empty-tree zero hashes and seed the filled-subtree cache, exactly like
+        // poolLib.createPool on Ethereum:
+        //   zeros[0] = 0, zeros[i] = Poseidon(zeros[i-1], zeros[i-1]), empty root = Z20.
+        let mut zero = [0u8; 32];
+        for i in 0..TREE_DEPTH {
+            pool_state.zeros[i] = zero;
+            pool_state.filled_subtrees[i] = zero;
+            zero = poseidon_hash2(&zero, &zero)?;
+        }
+        let empty_root = zero; // Z20
+
+        // Fail fast if the on-chain syscall disagrees with the expected off-chain hash.
+        require!(empty_root == EMPTY_ROOT, ErrorCode::PoseidonMismatch);
+
+        pool_state.root_history = vec![empty_root; ROOT_HISTORY_SIZE as usize];
         pool_state.root_ptr = 0;
         pool_state.next_idx = 0;
-        pool_state.current_root = EMPTY_ROOT;
+        pool_state.current_root = empty_root;
         pool_state.bump = ctx.bumps.pool_state;
         Ok(())
     }
@@ -53,8 +81,6 @@ pub mod noid_solana {
         amount: u64,
         c1: [u8; 32],
         c2: [u8; 32],
-        root1: [u8; 32],
-        root2: [u8; 32],
     ) -> Result<()> {
         require!(amount > 0, ErrorCode::ZeroAmount);
         require!(c1 != [0u8; 32] && c2 != [0u8; 32], ErrorCode::InvalidCommitment);
@@ -94,18 +120,12 @@ pub mod noid_solana {
         let pool_state = &mut ctx.accounts.pool_state;
         pool_state.locked_balance += amount;
 
-        // Insert c1
-        let ptr1 = pool_state.root_ptr as usize;
-        pool_state.root_history[ptr1] = root1;
-        pool_state.root_ptr = (pool_state.root_ptr + 1) % 100;
-        pool_state.next_idx += 1;
-
-        // Insert c2
-        let ptr2 = pool_state.root_ptr as usize;
-        pool_state.root_history[ptr2] = root2;
-        pool_state.root_ptr = (pool_state.root_ptr + 1) % 100;
-        pool_state.next_idx += 1;
-        pool_state.current_root = root2;
+        // Insert both commitments and recompute the Merkle root on-chain via the
+        // filled-subtree algorithm (no caller-supplied roots). One root — the state
+        // after both leaves — is appended to the history for this batch.
+        pool_state.insert_leaf(c1)?;
+        pool_state.insert_leaf(c2)?;
+        pool_state.push_root();
 
         emit!(NoteCreatedEvent {
             pool_id: 0,
@@ -133,7 +153,6 @@ pub mod noid_solana {
         nullifiers: [[u8; 32]; 4],
         output_enabled: [u8; 3],
         c_outs: [[u8; 32]; 3],
-        output_roots: [[u8; 32]; 3],
     ) -> Result<()> {
         let pool_state = &mut ctx.accounts.pool_state;
 
@@ -177,7 +196,7 @@ pub mod noid_solana {
                 require_keys_eq!(null_acc_info.key(), expected_pda, ErrorCode::InvalidPda);
 
                 create_pda_account(
-                    &ctx.accounts.relayer,
+                    &ctx.accounts.payer,
                     null_acc_info,
                     &[b"nullifier", n.as_ref(), &[bump]],
                     8,
@@ -188,8 +207,8 @@ pub mod noid_solana {
             }
         }
 
-        // Insert new commitments
-        let mut last_root = pool_state.current_root;
+        // Insert new commitments, recomputing the Merkle root on-chain per leaf.
+        let mut inserted_any = false;
         for j in 0..3 {
             if output_enabled[j] == 1 {
                 let c_acc_info = remaining_accounts_iter.next().ok_or(ErrorCode::MissingAccount)?;
@@ -198,7 +217,7 @@ pub mod noid_solana {
                 require_keys_eq!(c_acc_info.key(), expected_pda, ErrorCode::InvalidPda);
 
                 create_pda_account(
-                    &ctx.accounts.relayer,
+                    &ctx.accounts.payer,
                     c_acc_info,
                     &[b"commitment", c.as_ref(), &[bump]],
                     8,
@@ -206,12 +225,9 @@ pub mod noid_solana {
                     &ctx.accounts.system_program,
                 )?;
 
-                // Update Merkle tree
-                last_root = output_roots[j];
-                let ptr = pool_state.root_ptr as usize;
-                pool_state.root_history[ptr] = last_root;
-                pool_state.root_ptr = (pool_state.root_ptr + 1) % 100;
-                pool_state.next_idx += 1;
+                // Update Merkle tree (filled-subtree root computation, no caller roots)
+                pool_state.insert_leaf(c)?;
+                inserted_any = true;
 
                 emit!(NoteCreatedEvent {
                     pool_id: 0,
@@ -219,7 +235,10 @@ pub mod noid_solana {
                 });
             }
         }
-        pool_state.current_root = last_root;
+        // Append a single root for this batch once all outputs are inserted.
+        if inserted_any {
+            pool_state.push_root();
+        }
 
         Ok(())
     }
@@ -236,7 +255,6 @@ pub mod noid_solana {
         withdraw_amount: u64,
         out_enabled: [u8; 2],
         c_outs: [[u8; 32]; 2],
-        output_roots: [[u8; 32]; 2],
     ) -> Result<()> {
         let pool_state = &mut ctx.accounts.pool_state;
         require!(withdraw_amount > 0, ErrorCode::ZeroAmount);
@@ -285,7 +303,7 @@ pub mod noid_solana {
                 require_keys_eq!(null_acc_info.key(), expected_pda, ErrorCode::InvalidPda);
 
                 create_pda_account(
-                    &ctx.accounts.relayer,
+                    &ctx.accounts.payer,
                     null_acc_info,
                     &[b"nullifier", n.as_ref(), &[bump]],
                     8,
@@ -296,8 +314,8 @@ pub mod noid_solana {
             }
         }
 
-        // Insert new commitments (change outputs)
-        let mut last_root = pool_state.current_root;
+        // Insert new commitments (change outputs), recomputing the root on-chain per leaf.
+        let mut inserted_any = false;
         for j in 0..2 {
             if out_enabled[j] == 1 {
                 let c_acc_info = remaining_accounts_iter.next().ok_or(ErrorCode::MissingAccount)?;
@@ -306,7 +324,7 @@ pub mod noid_solana {
                 require_keys_eq!(c_acc_info.key(), expected_pda, ErrorCode::InvalidPda);
 
                 create_pda_account(
-                    &ctx.accounts.relayer,
+                    &ctx.accounts.payer,
                     c_acc_info,
                     &[b"commitment", c.as_ref(), &[bump]],
                     8,
@@ -314,12 +332,9 @@ pub mod noid_solana {
                     &ctx.accounts.system_program,
                 )?;
 
-                // Update Merkle tree
-                last_root = output_roots[j];
-                let ptr = pool_state.root_ptr as usize;
-                pool_state.root_history[ptr] = last_root;
-                pool_state.root_ptr = (pool_state.root_ptr + 1) % 100;
-                pool_state.next_idx += 1;
+                // Update Merkle tree (filled-subtree root computation, no caller roots)
+                pool_state.insert_leaf(c)?;
+                inserted_any = true;
 
                 emit!(NoteCreatedEvent {
                     pool_id: 0,
@@ -327,7 +342,10 @@ pub mod noid_solana {
                 });
             }
         }
-        pool_state.current_root = last_root;
+        // Append a single root for this batch if any change output was inserted.
+        if inserted_any {
+            pool_state.push_root();
+        }
 
         // Subtract locked balance and transfer SOL from vault PDA to receiver
         pool_state.locked_balance -= withdraw_amount;
@@ -354,6 +372,53 @@ pub mod noid_solana {
 }
 
 // Helper Functions
+
+/// Poseidon(2) over BN254 using the native `sol_poseidon` syscall.
+/// `Bn254X5` + `BigEndian` make this byte-for-byte compatible with circomlib's
+/// `Poseidon(2)` (the hash used in `merkle_path.circom` and by circomlibjs off-chain).
+fn poseidon_hash2(left: &[u8; 32], right: &[u8; 32]) -> Result<[u8; 32]> {
+    let h = hashv(
+        Parameters::Bn254X5,
+        Endianness::BigEndian,
+        &[&left[..], &right[..]],
+    )
+    .map_err(|_| error!(ErrorCode::PoseidonError))?;
+    Ok(h.to_bytes())
+}
+
+impl PoolState {
+    /// Insert a single leaf and recompute `current_root` using the incremental
+    /// filled-subtree algorithm — the exact port of poolLib.updatePool on Ethereum.
+    /// Walks all TREE_DEPTH levels, hashing each node with the native Poseidon syscall.
+    /// Does NOT append to the root history (callers batch that via `push_root`).
+    fn insert_leaf(&mut self, commitment: [u8; 32]) -> Result<()> {
+        require!(self.next_idx < MAX_LEAF, ErrorCode::TreeFull);
+        let mut current = commitment;
+        let mut idx = self.next_idx;
+        for i in 0..TREE_DEPTH {
+            if idx & 1 == 0 {
+                // Even index: `current` becomes the left child waiting for a right sibling.
+                self.filled_subtrees[i] = current;
+                current = poseidon_hash2(&current, &self.zeros[i])?;
+            } else {
+                // Odd index: the stored left subtree is the sibling.
+                current = poseidon_hash2(&self.filled_subtrees[i], &current)?;
+            }
+            idx >>= 1;
+        }
+        self.current_root = current;
+        self.next_idx += 1;
+        Ok(())
+    }
+
+    /// Append the current root to the circular root history.
+    fn push_root(&mut self) {
+        let ptr = self.root_ptr as usize;
+        self.root_history[ptr] = self.current_root;
+        self.root_ptr = (self.root_ptr + 1) % ROOT_HISTORY_SIZE;
+    }
+}
+
 fn u64_to_be32(val: u64) -> [u8; 32] {
     let mut out = [0u8; 32];
     out[24..32].copy_from_slice(&val.to_be_bytes());
@@ -441,7 +506,9 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + 32 + 32 + 32 + 8 + 3204 + 8 + 8 + 32 + 1,
+        // disc + admin + relayer_addr + relayer_zk + locked + root_history(4+100*32)
+        //  + root_ptr + next_idx + current_root + filled_subtrees(20*32) + zeros(20*32) + bump
+        space = 8 + 32 + 32 + 32 + 8 + 3204 + 8 + 8 + 32 + 640 + 640 + 1,
         seeds = [b"pool_state", admin.key().as_ref()],
         bump
     )]
@@ -476,13 +543,13 @@ pub struct Deposit<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    pub relayer: Signer<'info>,
-
+    // No relayer/co-signer required: anyone can submit a deposit. Correctness of the
+    // new Merkle root is enforced on-chain (filled-subtree recomputation), and the
+    // deposit ZK proof binds the relayer fee note via relayer_zk_pubkey.
     #[account(
         mut,
         seeds = [b"pool_state", pool_state.admin.as_ref()],
-        bump = pool_state.bump,
-        constraint = pool_state.relayer_address == relayer.key() @ ErrorCode::NotRelayer
+        bump = pool_state.bump
     )]
     pub pool_state: Box<Account<'info, PoolState>>,
 
@@ -516,14 +583,14 @@ pub struct Deposit<'info> {
 
 #[derive(Accounts)]
 pub struct Transfer<'info> {
+    // Any signer may submit a transfer and pay rent for the new PDAs (permissionless).
     #[account(mut)]
-    pub relayer: Signer<'info>,
+    pub payer: Signer<'info>,
 
     #[account(
         mut,
         seeds = [b"pool_state", pool_state.admin.as_ref()],
-        bump = pool_state.bump,
-        constraint = pool_state.relayer_address == relayer.key() @ ErrorCode::NotRelayer
+        bump = pool_state.bump
     )]
     pub pool_state: Box<Account<'info, PoolState>>,
 
@@ -532,14 +599,14 @@ pub struct Transfer<'info> {
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
+    // Any signer may submit a withdraw and pay rent for the new PDAs (permissionless).
     #[account(mut)]
-    pub relayer: Signer<'info>,
+    pub payer: Signer<'info>,
 
     #[account(
         mut,
         seeds = [b"pool_state", pool_state.admin.as_ref()],
-        bump = pool_state.bump,
-        constraint = pool_state.relayer_address == relayer.key() @ ErrorCode::NotRelayer
+        bump = pool_state.bump
     )]
     pub pool_state: Box<Account<'info, PoolState>>,
 
@@ -568,6 +635,10 @@ pub struct PoolState {
     pub root_ptr: u64,
     pub next_idx: u64,
     pub current_root: [u8; 32],
+    /// Latest completed left-subtree hash at each level (incremental Merkle tree cache).
+    pub filled_subtrees: [[u8; 32]; 20],
+    /// Zero-subtree hash at each level (Z0..Z19); seeded once in `initialize`.
+    pub zeros: [[u8; 32]; 20],
     pub bump: u8,
 }
 
@@ -609,6 +680,12 @@ pub enum ErrorCode {
     MissingAccount,
     #[msg("Insufficient balance in the pool")]
     InsufficientBalance,
+    #[msg("Merkle tree is full")]
+    TreeFull,
+    #[msg("Poseidon hashing failed")]
+    PoseidonError,
+    #[msg("On-chain Poseidon does not match expected empty root")]
+    PoseidonMismatch,
 }
 
 #[cfg(test)]
