@@ -4,10 +4,7 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-noid = "0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb"
-
-[dev-addresses]
-noid = "0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb"
+noid = "_"
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-framework.git"

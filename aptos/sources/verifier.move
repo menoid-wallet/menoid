@@ -73,6 +73,13 @@ module noid::verifier {
         wit_gamma: vector<u8>,
         wit_delta: vector<u8>,
         wit_ic:    vector<u8>,   // 20 * 64 = 1280 bytes
+
+        // NewRoot circuit (43 public signals → 44 IC points)
+        nr_alpha:  vector<u8>,
+        nr_beta:   vector<u8>,
+        nr_gamma:  vector<u8>,
+        nr_delta:  vector<u8>,
+        nr_ic:     vector<u8>,   // 44 * 64 = 2816 bytes
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -92,6 +99,9 @@ module noid::verifier {
         wit_alpha: vector<u8>, wit_beta: vector<u8>,
         wit_gamma: vector<u8>, wit_delta: vector<u8>,
         wit_ic:    vector<u8>,
+        nr_alpha:  vector<u8>, nr_beta: vector<u8>,
+        nr_gamma:  vector<u8>, nr_delta: vector<u8>,
+        nr_ic:     vector<u8>,
     ) {
         let addr = std::signer::address_of(admin);
         assert!(!exists<VerificationKeys>(addr), E_ALREADY_INITIALIZED);
@@ -99,6 +109,7 @@ module noid::verifier {
             dep_alpha, dep_beta, dep_gamma, dep_delta, dep_ic,
             tra_alpha, tra_beta, tra_gamma, tra_delta, tra_ic,
             wit_alpha, wit_beta, wit_gamma, wit_delta, wit_ic,
+            nr_alpha, nr_beta, nr_gamma, nr_delta, nr_ic,
         });
     }
 
@@ -114,6 +125,9 @@ module noid::verifier {
         wit_alpha: vector<u8>, wit_beta: vector<u8>,
         wit_gamma: vector<u8>, wit_delta: vector<u8>,
         wit_ic:    vector<u8>,
+        nr_alpha:  vector<u8>, nr_beta: vector<u8>,
+        nr_gamma:  vector<u8>, nr_delta: vector<u8>,
+        nr_ic:     vector<u8>,
     ) acquires VerificationKeys {
         let addr = std::signer::address_of(admin);
         if (exists<VerificationKeys>(addr)) {
@@ -127,11 +141,15 @@ module noid::verifier {
             vks.wit_alpha = wit_alpha; vks.wit_beta = wit_beta;
             vks.wit_gamma = wit_gamma; vks.wit_delta = wit_delta;
             vks.wit_ic    = wit_ic;
+            vks.nr_alpha  = nr_alpha; vks.nr_beta = nr_beta;
+            vks.nr_gamma  = nr_gamma; vks.nr_delta = nr_delta;
+            vks.nr_ic     = nr_ic;
         } else {
             move_to(admin, VerificationKeys {
                 dep_alpha, dep_beta, dep_gamma, dep_delta, dep_ic,
                 tra_alpha, tra_beta, tra_gamma, tra_delta, tra_ic,
                 wit_alpha, wit_beta, wit_gamma, wit_delta, wit_ic,
+                nr_alpha, nr_beta, nr_gamma, nr_delta, nr_ic,
             });
         }
     }
@@ -192,6 +210,26 @@ module noid::verifier {
         let vks = borrow_global<VerificationKeys>(vks_addr);
         groth16_verify(
             &vks.wit_alpha, &vks.wit_beta, &vks.wit_gamma, &vks.wit_delta, &vks.wit_ic,
+            a_bytes, b_bytes, c_bytes,
+            public_signals,
+        )
+    }
+
+    /// Verify a new_root (incremental-insertion) proof.
+    /// public_signals = [ newRoot, newSubtreesHash, oldSubtreesHash, commitment, leafIndex ]
+    /// → 5 signals (subtrees committed as a hash to keep the IC set small).
+    public fun verify_new_root(
+        vks_addr:       address,
+        a_bytes:        &vector<u8>,
+        b_bytes:        &vector<u8>,
+        c_bytes:        &vector<u8>,
+        public_signals: &vector<u256>,
+    ): bool acquires VerificationKeys {
+        assert!(exists<VerificationKeys>(vks_addr), E_NOT_INITIALIZED);
+        assert!(vector::length(public_signals) == 5, E_BAD_SIGNAL_COUNT);
+        let vks = borrow_global<VerificationKeys>(vks_addr);
+        groth16_verify(
+            &vks.nr_alpha, &vks.nr_beta, &vks.nr_gamma, &vks.nr_delta, &vks.nr_ic,
             a_bytes, b_bytes, c_bytes,
             public_signals,
         )

@@ -89,6 +89,7 @@ interface ProofCalldata {
 
 let relayerWallet: GeneratedWallet;
 const userWallets: GeneratedWallet[] = [];
+let subtrees: bigint[] = [];
 
 // poolResourceAddr is the resource account that actually holds APT
 let poolResourceAddr: string = "";
@@ -238,6 +239,7 @@ async function rebuildWalletState() {
   console.log("Spent nullifiers:", [...spentNullifiers]);
   console.log(`  Total commitments for rebuild: ${allCmxs.length}`);
 
+  subtrees = await getInitialSubtrees();
   for (const cmx of allCmxs) {
     // Find encrypted note from in-memory log (persisted state doesn't store enc data)
     const encryptedNote = emittedNoteEvents.find((e) => e.commitment === cmx)?.encryptedNote ?? "";
@@ -246,6 +248,10 @@ async function rebuildWalletState() {
     const state = poolStates["0"];
     state.tree.insert(BigInt(cmx));
     const leafIndex = state.tree.leaves.length - 1;
+
+    const subRes = await updateSubtrees(subtrees, BigInt(cmx), leafIndex);
+    subtrees = subRes.newSubtrees;
+
     const root      = state.tree.root.toString();
     state.latestRoot = root;
     state.roots.push(root);
@@ -276,6 +282,121 @@ async function rebuildWalletState() {
   console.log("\n========== WALLET STATES ==========");
   for (const [name, ws] of Object.entries(walletStates)) {
     console.log(`  ${name}: balance=${ws.balance} octas, notes=${ws.notes.length}`);
+  }
+}
+
+async function updateSubtrees(subtrees: bigint[], leaf: bigint, idx: number): Promise<{ newRoot: bigint, newSubtrees: bigint[] }> {
+  const poseidon = await getPoseidon();
+  const H = (a: bigint, b: bigint) => BigInt(poseidon.F.toString(poseidon([a, b])));
+  
+  // compute zeros
+  const zeros: bigint[] = [];
+  let z = 0n;
+  for (let i = 0; i < 20; i++) {
+    zeros.push(z);
+    z = H(z, z);
+  }
+  
+  const newSub = [...subtrees];
+  let cur = leaf;
+  for (let i = 0; i < 20; i++) {
+    if (((idx >> i) & 1) === 0) {
+      newSub[i] = cur;
+      cur = H(cur, zeros[i]);
+    } else {
+      cur = H(subtrees[i], cur);
+    }
+  }
+  return { newRoot: cur, newSubtrees: newSub };
+}
+async function getInitialSubtrees(): Promise<bigint[]> {
+  const poseidon = await getPoseidon();
+  const H = (a: bigint, b: bigint) => BigInt(poseidon.F.toString(poseidon([a, b])));
+  const zeros: bigint[] = [];
+  let z = 0n;
+  for (let i = 0; i < 20; i++) {
+    zeros.push(z);
+    z = H(z, z);
+  }
+  return zeros;
+}
+
+async function hashSubtrees(subtrees: bigint[]): Promise<string> {
+  const poseidon = await getPoseidon();
+  let acc = subtrees[0];
+  for (let i = 1; i < subtrees.length; i++) {
+    acc = BigInt(poseidon.F.toString(poseidon([acc, subtrees[i]])));
+  }
+  return acc.toString();
+}
+
+async function proveNewRoot(
+  oldSubtrees: string[],
+  commitment: string,
+  leafIndex: number,
+): Promise<{ calldata: ProofCalldata, newRoot: string, newSubtreesHash: string, oldSubtreesHash: string }> {
+  const oldSubtreesHash = await hashSubtrees(oldSubtrees.map(BigInt));
+  const input = {
+    oldSubtrees,
+    oldSubtreesHash,
+    commitment,
+    leafIndex: leafIndex.toString(),
+  };
+  console.log(`\n========== NEW ROOT CIRCOM INPUT (leafIndex ${leafIndex}) ==========\n`, input);
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    input,
+    circuitPath("new_root_js/new_root", "wasm"),
+    circuitPath("new_root_final", "zkey"),
+  );
+  console.log("\n========== NEW ROOT PUBLIC SIGNALS ==========\n", publicSignals);
+  return {
+    calldata: proofToBytes(proof),
+    newRoot: publicSignals[0],
+    newSubtreesHash: publicSignals[1],
+    oldSubtreesHash: publicSignals[2],
+  };
+}
+
+async function processPendingTasks(signer: Account) {
+  const [countVal] = await viewFunction("pending_commitments_count", [], [MODULE_ADDR]);
+  let count = Number(countVal);
+  console.log(`\n--- processing ${count} pending commitments on-chain ---`);
+  for (let idx = 0; idx < count; idx++) {
+    // Read commitment from contract (it must be at index 0 because we pop from front)
+    const [cmxVal] = await viewFunction("get_pending_commitment_at", [], [MODULE_ADDR, "0"]);
+    const commitment = cmxVal as string;
+    
+    // Get next leaf index in the Merkle tree
+    const [nextIdxVal] = await viewFunction("next_index", [], [MODULE_ADDR, "0"]);
+    const leafIndex = Number(nextIdxVal);
+    
+    // Generate new_root proof using the current off-chain subtrees
+    const { calldata: { aBytes, bBytes, cBytes }, newRoot, newSubtreesHash } = await proveNewRoot(
+      subtrees.map(String),
+      commitment,
+      leafIndex,
+    );
+    
+    console.log(`Submitting update_root for commitment ${commitment} at leafIndex ${leafIndex}...`);
+    const receipt = await submitRelayer(signer, {
+      function: `${MODULE_ADDR}::pool::update_root`,
+      typeArguments: [],
+      functionArguments: [
+        MODULE_ADDR,
+        u256ToMoveArg(BigInt(commitment)),
+        bytesToMoveArg(aBytes),
+        bytesToMoveArg(bBytes),
+        bytesToMoveArg(cBytes),
+        u256ToMoveArg(BigInt(newRoot)),
+        u256ToMoveArg(BigInt(newSubtreesHash)),
+      ],
+    });
+    console.log(`update_root receipt: success = ${receipt.success}`);
+    assert(receipt.success, "update_root transaction failed");
+    
+    // Update off-chain subtrees
+    const res = await updateSubtrees(subtrees, BigInt(commitment), leafIndex);
+    subtrees = res.newSubtrees;
   }
 }
 
@@ -488,24 +609,7 @@ async function submitRelayer(
 }
 
 /**
- * Submit the deposit transaction using MULTI-AGENT + FEE-PAYER pattern.
- *
- * Why this pattern:
- *   • Simple fee-payer (withFeePayer:true on build.simple) exposes the fee-payer
- *     ONLY as a gas payer — it does NOT appear as a &signer in the Move function.
- *     The Move entry function would see only one &signer (Alice), causing
- *     NUMBER_OF_SIGNER_ARGUMENTS_MISMATCH for a two-&signer function.
- *
- *   • Multi-agent + fee-payer exposes the relayer as BOTH:
- *       - A secondary signer → appears as the second &signer in Move (relayer: &signer)
- *       - The fee-payer      → pays gas, no extra APT needed beyond gas
- *
- * Signing steps:
- *   1. Build as multi-agent with relayer as secondary signer + fee-payer
- *   2. Alice signs the tx body (she is the sender, signer[0])
- *   3. Relayer signs as secondary signer (signer[1] → relayer: &signer in Move)
- *   4. Relayer also signs as fee-payer (gas payment)
- *   5. Submit with all three authenticators
+ * Submit the deposit transaction using FEE-PAYER pattern.
  */
 async function submitDeposit(
   alice:    Account,
@@ -513,29 +617,24 @@ async function submitDeposit(
   payload:  InputGenerateTransactionPayloadData,
   gasLimit: number = 2_000_000,
 ) {
-  // Step 1: Build multi-agent tx — relayer is secondary signer AND fee-payer
-  const tx = await aptos.transaction.build.multiAgent({
+  // Step 1: Build simple tx with fee-payer
+  const tx = await aptos.transaction.build.simple({
     sender:                   alice.accountAddress,
-    secondarySignerAddresses: [relayer.accountAddress],
     withFeePayer:             true,
     data:                     payload,
     options: { maxGasAmount: gasLimit, gasUnitPrice: 100 },
   });
 
-  // Step 2: Alice signs as the primary sender (provides APT)
+  // Step 2: Alice signs as the primary sender
   const aliceAuth = await aptos.transaction.sign({ signer: alice, transaction: tx });
 
-  // Step 3: Relayer signs as secondary signer (appears as second &signer in Move)
-  const relayerSecondaryAuth = await aptos.transaction.sign({ signer: relayer, transaction: tx });
-
-  // Step 4: Relayer also signs as fee-payer (pays gas)
+  // Step 3: Relayer signs as fee-payer (pays gas)
   const relayerFeePayerAuth = await aptos.transaction.signAsFeePayer({ signer: relayer, transaction: tx });
 
-  // Step 5: Submit with all authenticators
-  const result = await aptos.transaction.submit.multiAgent({
+  // Step 4: Submit with sender and fee payer authenticators
+  const result = await aptos.transaction.submit.simple({
     transaction:              tx,
     senderAuthenticator:      aliceAuth,
-    additionalSignersAuthenticators: [relayerSecondaryAuth],
     feePayerAuthenticator:    relayerFeePayerAuth,
   });
 
@@ -592,6 +691,7 @@ async function main() {
   // Load persisted cross-run state immediately — this is what keeps the
   // local Merkle tree in sync with the localnet across reruns.
   persistedState = loadPersistedState();
+  subtrees = await getInitialSubtrees();
 
   const aliceSigner   = Account.generate();
   const bobSigner     = Account.generate();
@@ -710,26 +810,10 @@ async function main() {
       userAmount, r1, user.zk.publicKey, fee, r2,
     );
 
-    // Compute deposit roots against the actual on-chain tree state.
-    // buildSyncTree includes all prior-run leaves from .noid-state.json.
-    let root1: string, root2: string;
-    {
-      const syncTree = await buildSyncTree();
-      syncTree.insert(BigInt(c1.decimal)); root1 = syncTree.root.toString();
-      syncTree.insert(BigInt(c2.decimal)); root2 = syncTree.root.toString();
-    }
-    console.log(`\nDeposit roots: root1=${root1!}  root2=${root2!}`);
-
     console.log(`\nSubmitting SPONSORED deposit tx to ${NET_LABEL}...`);
     console.log(`  Alice (sender/signer[0]): ${aliceSigner.accountAddress}`);
     console.log(`  Relayer (fee-payer/signer[1]): ${relayerSigner.accountAddress}`);
 
-    // Two-signer deposit (fee-payer transaction):
-    //   Alice   = tx sender + signer[0] in Move (caller: &signer) — provides APT
-    //   Relayer = secondary signer[1] in Move (relayer: &signer) + fee-payer — pays gas
-    //
-    // submitDeposit uses build.multiAgent with relayer as secondarySigner AND feePayer
-    // so the relayer appears as a &signer in the Move function AND pays gas.
     const receipt = await submitDeposit(
       aliceSigner,   // sender — Alice pays APT, Move's caller &signer
       relayerSigner, // secondary signer + fee-payer — Move's relayer &signer
@@ -742,8 +826,6 @@ async function main() {
           u256ToMoveArg(BigInt(c1.decimal)),
           u256ToMoveArg(BigInt(c2.decimal)),
           depositAmount.toString(),
-          u256ToMoveArg(BigInt(root1)),
-          u256ToMoveArg(BigInt(root2)),
           Array.from(Buffer.from(encNote1)),
           Array.from(Buffer.from(encNote2)),
         ],
@@ -761,10 +843,25 @@ async function main() {
     console.log(`Pool locked_balance: ${lockBal}`);
     assert(BigInt(lockBal as string) >= depositAmount, `locked_balance should be >= ${depositAmount}`);
 
-    const [c1Exists] = await viewFunction("commitment_exists", [], [MODULE_ADDR, c1.decimal]);
-    const [c2Exists] = await viewFunction("commitment_exists", [], [MODULE_ADDR, c2.decimal]);
-    assert(c1Exists as boolean, "c1 should exist on-chain");
-    assert(c2Exists as boolean, "c2 should exist on-chain");
+    // Commitments should not exist yet because they are pending task-queue execution
+    const [c1ExistsBefore] = await viewFunction("commitment_exists", [], [MODULE_ADDR, c1.decimal]);
+    const [c2ExistsBefore] = await viewFunction("commitment_exists", [], [MODULE_ADDR, c2.decimal]);
+    assert(!c1ExistsBefore, "c1 should NOT exist on-chain before processing tasks");
+    assert(!c2ExistsBefore, "c2 should NOT exist on-chain before processing tasks");
+
+    const [pendingCount] = await viewFunction("pending_commitments_count", [], [MODULE_ADDR]);
+    assert(Number(pendingCount) === 2, "Should have 2 pending commitments");
+
+    // Process tasks using relayer
+    await processPendingTasks(relayerSigner);
+
+    const [c1ExistsAfter] = await viewFunction("commitment_exists", [], [MODULE_ADDR, c1.decimal]);
+    const [c2ExistsAfter] = await viewFunction("commitment_exists", [], [MODULE_ADDR, c2.decimal]);
+    assert(c1ExistsAfter as boolean, "c1 should exist on-chain after processing tasks");
+    assert(c2ExistsAfter as boolean, "c2 should exist on-chain after processing tasks");
+
+    const [pendingCountAfter] = await viewFunction("pending_commitments_count", [], [MODULE_ADDR]);
+    assert(Number(pendingCountAfter) === 0, "Should have 0 pending commitments after processing");
 
     emittedNoteEvents.push({ poolId: "0", commitment: c1.decimal, encryptedNote: encNote1 });
     emittedNoteEvents.push({ poolId: "0", commitment: c2.decimal, encryptedNote: encNote2 });
@@ -819,13 +916,86 @@ async function main() {
             bytesToMoveArg(aBytes), bytesToMoveArg(bBytes), bytesToMoveArg(cBytes),
             u256ToMoveArg(BigInt(existingC1)), u256ToMoveArg(BigInt(c2_new.decimal)),
             "100000000",
-            u256ToMoveArg(0n), u256ToMoveArg(0n),
             Array.from(Buffer.from("enc1")), Array.from(Buffer.from("enc2")),
           ],
         },
       );
     } catch { threw = true; }
     assert(threw, "Should throw on duplicate commitment");
+  });
+
+  // TEST 7.5
+  await test("Cannot execute new actions when tasks are pending", async () => {
+    const user = userWallets[0];
+    const depositAmount = 100_000_000n, fee = 10_000_000n, userAmount = depositAmount - fee;
+    const r1 = randomField(), r2 = randomField();
+    const c1 = await createCommitment(userAmount.toString(), r1, user.zk.publicKey);
+    const c2 = await createCommitment(fee.toString(),        r2, relayerWallet.zk.publicKey);
+    const { aBytes, bBytes, cBytes } = await proveDeposit(
+      depositAmount, c1.decimal, c2.decimal, relayerWallet.zk.publicKey,
+      userAmount, r1, user.zk.publicKey, fee, r2,
+    );
+    
+    await fundAccount(aliceSigner, deployer, 110_000_000);
+    await submitDeposit(
+      aliceSigner,
+      relayerSigner,
+      {
+        function:      `${MODULE_ADDR}::pool::deposit`,
+        typeArguments: [],
+        functionArguments: [
+          MODULE_ADDR,
+          bytesToMoveArg(aBytes), bytesToMoveArg(bBytes), bytesToMoveArg(cBytes),
+          u256ToMoveArg(BigInt(c1.decimal)),
+          u256ToMoveArg(BigInt(c2.decimal)),
+          depositAmount.toString(),
+          Array.from(Buffer.from("enc1")),
+          Array.from(Buffer.from("enc2")),
+        ],
+      },
+    );
+
+    const [pendingCount] = await viewFunction("pending_commitments_count", [], [MODULE_ADDR]);
+    assert(Number(pendingCount) === 2, "Should have 2 pending commitments");
+
+    let threw = false;
+    try {
+      const r1_f = randomField(), r2_f = randomField();
+      const c1_f = await createCommitment(userAmount.toString(), r1_f, user.zk.publicKey);
+      const c2_f = await createCommitment(fee.toString(),        r2_f, relayerWallet.zk.publicKey);
+      const { aBytes: a_f, bBytes: b_f, cBytes: c_f } = await proveDeposit(
+        depositAmount, c1_f.decimal, c2_f.decimal, relayerWallet.zk.publicKey,
+        userAmount, r1_f, user.zk.publicKey, fee, r2_f,
+      );
+      await fundAccount(aliceSigner, deployer, 110_000_000);
+      await submitDeposit(
+        aliceSigner,
+        relayerSigner,
+        {
+          function:      `${MODULE_ADDR}::pool::deposit`,
+          typeArguments: [],
+          functionArguments: [
+            MODULE_ADDR,
+            bytesToMoveArg(a_f), bytesToMoveArg(b_f), bytesToMoveArg(c_f),
+            u256ToMoveArg(BigInt(c1_f.decimal)),
+            u256ToMoveArg(BigInt(c2_f.decimal)),
+            depositAmount.toString(),
+            Array.from(Buffer.from("enc1")),
+            Array.from(Buffer.from("enc2")),
+          ],
+        },
+      );
+    } catch (e: any) {
+      console.log(`  Expected rejection caught: ${e.message ?? e}`);
+      threw = true;
+    }
+    assert(threw, "New deposit should be rejected when tasks are pending");
+
+    await processPendingTasks(relayerSigner);
+    
+    emittedNoteEvents.push({ poolId: "0", commitment: c1.decimal, encryptedNote: "enc1" });
+    emittedNoteEvents.push({ poolId: "0", commitment: c2.decimal, encryptedNote: "enc2" });
+    flushToPersisted();
   });
 
   // TEST 8
@@ -872,15 +1042,6 @@ async function main() {
       relayerWallet.privateWallet.publicKey
     );
 
-    // Compute output roots from the full synced tree (includes prior-run leaves)
-    let tRoot1: string, tRoot2: string, tRoot3: string;
-    {
-      const traTree = await buildSyncTree();
-      traTree.insert(BigInt(receiverCmx.decimal)); tRoot1 = traTree.root.toString();
-      traTree.insert(BigInt(changeCmx.decimal));   tRoot2 = traTree.root.toString();
-      traTree.insert(BigInt(relayerCmx.decimal));  tRoot3 = traTree.root.toString();
-    }
-
     console.log(`\nSubmitting transfer tx (relayer single-signer) to ${NET_LABEL}...`);
     const receipt = await submitRelayer(relayerSigner, {
       function:      `${MODULE_ADDR}::pool::transfer`,
@@ -894,13 +1055,15 @@ async function main() {
         [nullifier,"0","0","0"],
         ["1","1","1"],
         [receiverCmx.decimal, changeCmx.decimal, relayerCmx.decimal],
-        [tRoot1, tRoot2, tRoot3],
         Array.from(Buffer.from(encNote1)),
         Array.from(Buffer.from(encNote2)),
         Array.from(Buffer.from(encNote3)),
       ],
     });
     console.log("\n========== TRANSFER RECEIPT ==========\n", receipt);
+
+    // Process tasks using relayer
+    await processPendingTasks(relayerSigner);
 
     const [nullSpent] = await viewFunction("is_nullifier_spent", [], [MODULE_ADDR, nullifier]);
     assert(nullSpent as boolean, "Alice's nullifier should be spent");
@@ -934,7 +1097,6 @@ async function main() {
           ["1","0","0","0"], ["0","0","0","0"], ["0","0","0","0"],
           [spentNull,"0","0","0"],
           ["1","0","0"], [fakeC.decimal,"0","0"],
-          ["0","0","0"],
           Array.from(Buffer.from("enc1")),
           Array.from(Buffer.from("enc2")),
           Array.from(Buffer.from("enc3")),
@@ -1040,12 +1202,14 @@ async function main() {
         withdrawAmt.toString(),
         [changeCmx ? "1" : "0", relayerCmx ? "1" : "0"],
         [changeCmx?.decimal ?? "0", relayerCmx?.decimal ?? "0"],
-        wRoots,
         Array.from(Buffer.from(encNote1)),
         Array.from(Buffer.from(encNote2)),
       ],
     });
     console.log("\n========== WITHDRAW RECEIPT ==========\n", receipt);
+
+    // Process tasks using relayer
+    await processPendingTasks(relayerSigner);
 
     const [nullSpent] = await viewFunction("is_nullifier_spent", [], [MODULE_ADDR, nullifier]);
     assert(nullSpent as boolean, "Bob's nullifier should be spent");
@@ -1090,7 +1254,6 @@ async function main() {
           bobSigner.accountAddress.toString(),
           "1000000",
           ["0","0"], ["0","0"],
-          ["0","0"],
           Array.from(Buffer.from("enc1")),
           Array.from(Buffer.from("enc2")),
         ],

@@ -101,6 +101,7 @@ async function main() {
   const depVK  = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, "deposit_verification_key.json"),  "utf8"));
   const traVK  = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, "transfer_verification_key.json"), "utf8"));
   const witVK  = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, "withdraw_verification_key.json"), "utf8"));
+  const nrVK   = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, "new_root_verification_key.json"),  "utf8"));
 
   const tx = await aptos.transaction.build.simple({
     sender: deployer.accountAddress,
@@ -126,6 +127,12 @@ async function main() {
         toMoveArg(g2ToBytes(witVK.vk_gamma_2)),
         toMoveArg(g2ToBytes(witVK.vk_delta_2)),
         toMoveArg(icToBytes(witVK.IC)),
+        // New Root VK
+        toMoveArg(g1ToBytes(nrVK.vk_alpha_1)),
+        toMoveArg(g2ToBytes(nrVK.vk_beta_2)),
+        toMoveArg(g2ToBytes(nrVK.vk_gamma_2)),
+        toMoveArg(g2ToBytes(nrVK.vk_delta_2)),
+        toMoveArg(icToBytes(nrVK.IC)),
       ],
     },
   });
