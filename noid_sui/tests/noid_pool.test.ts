@@ -583,6 +583,30 @@ async function execRelayer(tx: Transaction, gasBudget: number = 50_000_000_000):
 }
 
 /**
+ * Execute a Move call signed by `keypair`, which is also the gas payer.
+ * Used for the user-submitted deposit (permissionless, no relayer involvement).
+ */
+async function execSigned(
+  tx: Transaction,
+  keypair: Ed25519Keypair,
+  gasBudget: number = 50_000_000,
+): Promise<string> {
+  tx.setSender(keypair.getPublicKey().toSuiAddress());
+  tx.setGasBudget(gasBudget);
+  const result = await suiClient.signAndExecuteTransaction({
+    signer:      keypair,
+    transaction: tx,
+    options:     { showEffects: true, showEvents: true },
+  });
+  if (result.effects?.status.status !== "success") {
+    throw new Error(`Transaction failed: ${JSON.stringify(result.effects?.status)}`);
+  }
+  await suiClient.waitForTransaction({ digest: result.digest });
+  await sleep(IS_LOCAL ? 300 : 3000);
+  return result.digest;
+}
+
+/**
  * Execute a sponsored transaction block where the sender is senderKeypair
  * and the gas payer is sponsorKeypair.
  */
@@ -758,7 +782,7 @@ async function main() {
   // wraps it in the deposit call. In production a PTB with Alice's signature
   // would be the correct pattern.
 
-  await test(`Alice deposits 1 SUI via relayer on ${NET_LABEL}`, async () => {
+  await test(`Alice deposits 1 SUI (user-signed, permissionless) on ${NET_LABEL}`, async () => {
     const user = userWallets[0];
     const depositAmount = 100_000_000n, fee = 10_000_000n, userAmount = depositAmount - fee;
     const r1 = randomField(), r2 = randomField();
@@ -780,19 +804,12 @@ async function main() {
       userAmount, r1, user.zk.publicKey, fee, r2,
     );
 
-    // Compute deposit roots
-    let root1: string, root2: string;
-    {
-      const syncTree = await buildSyncTree();
-      syncTree.insert(BigInt(c1.decimal)); root1 = syncTree.root.toString();
-      syncTree.insert(BigInt(c2.decimal)); root2 = syncTree.root.toString();
-    }
-    console.log(`\nDeposit roots: root1=${root1!}  root2=${root2!}`);
+    // Roots are recomputed on-chain — no off-chain root computation needed.
 
     // Alice splits the exact deposit amount from her own SUI coin
     const aliceCoinId = await getCoinForAmount(aliceKeypair, depositAmount);
 
-    console.log(`\nSubmitting SPONSORED DEPOSIT tx to ${NET_LABEL}...`);
+    console.log(`\nSubmitting DEPOSIT tx (signed by Alice) to ${NET_LABEL}...`);
     const tx = new Transaction();
 
     const [depositCoin] = tx.splitCoins(tx.object(aliceCoinId), [depositAmount.toString()]);
@@ -807,14 +824,13 @@ async function main() {
         tx.pure.u256(BigInt(c1.decimal)),
         tx.pure.u256(BigInt(c2.decimal)),
         tx.pure.u64(Number(depositAmount)),
-        tx.pure.u256(BigInt(root1!)),
-        tx.pure.u256(BigInt(root2!)),
         tx.pure.vector("u8", Array.from(Buffer.from(encNote1))),
         tx.pure.vector("u8", Array.from(Buffer.from(encNote2))),
       ],
     });
 
-    const digest = await execSponsored(tx, aliceKeypair, relayerKeypair, 50_000_000);
+    // Deposit is permissionless and submitted by the user (Alice) herself.
+    const digest = await execSigned(tx, aliceKeypair, 50_000_000);
     console.log(`\nDeposit tx digest: ${digest}`);
 
     // Verify on-chain state
@@ -878,13 +894,11 @@ async function main() {
           tx.pure.u256(BigInt(existingC1)),
           tx.pure.u256(BigInt(c2_new.decimal)),
           tx.pure.u64(100_000_000),
-          tx.pure.u256(0n),
-          tx.pure.u256(0n),
           tx.pure.vector("u8", Array.from(Buffer.from("enc1"))),
           tx.pure.vector("u8", Array.from(Buffer.from("enc2"))),
         ],
       });
-      await execSponsored(tx, aliceKeypair, relayerKeypair, 50_000_000);
+      await execSigned(tx, aliceKeypair, 50_000_000);
     } catch { threw = true; }
     assert(threw, "Should throw on duplicate commitment");
   });
@@ -934,14 +948,6 @@ async function main() {
       relayerWallet.privateWallet.publicKey,
     );
 
-    let tRoot1: string, tRoot2: string, tRoot3: string;
-    {
-      const traTree = await buildSyncTree();
-      traTree.insert(BigInt(receiverCmx.decimal)); tRoot1 = traTree.root.toString();
-      traTree.insert(BigInt(changeCmx.decimal));   tRoot2 = traTree.root.toString();
-      traTree.insert(BigInt(relayerCmx.decimal));  tRoot3 = traTree.root.toString();
-    }
-
     console.log(`\nSubmitting TRANSFER tx (relayer) to ${NET_LABEL}...`);
     const tx = new Transaction();
     tx.moveCall({
@@ -956,7 +962,6 @@ async function main() {
         tx.pure.vector("u256", [BigInt(nullifier), 0n, 0n, 0n]),
         tx.pure.vector("u8", [1, 1, 1]),
         tx.pure.vector("u256", [BigInt(receiverCmx.decimal), BigInt(changeCmx.decimal), BigInt(relayerCmx.decimal)]),
-        tx.pure.vector("u256", [BigInt(tRoot1!), BigInt(tRoot2!), BigInt(tRoot3!)]),
         tx.pure.vector("u8", Array.from(Buffer.from(encNote1))),
         tx.pure.vector("u8", Array.from(Buffer.from(encNote2))),
         tx.pure.vector("u8", Array.from(Buffer.from(encNote3))),
@@ -996,7 +1001,6 @@ async function main() {
           tx.pure.vector("u256", [BigInt(spentNull), 0n, 0n, 0n]),
           tx.pure.vector("u8", [1, 0, 0]),
           tx.pure.vector("u256", [BigInt(fakeC.decimal), 0n, 0n]),
-          tx.pure.vector("u256", [0n, 0n, 0n]),
           tx.pure.vector("u8", Array.from(Buffer.from("enc1"))),
           tx.pure.vector("u8", Array.from(Buffer.from("enc2"))),
           tx.pure.vector("u8", Array.from(Buffer.from("enc3"))),
@@ -1068,13 +1072,6 @@ async function main() {
       relayerWallet.privateWallet.publicKey,
     );
 
-    const wRoots = [0n, 0n];
-    {
-      const witTree = await buildSyncTree();
-      if (changeCmx)  { witTree.insert(BigInt(changeCmx.decimal));  wRoots[0] = BigInt(witTree.root.toString()); }
-      if (relayerCmx) { witTree.insert(BigInt(relayerCmx.decimal)); wRoots[1] = BigInt(witTree.root.toString()); }
-    }
-
     const bobBalBefore = await getSuiBalance(bobAddress);
     console.log(`\nBob SUI before withdraw: ${bobBalBefore} MIST`);
 
@@ -1098,7 +1095,6 @@ async function main() {
         tx.pure.u64(Number(withdrawAmt)),
         tx.pure.vector("u8", [changeCmx ? 1 : 0, relayerCmx ? 1 : 0]),
         tx.pure.vector("u256", [BigInt(changeCmx?.decimal ?? "0"), BigInt(relayerCmx?.decimal ?? "0")]),
-        tx.pure.vector("u256", wRoots),
         tx.pure.vector("u8", Array.from(Buffer.from(encNote1))),
         tx.pure.vector("u8", Array.from(Buffer.from(encNote2))),
       ],
@@ -1144,7 +1140,6 @@ async function main() {
           tx.pure.address(bobAddress),
           tx.pure.u64(1_000_000),
           tx.pure.vector("u8", [0, 0]),
-          tx.pure.vector("u256", [0n, 0n]),
           tx.pure.vector("u256", [0n, 0n]),
           tx.pure.vector("u8", Array.from(Buffer.from("enc1"))),
           tx.pure.vector("u8", Array.from(Buffer.from("enc2"))),

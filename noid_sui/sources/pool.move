@@ -83,10 +83,6 @@ module noid::pool {
         state.relayer_address   = relayer_address;
     }
 
-    fun assert_relayer(state: &PoolState, ctx: &sui::tx_context::TxContext) {
-        assert!(sui::tx_context::sender(ctx) == state.relayer_address, E_NOT_RELAYER);
-    }
-
     public entry fun deposit(
         state:           &mut PoolState,
         config:          &VerifierConfig,
@@ -95,21 +91,16 @@ module noid::pool {
         c1:              u256,
         c2:              u256,
         amount:          u64,
-        new_root_1:      u256,
-        new_root_2:      u256,
         encrypted_note1: vector<u8>,
         encrypted_note2: vector<u8>,
-        ctx:             &mut sui::tx_context::TxContext,
+        _ctx:            &mut sui::tx_context::TxContext,
     ) {
+        // Permissionless: anyone may submit a deposit (no relayer sponsor required).
+        // The new Merkle root is recomputed on-chain, and the deposit ZK proof binds
+        // the relayer fee note via relayer_zk_pubkey.
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(c1 != ZERO_COMMITMENT && c2 != ZERO_COMMITMENT, E_INVALID_COMMITMENT);
         assert!(c1 != c2, E_DUPLICATE_COMMITMENT);
-        let sponsor_addr = sui::tx_context::sponsor(ctx);
-        assert!(
-            std::option::is_some(&sponsor_addr) && 
-            *std::option::borrow(&sponsor_addr) == state.relayer_address, 
-            E_NOT_RELAYER
-        );
         assert!(!table::contains(&state.commitments, c1), E_COMMITMENT_EXISTS);
         assert!(!table::contains(&state.commitments, c2), E_COMMITMENT_EXISTS);
         assert!(coin::value(&coin) == amount, E_ZERO_AMOUNT);
@@ -126,7 +117,7 @@ module noid::pool {
         balance::join(&mut state.balance, coin_balance);
         state.locked_balance = state.locked_balance + amount;
 
-        let r1 = merkle_tree::insert(&mut state.forest, c1, new_root_1);
+        let r1 = merkle_tree::insert(&mut state.forest, c1);
         table::add(&mut state.commitments, c1, true);
         event::emit(NoteCreatedEvent {
             pool_id:        merkle_tree::insert_result_pool_idx(&r1),
@@ -134,7 +125,7 @@ module noid::pool {
             encrypted_note: encrypted_note1,
         });
 
-        let r2 = merkle_tree::insert(&mut state.forest, c2, new_root_2);
+        let r2 = merkle_tree::insert(&mut state.forest, c2);
         table::add(&mut state.commitments, c2, true);
         event::emit(NoteCreatedEvent {
             pool_id:        merkle_tree::insert_result_pool_idx(&r2),
@@ -153,12 +144,12 @@ module noid::pool {
         nullifiers:      vector<u256>,
         output_enabled:  vector<u8>,
         c_outs:          vector<u256>,
-        output_roots:    vector<u256>,
         encrypted_note1: vector<u8>,
         encrypted_note2: vector<u8>,
         encrypted_note3: vector<u8>,
-        ctx:             &mut sui::tx_context::TxContext,
+        _ctx:            &mut sui::tx_context::TxContext,
     ) {
+        // Permissionless: anyone may submit a transfer. No relayer-only check.
         assert!(
             vector::length(&enabled)    == MAX_INPUTS &&
             vector::length(&pool_ids)   == MAX_INPUTS &&
@@ -168,11 +159,9 @@ module noid::pool {
         );
         assert!(vector::length(&output_enabled) == 3 && vector::length(&c_outs) == 3, E_BAD_INPUT_LEN);
 
-        assert_relayer(state, ctx);
         verify_inputs(state, &enabled, &pool_ids, &roots, &nullifiers);
 
-        let mut out_cmxs           = vector[];
-        let mut out_roots_filtered = vector[];
+        let mut out_cmxs = vector[];
         let mut i = 0u64;
         while (i < 3) {
             if (*vector::borrow(&output_enabled, i) == 1u8) {
@@ -180,7 +169,6 @@ module noid::pool {
                 assert!(c != ZERO_COMMITMENT, E_INVALID_COMMITMENT);
                 assert!(!table::contains(&state.commitments, c), E_COMMITMENT_EXISTS);
                 vector::push_back(&mut out_cmxs, c);
-                vector::push_back(&mut out_roots_filtered, *vector::borrow(&output_roots, i));
             };
             i = i + 1;
         };
@@ -227,7 +215,7 @@ module noid::pool {
 
         spend_nullifiers(state, &enabled, &nullifiers);
 
-        let inserted = merkle_tree::insert_batch(&mut state.forest, out_cmxs, out_roots_filtered);
+        let inserted = merkle_tree::insert_batch(&mut state.forest, out_cmxs);
         let mut j = 0u64;
         while (j < vector::length(&inserted)) {
             let pool_id = merkle_tree::insert_result_pool_idx(vector::borrow(&inserted, j));
@@ -254,11 +242,11 @@ module noid::pool {
         withdraw_amount: u64,
         out_enabled:     vector<u8>,
         c_outs:          vector<u256>,
-        output_roots:    vector<u256>,
         encrypted_note1: vector<u8>,
         encrypted_note2: vector<u8>,
         ctx:             &mut sui::tx_context::TxContext,
     ) {
+        // Permissionless: anyone may submit a withdraw. No relayer-only check.
         assert!(
             vector::length(&enabled)    == MAX_INPUTS &&
             vector::length(&pool_ids)   == MAX_INPUTS &&
@@ -269,12 +257,10 @@ module noid::pool {
         assert!(vector::length(&out_enabled) == 2 && vector::length(&c_outs) == 2, E_BAD_INPUT_LEN);
         assert!(withdraw_amount > 0, E_ZERO_AMOUNT);
 
-        assert_relayer(state, ctx);
         assert!(state.locked_balance >= withdraw_amount, E_INSUFFICIENT_BALANCE);
         verify_inputs(state, &enabled, &pool_ids, &roots, &nullifiers);
 
-        let mut out_cmxs           = vector[];
-        let mut out_roots_filtered = vector[];
+        let mut out_cmxs = vector[];
         let mut i = 0u64;
         while (i < 2) {
             if (*vector::borrow(&out_enabled, i) == 1u8) {
@@ -282,7 +268,6 @@ module noid::pool {
                 assert!(c != ZERO_COMMITMENT, E_INVALID_COMMITMENT);
                 assert!(!table::contains(&state.commitments, c), E_COMMITMENT_EXISTS);
                 vector::push_back(&mut out_cmxs, c);
-                vector::push_back(&mut out_roots_filtered, *vector::borrow(&output_roots, i));
             };
             i = i + 1;
         };
@@ -330,7 +315,7 @@ module noid::pool {
         spend_nullifiers(state, &enabled, &nullifiers);
 
         if (vector::length(&out_cmxs) > 0) {
-            let inserted = merkle_tree::insert_batch(&mut state.forest, out_cmxs, out_roots_filtered);
+            let inserted = merkle_tree::insert_batch(&mut state.forest, out_cmxs);
             let mut j = 0u64;
             while (j < vector::length(&inserted)) {
                 let pool_id = merkle_tree::insert_result_pool_idx(vector::borrow(&inserted, j));
