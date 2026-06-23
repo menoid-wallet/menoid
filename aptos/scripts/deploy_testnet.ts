@@ -99,9 +99,11 @@ async function main() {
   const deployer = Account.fromPrivateKey({ privateKey: deployerPrivateKey });
   console.log(`Deployer address: ${deployer.accountAddress.toString()}`);
   
-  // 1. Generate private wallet ZK keypair with seed matching test runner
+  // 1. Generate private wallet ZK keypair. Seed = deployer key + "Menoid wallet"
+  //    — the same convention used by the Solana/Sui deploys and the backend, so
+  //    the relayer fee-note key is consistent across chains.
   console.log("\nGenerating private wallet ZK keypair...");
-  const relayerWallet = await generatePrivateWallet("noid-relayer-devnet-seed");
+  const relayerWallet = await generatePrivateWallet(deployerPkHex + "Menoid wallet");
   console.log("Derived ZK Relayer Wallet:");
   console.log(JSON.stringify(relayerWallet, null, 2));
   
@@ -198,7 +200,7 @@ async function main() {
     const poolArgs = [
       BigInt(relayerWallet.zk.publicKey),
       deployer.accountAddress.toString(),
-      toMoveArg(Buffer.from("noid-pool-seed-v1")),
+      toMoveArg(Buffer.from("noid-pool-seed-v2")),
     ];
     
     await execTx("pool::initialize", poolArgs);

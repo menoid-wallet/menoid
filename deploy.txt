@@ -2,10 +2,18 @@
                                 SOLANA (DEVNET)
 ================================================================================
 Program ID: 3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC
-Pool State PDA: AsND4jSJBC9t7kwRqD4R6gkwnF4kibVuyGvSNTD1S7QG
+Pool State PDA: BUEFPcHFn62xVdvM9SfmXeSyczCCjdLC2Ha6s1uDdEsb
+Vault PDA: E9wc8Zp9jnWKzSEHBmKu44gq563VZdSp29fUtxWpJNXn
+Pool Admin (PDA owner, derived from deployer): EGx6RbBzcAYLzzDC2iWXF9N5fdGaHynQArJQB6j699ic
 Deployer Address (Relayer Address): 7s3XTUSX4VCQw7QKfba4oGUh5bE9n1gqVNGFrNGrnFW4
 
-Derived ZK Relayer Wallet (Solana Ed25519 Keypair):
+Notes:
+  - Program upgraded in place to the latest (permissionless) code. Anyone may call
+    deposit/transfer/withdraw; the Merkle root is recomputed on-chain.
+  - A fresh PoolState PDA was initialized under a new deterministic admin (the prior
+    deployer-admin pool was already populated). The deployer remains the relayer.
+
+Derived ZK Relayer Wallet (seed = SOLANA_DEPLOYER_PRIVATE_KEY + "Menoid wallet"):
   - Private Wallet Address: J5JNvWK3LGeJA9ijqyorF6Cto7BojsztDPdwuBp1BvBm
   - Private Key (base58, 64-byte secret key): 3sTpohvF9kvKnQRDic7vHcnDGjJDYtPpXwiFwHsYyZJLXmpXSAeEenvg8zTyGbL69WRfX6pWN1hTXbzzgGskGHaK
   - Public Key (base58): J5JNvWK3LGeJA9ijqyorF6Cto7BojsztDPdwuBp1BvBm
@@ -15,12 +23,16 @@ Derived ZK Relayer Wallet (Solana Ed25519 Keypair):
 ================================================================================
                                  SUI (TESTNET)
 ================================================================================
-Package ID: 0x8eb346e371efef3b48d51cc76ef00a10875fffc800a966df25b4ddf024ae9d55
-PoolState Object ID: 0x4b4aecb18020a1bd7f22dfc03f30cb10526fa167d02e40683197c334f9791a33
-VerifierConfig Object ID: 0x19a4ed9c23910e00887a2f73efffd29c45e4deed6da98261370601b314030e7a
+Package ID: 0x0612ba9aec07eebbf0940b2f3334a92dc02131bca754f8d7cda2b42376a6b6ee
+PoolState Object ID: 0xfe2b2ee932de17bee89e4fb2526d3a08e7b38c283bf11b786e7450b63a7784ee
+VerifierConfig Object ID: 0x6eeab199388238932894d200c575fd39aa0b5014d5b2cb371b5573d0b7700a9b
 Deployer Address (Relayer Address): 0xe80cb32c8d5940d1dabc8e7b2463c8a0f4fd367345b969e9ce6850d5fec2ab80
 
-Derived ZK Relayer Wallet (Sui Ed25519 Keypair):
+Notes:
+  - Freshly published package + fresh shared PoolState/VerifierConfig objects.
+    Permissionless: anyone may call deposit/transfer/withdraw; root recomputed on-chain.
+
+Derived ZK Relayer Wallet (seed = SUI_DEPLOYER_SECRET_KEY + "Menoid wallet"):
   - Private Wallet Address: 0xa3594864af4b5b55c723c2dd7a6b0d1d2d6219486a0ffd9eeaf700d6f0d9f7c5
   - Private Key (Bech32): suiprivkey1qppdn899qwlazxkn6fex2h39uydcz8tjcguzs4spryprr738aq7f7vc08hd
   - Public Key (base64): bSzVaZDb7tNaUw7O7GHVTh6/2GM9cFxSt4PSX7fr9pc=
@@ -30,11 +42,20 @@ Derived ZK Relayer Wallet (Sui Ed25519 Keypair):
 ================================================================================
                                 APTOS (TESTNET)
 ================================================================================
-Module Address (noid): 0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
-Pool Resource Account: 0x8f041f33125b093d771c93ea8f311a34b679e18ce7682c4724c62cff8728a08c
+Module Address (noid, object code deployment): 0x3d4f846b4023cba619dc1e1523b0a80716887da90cbdcdaa3e50f453a9b915cc
+Pool Address (PoolState resource account holder = deployer): 0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
+Pool Resource Account (holds locked APT): 0x95d0e7ae768af7e34ed3d0daf84ba4130af5b655abbeb56e74d732802c810a95
 Deployer Address (Relayer Address): 0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
 
-Derived ZK Relayer Wallet (Aptos Ed25519 Keypair):
+Notes:
+  - New code published to a fresh OBJECT address owned by the deployer (the prior
+    deployer-account module was the old, incompatible version and cannot be upgraded).
+  - The pool_addr passed to every entry function is the deployer address (where the
+    PoolState resource lives); the module/function prefix is the object address above.
+  - Mutex flow on the backend: deposit/transfer/withdraw queue commitments, then
+    pool::update_root is called once per commitment with a `new_root` ZK proof.
+
+Derived ZK Relayer Wallet (seed = APTOS_DEPLOYER_PRIVATE_KEY + "Menoid wallet"):
   - Private Wallet Address: 0xda877ce23180dce07c4984a11438db23991dfa04ae2647b319e7e2206ccce888
   - Private Key (hex, 32-byte seed): 0xfe00b4da2cdc88227fedffff16c4943899dff5e4204a8c183ccc21d906c94f1f
   - Public Key (hex): 0xd5f7279fa985510a70bec6407a0f26ffed4f7eeb48352f2b47dfa31f77cf22b3
