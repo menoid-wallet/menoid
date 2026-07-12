@@ -1,6 +1,7 @@
 pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/babyjub.circom";
 include "./merkle_path.circom";
 include "./range_check.circom";
 
@@ -58,17 +59,24 @@ template Hash4() {
 template TransferProof(max_inputs,  depth) {
     // ownership
     // private inputs
-    signal input sk;    // PrivateKey of the wallet
-    signal input pk;    // zkPublicKey of the wallet
-    
-    // relayer address
-    signal input relayer; //public 
+    signal input sk;            // BabyJubJub spending private key
+    signal input owner_address; // real wallet address of the owner
 
-    // pk = poseidon(sk)
-    component ownershipHasher = Poseidon(2);
-    ownershipHasher.inputs[0] <== 3; // <--- domain separator
-    ownershipHasher.inputs[1] <== sk;
-    pk === ownershipHasher.out; // zk publickey ownership constraint
+    // relayer user commitment
+    signal input relayer; //public
+
+    // spendPk = BabyJubJub(sk)
+    component spendPk = BabyPbk();
+    spendPk.in <== sk;
+
+    // user_commitment = Poseidon(address, spendPk.x, spendPk.y)
+    component ownershipHasher = Poseidon(3);
+    ownershipHasher.inputs[0] <== owner_address;
+    ownershipHasher.inputs[1] <== spendPk.Ax;
+    ownershipHasher.inputs[2] <== spendPk.Ay;
+
+    signal user_commitment;
+    user_commitment <== ownershipHasher.out;
 
 
     /// INPUTS SECTION
@@ -119,7 +127,7 @@ template TransferProof(max_inputs,  depth) {
         hasher[i].inputs[0] <== 1; //<-- domain separator
         hasher[i].inputs[1] <== a_ins[i];
         hasher[i].inputs[2] <== r_ins[i];
-        hasher[i].inputs[3] <== pk;
+        hasher[i].inputs[3] <== user_commitment;
 
         enabled[i] * (c_ins[i] - hasher[i].out) === 0; //commitment checkup
 

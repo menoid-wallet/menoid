@@ -54,7 +54,7 @@ module noid::verifier {
         proof_bytes:    &vector<u8>,
         public_signals: &vector<u256>,
     ): bool {
-        assert!(vector::length(public_signals) == 4, E_BAD_SIGNAL_COUNT);
+        assert!(vector::length(public_signals) == 5, E_BAD_SIGNAL_COUNT);
         let curve         = groth16::bn254();
         let inputs_bytes  = pack_signals(public_signals);
         let public_inputs = groth16::public_proof_inputs_from_bytes(inputs_bytes);

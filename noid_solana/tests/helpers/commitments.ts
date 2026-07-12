@@ -9,13 +9,13 @@ export interface Commitment {
 export async function createCommitment(
   amount: string,
   randomness: string,
-  zkPublicKey: string
+  userCommitment: string
 ): Promise<Commitment> {
   const poseidon = await buildPoseidon();
 
   const commitmentBigInt: bigint = BigInt(
     poseidon.F.toString(
-      poseidon([BigInt(1), BigInt(amount), BigInt(randomness), BigInt(zkPublicKey)])
+      poseidon([BigInt(1), BigInt(amount), BigInt(randomness), BigInt(userCommitment)])
     )
   );
 

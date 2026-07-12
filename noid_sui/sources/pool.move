@@ -29,6 +29,8 @@ module noid::pool {
     const E_INSUFFICIENT_BALANCE: u64 = 14;
     const E_BAD_INPUT_LEN: u64        = 20;
     const E_NOT_RELAYER: u64          = 21;
+    const E_ALREADY_REGISTERED: u64   = 22;
+    const E_INVALID_USER_COMMITMENT: u64 = 23;
 
     public struct NoteCreatedEvent has copy, drop {
         pool_id:        u64,
@@ -40,6 +42,11 @@ module noid::pool {
         nullifier: u256,
     }
 
+    public struct WalletRegisteredEvent has copy, drop {
+        wallet:          address,
+        user_commitment: u256,
+    }
+
     public struct PoolState has key {
         id:                sui::object::UID,
         forest:            Forest,
@@ -47,13 +54,16 @@ module noid::pool {
         commitments:       Table<u256, bool>,
         balance:           Balance<SUI>,
         locked_balance:    u64,
-        relayer_zk_pubkey: u256,
+        relayer_commitment: u256,
         relayer_address:   address,
         admin:             address,
+        // wallet address => user commitment
+        // user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
+        registered:        Table<address, u256>,
     }
 
     public entry fun initialize(
-        relayer_zk_pubkey: u256,
+        relayer_commitment: u256,
         relayer_address:   address,
         ctx:               &mut sui::tx_context::TxContext,
     ) {
@@ -65,22 +75,49 @@ module noid::pool {
             commitments:       table::new<u256, bool>(ctx),
             balance:           balance::zero<SUI>(),
             locked_balance:    0,
-            relayer_zk_pubkey,
+            relayer_commitment,
             relayer_address,
             admin:             sui::tx_context::sender(ctx),
+            registered:        table::new<address, u256>(ctx),
         };
         sui::transfer::share_object(state);
     }
 
     public entry fun set_relayer(
         state:             &mut PoolState,
-        relayer_zk_pubkey: u256,
+        relayer_commitment: u256,
         relayer_address:   address,
         ctx:               &sui::tx_context::TxContext,
     ) {
         assert!(state.admin == sui::tx_context::sender(ctx), E_NOT_RELAYER);
-        state.relayer_zk_pubkey = relayer_zk_pubkey;
+        state.relayer_commitment = relayer_commitment;
         state.relayer_address   = relayer_address;
+    }
+
+    /// One-time binding of a real wallet address to its user commitment.
+    ///
+    /// Wallet responsibilities (off-chain):
+    ///   - Sign the message "menoid_Wallet" with the real wallet's private key
+    ///   - Derive the BabyJubJub spending keypair from that signature
+    ///   - user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
+    public entry fun register(
+        state:           &mut PoolState,
+        user_commitment: u256,
+        ctx:             &sui::tx_context::TxContext,
+    ) {
+        assert!(user_commitment != 0u256, E_INVALID_USER_COMMITMENT);
+        let sender = sui::tx_context::sender(ctx);
+        assert!(!table::contains(&state.registered, sender), E_ALREADY_REGISTERED);
+        table::add(&mut state.registered, sender, user_commitment);
+        event::emit(WalletRegisteredEvent { wallet: sender, user_commitment });
+    }
+
+    public fun is_registered(state: &PoolState, wallet: address): bool {
+        table::contains(&state.registered, wallet)
+    }
+
+    public fun registered_commitment(state: &PoolState, wallet: address): u256 {
+        *table::borrow(&state.registered, wallet)
     }
 
     public entry fun deposit(
@@ -97,19 +134,26 @@ module noid::pool {
     ) {
         // Permissionless: anyone may submit a deposit (no relayer sponsor required).
         // The new Merkle root is recomputed on-chain, and the deposit ZK proof binds
-        // the relayer fee note via relayer_zk_pubkey.
+        // the relayer fee note via relayer_commitment.
         assert!(amount > 0, E_ZERO_AMOUNT);
-        assert!(c1 != ZERO_COMMITMENT && c2 != ZERO_COMMITMENT, E_INVALID_COMMITMENT);
-        assert!(c1 != c2, E_DUPLICATE_COMMITMENT);
+        assert!(c1 != ZERO_COMMITMENT, E_INVALID_COMMITMENT);
         assert!(!table::contains(&state.commitments, c1), E_COMMITMENT_EXISTS);
-        assert!(!table::contains(&state.commitments, c2), E_COMMITMENT_EXISTS);
         assert!(coin::value(&coin) == amount, E_ZERO_AMOUNT);
 
+        // C2 is the optional relayer fee note - it may be zero
+        let c2_enabled: u256 = if (c2 != ZERO_COMMITMENT) { 1u256 } else { 0u256 };
+        if (c2_enabled == 1u256) {
+            assert!(c1 != c2, E_DUPLICATE_COMMITMENT);
+            assert!(!table::contains(&state.commitments, c2), E_COMMITMENT_EXISTS);
+        };
+
+        // public signals: [amount, c1, c2, c2_enabled, relayer_commitment]
         let mut sigs = vector[];
         vector::push_back(&mut sigs, (amount as u256));
         vector::push_back(&mut sigs, c1);
         vector::push_back(&mut sigs, c2);
-        vector::push_back(&mut sigs, state.relayer_zk_pubkey);
+        vector::push_back(&mut sigs, c2_enabled);
+        vector::push_back(&mut sigs, state.relayer_commitment);
 
         assert!(verifier::verify_deposit(config, &proof_bytes, &sigs), E_PROOF_FAILED);
 
@@ -125,13 +169,15 @@ module noid::pool {
             encrypted_note: encrypted_note1,
         });
 
-        let r2 = merkle_tree::insert(&mut state.forest, c2);
-        table::add(&mut state.commitments, c2, true);
-        event::emit(NoteCreatedEvent {
-            pool_id:        merkle_tree::insert_result_pool_idx(&r2),
-            commitment:     c2,
-            encrypted_note: encrypted_note2,
-        });
+        if (c2_enabled == 1u256) {
+            let r2 = merkle_tree::insert(&mut state.forest, c2);
+            table::add(&mut state.commitments, c2, true);
+            event::emit(NoteCreatedEvent {
+                pool_id:        merkle_tree::insert_result_pool_idx(&r2),
+                commitment:     c2,
+                encrypted_note: encrypted_note2,
+            });
+        };
     }
 
     public entry fun transfer(
@@ -204,7 +250,7 @@ module noid::pool {
         );
 
         let mut sigs = vector[];
-        vector::push_back(&mut sigs, state.relayer_zk_pubkey);
+        vector::push_back(&mut sigs, state.relayer_commitment);
         vector::push_back(&mut sigs, enabled_hash);
         vector::push_back(&mut sigs, roots_hash);
         vector::push_back(&mut sigs, nullifiers_hash);
@@ -302,7 +348,7 @@ module noid::pool {
 
         let mut sigs = vector[];
         vector::push_back(&mut sigs, address_to_u256_mod_p(receiver));
-        vector::push_back(&mut sigs, state.relayer_zk_pubkey);
+        vector::push_back(&mut sigs, state.relayer_commitment);
         vector::push_back(&mut sigs, enabled_hash);
         vector::push_back(&mut sigs, roots_hash);
         vector::push_back(&mut sigs, nullifiers_hash);

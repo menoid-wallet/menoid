@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./NoidAccount.sol";
 import "./libraries/Interfaces.sol";
 import "./libraries/poolLib.sol";
 import "./libraries/Types.sol";
-import "./NoidAccountManager.sol";
 /**
- * ShieldedPool
+ * NoidPool
  *
  * A ZK-based UTXO-style private ETH/EVM-based-coins pool.
  *
@@ -24,11 +22,14 @@ contract NoidPool {
     using PoolLib for PoolLib.Pool;
     /**
      * Wallet:
-     *      Get signature from real wallet
-     *      PrivateKey = H(signature("prifiwallet"))
-     *      Derive:
-     *          zkPublicKey = Poseidon(PrivateKey) // used for transfer
-     *          encPublicKey = EC_Derive(PrivateKey) // used for encrypting notes
+     *      Get signature from real wallet: sign("menoid_Wallet")
+     *      spendingKeyPair = BabyJubJub keypair derived from the signature
+     *      userCommitment  = Poseidon(walletAddress, spendingPubKey.x, spendingPubKey.y)
+     *
+     *      The user registers userCommitment on-chain (register()).
+     *      Senders look up registered[receiverAddress] and lock notes to it:
+     *          commitment = Poseidon(1, amount, randomness, userCommitment)
+     *          nullifier  = Poseidon(2, commitment, randomness, spendingPrivateKey)
      */
     // zero commitment - used in the place of empty commitment (wallet must use same convention)
     bytes32 public constant ZERO_COMMITMENT = bytes32(0);
@@ -36,32 +37,30 @@ contract NoidPool {
     //global state
     mapping(bytes32 => bool) public nullifierSpent;
     mapping(bytes32 => bool) public commitmentExists;
-    mapping(bytes32 => address) public NoidAccounts;
+
+    // wallet address => user commitment (Poseidon(address, spendPk.x, spendPk.y))
+    mapping(address => bytes32) public registered;
 
     // verifiers
     IDepositVerifier public immutable depositVerifier;
     ITransferVerifier public immutable transferVerifier;
     IWithdrawVerifier public immutable withdrawVerifier;
 
-
-
-    NoidAccountManager public noidAccountManager;
-
     // poseidon
     IPoseidon public immutable poseidon;
 
     // relayer
     address public immutable relayer;
-    uint256 public immutable relayerZkPubkey;
+    uint256 public immutable relayerCommitment; // relayer's user commitment
 
     // events
     event NewPool(uint256 indexed poolId); //indexed-> searchable/filterable
     // we dont store the encryptedNotes on chain ( storage gas ) instead we emit them as events
     event NoteCreated(uint256 poolId, bytes32 commitment, bytes encryptedNote);
-    // event for Noid account creation
-    event NoidAccountCreated(bytes32 commitment, bytes encryptedNote);
     // nullfier spent
     event NullifierSpent(bytes32 nullifier);
+    // wallet registration
+    event WalletRegistered(address indexed wallet, bytes32 userCommitment);
 
     constructor(
         address _depositVerifier,
@@ -69,7 +68,7 @@ contract NoidPool {
         address _withdrawVerifier,
         address _poseidon,
         address _relayer,
-        uint256 _relayerZkPubkey
+        uint256 _relayerCommitment
     ) {
         depositVerifier = IDepositVerifier(_depositVerifier);
         transferVerifier = ITransferVerifier(_transferVerifier);
@@ -77,28 +76,40 @@ contract NoidPool {
         poseidon = IPoseidon(_poseidon);
 
         relayer = _relayer;
-        relayerZkPubkey = _relayerZkPubkey;
+        relayerCommitment = _relayerCommitment;
         PoolLib.createPool(pools, poseidon);
     }
 
-    function setNoidAccountManager(address _manager) 
-    external { 
-        require(msg.sender == relayer, "Not relayer"); 
-        require(address(noidAccountManager) == address(0), "Already set"); 
-        noidAccountManager = NoidAccountManager(_manager); 
-    }
-
     PoolLib.Pool[] public pools;
+
+    // Register
+    //  * One-time binding of a real wallet address to its user commitment.
+    //  *
+    //  * Wallet responsibilities (off-chain):
+    //  * - Sign the message "menoid_Wallet" with the real wallet's private key
+    //  * - Derive the BabyJubJub spending keypair from that signature
+    //  * - Compute userCommitment = Poseidon(walletAddress, spendPk.x, spendPk.y)
+    //  * - Call register(userCommitment) from the real wallet
+    function register(bytes32 userCommitment) external {
+        require(userCommitment != bytes32(0), "Invalid user commitment");
+        require(registered[msg.sender] == bytes32(0), "Already registered");
+
+        registered[msg.sender] = userCommitment;
+
+        emit WalletRegistered(msg.sender, userCommitment);
+    }
 
     // Depsoit
     //  * Public entry into the shielded pool.
     //  *
     //  * - ETH is sent with the transaction
     //  * - One or two commitments are created
+    //  *   (C2 is the optional relayer fee note - may be zero)
     //  * - Commitments are inserted into the current pool(s)
     //  * - Each commitment is logged with NoteCreated
     //  *
     //  * Wallet responsibilities (off-chain):
+    //  * - Fetch the receiver's registered user commitment
     //  * - Choose amount + randomness
     //  * - Compute commitment(s)
     //  * - Encrypt note(s)
@@ -108,7 +119,7 @@ contract NoidPool {
         uint256[2][2] calldata b,
         uint256[2] calldata c,
         bytes32 C1, // First commitment (required)
-        bytes32 C2, // 2nd commitment   relayer  (required)
+        bytes32 C2, // 2nd commitment - relayer fee (optional, may be zero)
         bytes calldata encryptedNote1, // encrypted (amount, randomness) for C1
         bytes calldata encryptedNote2 // Encrypted (amount, randomness) for C2
     ) external payable {
@@ -116,27 +127,35 @@ contract NoidPool {
 
         // zero commitments are only for transfer/withdraw calls
         require(C1 != ZERO_COMMITMENT, "Invalid commitment 1");
-        require(C2 != ZERO_COMMITMENT, "Invalid commitment 2");
 
         // commitments already exists?
         require(
             !commitmentExists[C1],
             "Commitment 1 already existing, change r value"
         );
-        require(
-            !commitmentExists[C2],
-            "Commitment 2 already existing, change r value"
-        );
+
+        // C2 is the relayer fee note - it is optional
+        uint256 c2Enabled = 0;
+        if (C2 != ZERO_COMMITMENT) {
+            require(
+                !commitmentExists[C2],
+                "Commitment 2 already existing, change r value"
+            );
+            c2Enabled = 1;
+        }
+
         // public signals
         // deposit amount
         // c1
         // c2
-        // pk2 (relayerZkPubkey)
-        uint256[4] memory publicSignals;
+        // c2 enabled flag
+        // uc2 (relayerCommitment)
+        uint256[5] memory publicSignals;
         publicSignals[0] = msg.value;
         publicSignals[1] = uint256(C1);
         publicSignals[2] = uint256(C2);
-        publicSignals[3] = relayerZkPubkey;
+        publicSignals[3] = c2Enabled;
+        publicSignals[4] = relayerCommitment;
 
         // in deposit we dont need to check merkle path
         // deposit zk , proves that the amounts that are in the commitments equals deposited amount
@@ -145,13 +164,16 @@ contract NoidPool {
             "Deposit proof verification failed"
         );
 
-        bytes32[] memory commitments = new bytes32[](2);
+        uint256 count = 1 + c2Enabled;
+        bytes32[] memory commitments = new bytes32[](count);
         commitments[0] = C1;
-        commitments[1] = C2;
+        if (c2Enabled == 1) {
+            commitments[1] = C2;
+        }
 
         // addition of group of commitments to be added here
         InsertedNote[] memory notesInserted = _insertBatch(commitments);
-        for (uint8 i = 0; i < 2; i++) {
+        for (uint8 i = 0; i < count; i++) {
             InsertedNote memory note = notesInserted[i];
             if (i == 0) {
                 // emit the note created event
@@ -160,12 +182,6 @@ contract NoidPool {
                 emit NoteCreated(note.poolId, note.commitment, encryptedNote2);
             }
         }
-    }
-
-    function verifyInputs( 
-        Inputs calldata inputs 
-    ) external view { 
-        _verifyInputs(inputs); 
     }
 
     // inputs validation helper function
@@ -224,7 +240,7 @@ contract NoidPool {
         // zkproof
 
         //required public signals
-        // relayer, - 1
+        // relayer (user commitment), - 1
         // enabled,  - MAX_INPUTS
         // roots,   - MAX_INPUTS
         // nullifiers,  - MAX_INPUTS
@@ -233,7 +249,7 @@ contract NoidPool {
 
         uint256[19] memory publicSignals;
         uint8 idx = 0;
-        publicSignals[idx++] = relayerZkPubkey;
+        publicSignals[idx++] = relayerCommitment;
         for (uint8 i = 0; i < MAX_INPUTS; i++) {
             publicSignals[idx++] = uint256(call.inputs.enabled[i]);
         }
@@ -343,7 +359,7 @@ contract NoidPool {
         // for zk proof rquired public inputs:
         /**
             receiver,
-            relayer,
+            relayer (user commitment),
             enabled,
             roots,
             nullifiers,
@@ -353,7 +369,7 @@ contract NoidPool {
          */
         uint256[19] memory publicSignals;
         publicSignals[0] = uint256(uint160(to));
-        publicSignals[1] = relayerZkPubkey;
+        publicSignals[1] = relayerCommitment;
 
         // enabled roots nullifier
         for (uint8 i = 2; i < MAX_INPUTS + 2; i++) {
@@ -423,74 +439,6 @@ contract NoidPool {
                 enc
             );
         }
-    }
-
-    function setNoidAccount(bytes32 cmx, address account, bytes memory eNote) external {
-        require(msg.sender != address(0),"Didnt set noid account manager address");
-        require(msg.sender == address(noidAccountManager),"Not allowed");
-        NoidAccounts[cmx] = account;
-        emit NoidAccountCreated(cmx, eNote);
-    }
-
-    function addNullifiersSpent(Inputs memory input) external {
-        require(msg.sender != address(0),"Didnt set noid account manager address");
-        require(msg.sender == address(noidAccountManager),"Not allowed");
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (input.enabled[i] == 0) continue;
-            require(
-                !nullifierSpent[input.nullifiers[i]],
-                "Nullifier already exists"
-            );
-            nullifierSpent[input.nullifiers[i]] = true;
-            emit NullifierSpent(input.nullifiers[i]);
-        }
-    }
-
-    function noteCreated(uint256 poolId, bytes32 commitment , bytes memory enc) external{
-        require(msg.sender != address(0),"Didnt set noid account manager address");
-        require(msg.sender == address(noidAccountManager),"Not allowed");
-    
-        emit NoteCreated(
-            poolId,
-            commitment,
-            enc
-        );
-    }
-
-    function executeNoidAccountFunction(
-        address target,
-        uint256 value,
-        bytes calldata data,
-        bytes32 commitment, // owndership commitment of the Noid account
-        bytes32 callCommitment,
-        // zkproof
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        address noidAccount
-    ) external {
-        require(msg.sender != address(0),"Didnt set noid account manager address");
-        require(msg.sender == address(noidAccountManager),"Not allowed");
-
-        require(NoidAccounts[commitment] == noidAccount , "Noid account mismatch");
-
-        NoidAccount(payable(noidAccount)).execute{value: value} (
-            target,
-            value,
-            data,
-            callCommitment,
-            a,
-            b,
-            c
-        );
-    }
-
-    function insertCommitments( 
-        bytes32[] calldata commitments 
-    ) external returns ( 
-        InsertedNote[] memory 
-    ) { 
-        return _insertBatch(commitments); 
     }
 
     // it inserts the group of commitments all at once.

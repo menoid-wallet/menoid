@@ -9,7 +9,7 @@
 ///
 /// Permissionless: anyone can call deposit/transfer/withdraw directly. The
 /// `relayer` module is only a convenience task-queue; the system works without it.
-/// `relayer_zk_pubkey` is unrelated — it's the ZK fee-note key bound inside the
+/// `relayer_commitment` is unrelated — it's the ZK fee-note key bound inside the
 /// deposit/transfer/withdraw circuits.
 module noid::pool {
 
@@ -56,6 +56,8 @@ module noid::pool {
     const E_NOT_RELAYER: u64          = 21;
     const E_BAD_PROOF_COUNT: u64      = 22;
     const E_AMOUNT_MISMATCH: u64      = 23;
+    const E_ALREADY_REGISTERED: u64   = 24;
+    const E_INVALID_USER_COMMITMENT: u64 = 25;
 
     // ── Events ────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,12 @@ module noid::pool {
         nullifier: u256,
     }
 
+    #[event]
+    struct WalletRegisteredEvent has drop, store {
+        wallet:          address,
+        user_commitment: u256,
+    }
+
     struct PendingCommitment has store, drop, copy {
         commitment:     u256,
         encrypted_note: vector<u8>,
@@ -83,19 +91,22 @@ module noid::pool {
         nullifiers:          Table<u256, bool>,
         commitments:         Table<u256, bool>,
         locked_balance:      u64,
-        relayer_zk_pubkey:   u256,
+        relayer_commitment:   u256,
         relayer_address:     address, // retained for set_relayer; no longer gates access
         admin:               address,
         pool_signer_cap:     SignerCapability,
         pool_resource_addr:  address,
         pending_commitments: vector<PendingCommitment>,
+        // wallet address => user commitment
+        // user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
+        registered:          Table<address, u256>,
     }
 
     // ── Initialization ────────────────────────────────────────────────────────
 
     public entry fun initialize(
         admin:             &signer,
-        relayer_zk_pubkey: u256,
+        relayer_commitment: u256,
         relayer_address:   address,
         seed:              vector<u8>,
     ) {
@@ -117,25 +128,26 @@ module noid::pool {
             nullifiers:         table::new<u256, bool>(),
             commitments:        table::new<u256, bool>(),
             locked_balance:     0,
-            relayer_zk_pubkey,
+            relayer_commitment,
             relayer_address,
             admin:              admin_addr,
             pool_signer_cap,
             pool_resource_addr,
             pending_commitments: vector::empty<PendingCommitment>(),
+            registered:          table::new<address, u256>(),
         });
     }
 
     public entry fun set_relayer(
         admin: &signer, pool_addr: address,
-        relayer_zk_pubkey: u256, relayer_address: address,
+        relayer_commitment: u256, relayer_address: address,
     ) acquires PoolState {
         let state = borrow_global_mut<PoolState>(pool_addr);
         assert!(
             state.admin == signer::address_of(admin),
             error::permission_denied(E_NOT_RELAYER)
         );
-        state.relayer_zk_pubkey = relayer_zk_pubkey;
+        state.relayer_commitment = relayer_commitment;
         state.relayer_address   = relayer_address;
     }
 
@@ -173,6 +185,43 @@ module noid::pool {
         );
 
         merkle_tree::insert(&mut state.forest, new_root, new_subtrees_hash);
+    }
+
+    // ── REGISTER ──────────────────────────────────────────────────────────────
+    //
+    // One-time binding of a real wallet address to its user commitment.
+    //
+    // Wallet responsibilities (off-chain):
+    //   - Sign the message "menoid_Wallet" with the real wallet's private key
+    //   - Derive the BabyJubJub spending keypair from that signature
+    //   - user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
+
+    public entry fun register(
+        user:            &signer,
+        pool_addr:       address,
+        user_commitment: u256,
+    ) acquires PoolState {
+        assert!(user_commitment != 0u256, error::invalid_argument(E_INVALID_USER_COMMITMENT));
+
+        let user_addr = signer::address_of(user);
+        let state = borrow_global_mut<PoolState>(pool_addr);
+        assert!(
+            !table::contains(&state.registered, user_addr),
+            error::already_exists(E_ALREADY_REGISTERED)
+        );
+
+        table::add(&mut state.registered, user_addr, user_commitment);
+        event::emit(WalletRegisteredEvent { wallet: user_addr, user_commitment });
+    }
+
+    #[view]
+    public fun is_registered(pool_addr: address, wallet: address): bool acquires PoolState {
+        table::contains(&borrow_global<PoolState>(pool_addr).registered, wallet)
+    }
+
+    #[view]
+    public fun registered_commitment(pool_addr: address, wallet: address): u256 acquires PoolState {
+        *table::borrow(&borrow_global<PoolState>(pool_addr).registered, wallet)
     }
 
     // ── DEPOSIT ───────────────────────────────────────────────────────────────
@@ -214,24 +263,31 @@ module noid::pool {
         encrypted_note2: vector<u8>,
     ) acquires PoolState {
         assert!(amount > 0, error::invalid_argument(E_ZERO_AMOUNT));
-        assert!(
-            c1 != ZERO_COMMITMENT && c2 != ZERO_COMMITMENT,
-            error::invalid_argument(E_INVALID_COMMITMENT)
-        );
-        assert!(c1 != c2, error::invalid_argument(E_DUPLICATE_COMMITMENT));
+        assert!(c1 != ZERO_COMMITMENT, error::invalid_argument(E_INVALID_COMMITMENT));
         assert!(coin::value(&coin) == amount, error::invalid_argument(E_AMOUNT_MISMATCH));
+
+        // C2 is the optional relayer fee note - it may be zero
+        let c2_enabled: u256 = if (c2 != ZERO_COMMITMENT) { 1u256 } else { 0u256 };
+        if (c2_enabled == 1u256) {
+            assert!(c1 != c2, error::invalid_argument(E_DUPLICATE_COMMITMENT));
+        };
 
         let state = borrow_global_mut<PoolState>(pool_addr);
         assert!(vector::is_empty(&state.pending_commitments), error::invalid_state(E_PENDING_TASKS));
         assert!(!table::contains(&state.commitments, c1), error::already_exists(E_COMMITMENT_EXISTS));
-        assert!(!table::contains(&state.commitments, c2), error::already_exists(E_COMMITMENT_EXISTS));
+        if (c2_enabled == 1u256) {
+            assert!(!table::contains(&state.commitments, c2), error::already_exists(E_COMMITMENT_EXISTS));
+        };
 
-        // Deposit ZK proof: amount == sum of committed values, fee note bound to relayer pk.
+        // Deposit ZK proof: amount == sum of committed values, fee note bound to
+        // the relayer's user commitment.
+        // public signals: [amount, c1, c2, c2_enabled, relayer_commitment]
         let dsigs = vector::empty<u256>();
         vector::push_back(&mut dsigs, (amount as u256));
         vector::push_back(&mut dsigs, c1);
         vector::push_back(&mut dsigs, c2);
-        vector::push_back(&mut dsigs, state.relayer_zk_pubkey);
+        vector::push_back(&mut dsigs, c2_enabled);
+        vector::push_back(&mut dsigs, state.relayer_commitment);
         assert!(
             verifier::verify_deposit(pool_addr, &a_bytes, &b_bytes, &c_bytes, &dsigs),
             error::invalid_argument(E_PROOF_FAILED)
@@ -243,7 +299,9 @@ module noid::pool {
 
         // Push commitments to the pending queue instead of inserting immediately.
         vector::push_back(&mut state.pending_commitments, PendingCommitment { commitment: c1, encrypted_note: encrypted_note1 });
-        vector::push_back(&mut state.pending_commitments, PendingCommitment { commitment: c2, encrypted_note: encrypted_note2 });
+        if (c2_enabled == 1u256) {
+            vector::push_back(&mut state.pending_commitments, PendingCommitment { commitment: c2, encrypted_note: encrypted_note2 });
+        };
     }
 
     // ── TRANSFER ──────────────────────────────────────────────────────────────
@@ -283,7 +341,7 @@ module noid::pool {
 
         // Transfer ZK proof public signals (19).
         let sigs = vector::empty<u256>();
-        vector::push_back(&mut sigs, state.relayer_zk_pubkey);
+        vector::push_back(&mut sigs, state.relayer_commitment);
         pack_enabled(&mut sigs, &enabled);
         pack_u256_vec(&mut sigs, &roots);
         pack_u256_vec(&mut sigs, &nullifiers);
@@ -362,7 +420,7 @@ module noid::pool {
         // Withdraw ZK proof public signals (19).
         let sigs = vector::empty<u256>();
         vector::push_back(&mut sigs, address_to_u256_mod_p(receiver));
-        vector::push_back(&mut sigs, state.relayer_zk_pubkey);
+        vector::push_back(&mut sigs, state.relayer_commitment);
         pack_enabled(&mut sigs, &enabled);
         pack_u256_vec(&mut sigs, &roots);
         pack_u256_vec(&mut sigs, &nullifiers);
@@ -537,6 +595,11 @@ module noid::pool {
     #[view]
     public fun relayer_address(pool_addr: address): address acquires PoolState {
         borrow_global<PoolState>(pool_addr).relayer_address
+    }
+
+    #[view]
+    public fun relayer_commitment(pool_addr: address): u256 acquires PoolState {
+        borrow_global<PoolState>(pool_addr).relayer_commitment
     }
 
     #[view]

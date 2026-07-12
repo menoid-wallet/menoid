@@ -1,6 +1,7 @@
 pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/babyjub.circom";
 include "./merkle_path.circom";
 include "./range_check.circom";
 /**
@@ -11,6 +12,13 @@ include "./range_check.circom";
  * address, while optionally creating up to 2 new private
  * output notes (change and relayer).
  *
+ * Ownership:
+ *      spendPk         = BabyJubJub(sk)  (spending keypair derived off-chain
+ *                                         from sign("menoid_Wallet"))
+ *      user_commitment = Poseidon(walletAddress, spendPk.x, spendPk.y)
+ *      commitment      = Poseidon(1, amount, randomness, user_commitment)
+ *      nullifier       = Poseidon(2, commitment, randomness, sk)
+ *
  * Input notes are masked using an `enabled[]` flag, allowing
  * dummy slots to be ignored while keeping the circuit size fixed.
  *
@@ -20,32 +28,40 @@ include "./range_check.circom";
 
 template WithdrawProof(max_inputs, depth) {
     // we need to check the ownership ✅
-    // Requires: Pk, Sk 
+    // Requires: sk, owner_address
     // we need to check the input commitments validity ✅
-    // Requires: enabled[], c_ins[], a_ins[], r_ins[] , pk; roots, pathElements[], pathIndices[] 
+    // Requires: enabled[], c_ins[], a_ins[], r_ins[] , user_commitment; roots, pathElements[], pathIndices[]
     // we need recompute nullifiers ✅
     // Requires: c_ins[],r_ins[],sk
     // we need to check the 2 output commitments validity ✅
     // Requires: out_enabled[] , C_outs[], r_outs[] , a_outs[] , receivers[]
     // we need compute sumInputs = sumOutputs
-    // Requires: Sum(a_ins[]) == Sum(withdrawAmount + Sum(a_outs)) 
+    // Requires: Sum(a_ins[]) == Sum(withdrawAmount + Sum(a_outs))
 
     // ownership
-    signal input pk; // private
-    signal input sk; // private
+    signal input sk;            // private - BabyJubJub spending private key
+    signal input owner_address; // private - real wallet address of the owner
 
     //receiver
     signal input receiver; //public <- address
-    signal input changeReceiver; //private
+    signal input changeReceiver; //private (user commitment for the change note)
     //relayer
-    signal input relayer; //public
+    signal input relayer; //public (relayer user commitment)
 
 
-    // owndership check
-    component ownHasher = Poseidon(2);
-    ownHasher.inputs[0] <== 3;
-    ownHasher.inputs[1] <== sk;
-    pk === ownHasher.out;
+    // ownership check
+    // spendPk = BabyJubJub(sk)
+    component spendPk = BabyPbk();
+    spendPk.in <== sk;
+
+    // user_commitment = Poseidon(address, spendPk.x, spendPk.y)
+    component ownHasher = Poseidon(3);
+    ownHasher.inputs[0] <== owner_address;
+    ownHasher.inputs[1] <== spendPk.Ax;
+    ownHasher.inputs[2] <== spendPk.Ay;
+
+    signal user_commitment;
+    user_commitment <== ownHasher.out;
 
     //INPUTS VALIDATION
 
@@ -55,10 +71,10 @@ template WithdrawProof(max_inputs, depth) {
     signal input a_ins[max_inputs]; // amount in for that cmx                          //private
     signal input r_ins[max_inputs]; // "r" used to create that cmx                     //private
     signal input roots[max_inputs]; // root for the merkle tree that cmx present in    //public
-    signal input pathElements[max_inputs][depth]; // path elements to the root         //private 
+    signal input pathElements[max_inputs][depth]; // path elements to the root         //private
     signal input pathIndices[max_inputs][depth]; // path indices to the root           //private
 
-    // nullifiers 
+    // nullifiers
     signal input nullifiers[max_inputs];//public
 
     signal sum[max_inputs + 1]; // sum[max_inputs] will be sum of inputs
@@ -87,9 +103,9 @@ template WithdrawProof(max_inputs, depth) {
         comHasher[i].inputs[0] <== 1;
         comHasher[i].inputs[1] <== a_ins[i];
         comHasher[i].inputs[2] <== r_ins[i];
-        comHasher[i].inputs[3] <== pk;
+        comHasher[i].inputs[3] <== user_commitment;
 
-        // constraint 
+        // constraint
         enabled[i] * (comHasher[i].out - c_ins[i]) === 0;
 
         // merkle root validity check
@@ -128,7 +144,7 @@ template WithdrawProof(max_inputs, depth) {
     signal input a_outs[2]; // private
     signal input r_outs[2]; // private
     signal input c_outs[2]; // public
-    signal input receivers[2]; // private
+    signal input receivers[2]; // private (user commitments of the receivers)
 
 
     receivers[0] === changeReceiver;
@@ -162,7 +178,7 @@ template WithdrawProof(max_inputs, depth) {
         //constraint
         out_enabled[i] * (outHasher[i].out - c_outs[i]) === 0;
     }
- 
+
     // Input Summation == Output Summation constraint
     sum[max_inputs] === outSum[2] + withdrawAmount;
 

@@ -16,6 +16,7 @@
   "dependencies": {
     "@aptos-labs/ts-sdk": "^7.1.0",
     "@zk-kit/incremental-merkle-tree": "^1.1.0",
+    "circomlib": "^2.0.5",
     "circomlibjs": "^0.1.7",
     "snarkjs": "^0.7.6",
     "tweetnacl": "^1.0.3"

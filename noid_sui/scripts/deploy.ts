@@ -35,6 +35,8 @@ import { fromBase64 } from "@mysten/sui/utils";
 import * as fs from "fs";
 import * as path from "path";
 
+import { deriveNoidWallet } from "../helpers/wallets";
+
 const RPC_URL     = process.env.SUI_RPC_URL    ?? "http://127.0.0.1:9000";
 const FAUCET_URL  = process.env.SUI_FAUCET_URL ?? "http://127.0.0.1:9123/gas";
 const CIRCUIT_DIR = process.env.CIRCUIT_DIR    ?? path.join(__dirname, "../zk_build");
@@ -178,12 +180,15 @@ async function main() {
   )?.objectId;
   console.log(`  VerifierConfig: ${vcId}`);
 
-  console.log("\n[3/3] Initializing PoolState...");
+  console.log("\n[3/4] Initializing PoolState...");
+  // relayer keys are derived from the REAL deployer wallet's signature
+  const relayerWallet = await deriveNoidWallet(keypair);
+  console.log(`  Relayer user commitment: ${relayerWallet.userCommitment}`);
   const poolTx = new Transaction();
   poolTx.moveCall({
     target: `${PACKAGE_ID}::pool::initialize`,
     arguments: [
-      poolTx.pure.u256(16407951615567460638183836566074464436072380568421544574059902095913473641125n),
+      poolTx.pure.u256(BigInt(relayerWallet.userCommitment)),
       poolTx.pure.address(deployer),
     ],
   });
@@ -192,6 +197,18 @@ async function main() {
     (c: any) => c.type === "created" && c.objectType?.includes("PoolState")
   )?.objectId;
   console.log(`  PoolState: ${psId}`);
+
+  console.log("\n[4/4] Registering the relayer wallet...");
+  const regTx = new Transaction();
+  regTx.moveCall({
+    target: `${PACKAGE_ID}::pool::register`,
+    arguments: [
+      regTx.object(psId),
+      regTx.pure.u256(BigInt(relayerWallet.userCommitment)),
+    ],
+  });
+  await execTx(regTx);
+  console.log("  Relayer registered");
 
   console.log("\n" + "=".repeat(60));
   console.log("  SET THESE ENV VARS:");

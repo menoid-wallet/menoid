@@ -1,6 +1,7 @@
 pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/babyjub.circom";
 include "./merkle_path.circom";
 include "./range_check.circom";
 
@@ -51,8 +52,8 @@ template Hash4() {
 
 template WithdrawProof(max_inputs, depth) {
     // ownership
-    signal input pk; // private
-    signal input sk; // private
+    signal input sk;            // private - BabyJubJub spending private key
+    signal input owner_address; // private - real wallet address of the owner
 
     //receiver
     signal input receiver; //public <- address
@@ -62,10 +63,18 @@ template WithdrawProof(max_inputs, depth) {
 
 
     // owndership check
-    component ownHasher = Poseidon(2);
-    ownHasher.inputs[0] <== 3;
-    ownHasher.inputs[1] <== sk;
-    pk === ownHasher.out;
+    // spendPk = BabyJubJub(sk)
+    component spendPk = BabyPbk();
+    spendPk.in <== sk;
+
+    // user_commitment = Poseidon(address, spendPk.x, spendPk.y)
+    component ownHasher = Poseidon(3);
+    ownHasher.inputs[0] <== owner_address;
+    ownHasher.inputs[1] <== spendPk.Ax;
+    ownHasher.inputs[2] <== spendPk.Ay;
+
+    signal user_commitment;
+    user_commitment <== ownHasher.out;
 
     //INPUTS VALIDATION
 
@@ -110,7 +119,7 @@ template WithdrawProof(max_inputs, depth) {
         comHasher[i].inputs[0] <== 1;
         comHasher[i].inputs[1] <== a_ins[i];
         comHasher[i].inputs[2] <== r_ins[i];
-        comHasher[i].inputs[3] <== pk;
+        comHasher[i].inputs[3] <== user_commitment;
 
         // constraint 
         enabled[i] * (comHasher[i].out - c_ins[i]) === 0;

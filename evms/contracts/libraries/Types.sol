@@ -68,37 +68,6 @@ struct WithdrawCall {
 }
 
 
-// private accounts creation
-struct CreateNoidAccountCall {
-    // zk proof
-    uint256[2] a;
-    uint256[2][2] b;
-    uint256[2] c;
-    //input details
-    Inputs inputs;
-    // outputs (maximum of 2)
-    bytes32 C1; // change commitment
-    bytes32 C2; // relayer commitment
-    bytes encryptedNote1; // change encrypted note
-    bytes encryptedNote2; // relayer encrypted note
-}
-
-
-struct ExecuteFunctionCall {
-    // zk proof
-    uint256[2] a;
-    uint256[2][2] b;
-    uint256[2] c;
-    //input details
-    Inputs inputs;
-    // outputs (maximum of 2)
-    bytes32 C1; // change commitment
-    bytes32 C2; // relayer commitment
-    bytes encryptedNote1; // change encrypted note
-    bytes encryptedNote2; // relayer encrypted note
-    uint256 callValue; // portion of value from this call to the function call's value
-}
-
     // helper functions
 struct InsertedNote {
     uint256 poolId;

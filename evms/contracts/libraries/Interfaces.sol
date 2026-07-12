@@ -6,7 +6,7 @@ interface IDepositVerifier {
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        uint256[4] calldata publicSignals
+        uint256[5] calldata publicSignals
     ) external view returns (bool);
 }
 interface ITransferVerifier {
@@ -24,32 +24,6 @@ interface IWithdrawVerifier {
         uint256[2][2] calldata b,
         uint256[2] calldata c,
         uint256[19] calldata publicSignals
-    ) external view returns (bool);
-}
-
-interface ICreateNoidAccountVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[18] calldata publicSignals
-    ) external view returns (bool);
-}
-interface IExecuteFunctionCallVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[18] calldata publicSignals
-    ) external view returns (bool);
-}
-
-interface INoidAccountOwnershipVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[6] calldata publicSignals
     ) external view returns (bool);
 }
 

@@ -2,10 +2,12 @@ const circomlibjs = require("circomlibjs");
 
 const { ethers } = require("ethers");
 
+// commitment = Poseidon(1, amount, randomness, userCommitment)
+// userCommitment is the receiver's registered user commitment
 async function createCommitment(
     amount,
     randomness,
-    zkPublicKey
+    userCommitment
 ) {
 
     const poseidon =
@@ -17,7 +19,7 @@ async function createCommitment(
                 1,
                 amount,
                 randomness,
-                zkPublicKey
+                userCommitment
             ])
         );
 

@@ -3,14 +3,13 @@ import { Program } from "@coral-xyz/anchor";
 import { NoidSolana } from "../target/types/noid_solana";
 import { expect } from "chai";
 import * as path from "path";
-import * as fs from "fs";
 import { randomBytes } from "crypto";
 // @ts-ignore
 import * as snarkjs from "snarkjs";
 // @ts-ignore
 import { IncrementalMerkleTree } from "@zk-kit/incremental-merkle-tree";
 import { buildPoseidon } from "circomlibjs";
-import { generatePrivateWallet, GeneratedWallet } from "./helpers/wallets";
+import { deriveNoidWallet, NoidWallet } from "./helpers/wallets";
 import { encryptMessage, decryptMessage } from "./helpers/encryption";
 import { createCommitment } from "./helpers/commitments";
 import { formatProofForSolana, toBE32 } from "./helpers/proofs";
@@ -46,7 +45,7 @@ interface Note {
 }
 
 interface WalletState {
-  wallet:  GeneratedWallet;
+  wallet:  NoidWallet;
   notes:   Note[];
   balance: bigint;
 }
@@ -73,8 +72,10 @@ describe("noid_solana", () => {
     program.programId
   );
 
-  let relayerWallet: GeneratedWallet;
-  const userWallets: GeneratedWallet[] = [];
+  // real wallets + derived noid keys (no generated wallets anymore)
+  let relayerWallet: NoidWallet;
+  let aliceWallet: NoidWallet;
+  let bobWallet: NoidWallet;
 
   const poolStates: Record<string, {
     tree:        InstanceType<typeof IncrementalMerkleTree>;
@@ -104,6 +105,25 @@ describe("noid_solana", () => {
     let r: bigint;
     do { r = BigInt("0x" + randomBytes(32).toString("hex")); } while (r >= P);
     return r.toString();
+  }
+
+  function registrationPda(wallet: anchor.web3.PublicKey): anchor.web3.PublicKey {
+    return anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("registration"), wallet.toBuffer()],
+      program.programId
+    )[0];
+  }
+
+  function beBytesToDecimal(bytes: number[] | Uint8Array): string {
+    return BigInt("0x" + Buffer.from(bytes).toString("hex")).toString();
+  }
+
+  // fetch a wallet's registered user commitment from the chain
+  async function fetchUserCommitment(wallet: anchor.web3.PublicKey): Promise<string> {
+    const registration = await program.account.registration.fetch(
+      registrationPda(wallet)
+    );
+    return beBytesToDecimal(registration.userCommitment as number[]);
   }
 
   async function initializePool(poolId: string) {
@@ -143,10 +163,18 @@ describe("noid_solana", () => {
 
       for (const [name, ws] of Object.entries(walletStates)) {
         try {
-          const decrypted = decryptMessage(ev.encryptedNote, ws.wallet.privateWallet.privateKey);
+          const decrypted = decryptMessage(ev.encryptedNote, ws.wallet.encryption.privateKey);
           const parsed: { amount: string; randomness: string } = JSON.parse(decrypted);
+
+          // ownership check: commitment must be locked to this wallet's user commitment
+          const expectedCmx = poseidon.F.toString(
+            poseidon([BigInt(1), BigInt(parsed.amount), BigInt(parsed.randomness), BigInt(ws.wallet.userCommitment)])
+          );
+          if (expectedCmx !== cmx) continue;
+
+          // nullifier = Poseidon(2, commitment, r, spendPrivateKey)
           const nullifier = poseidon.F.toString(
-            poseidon([BigInt(2), BigInt(cmx), BigInt(parsed.randomness), BigInt(ws.wallet.zk.secretKey)])
+            poseidon([BigInt(2), BigInt(cmx), BigInt(parsed.randomness), BigInt(ws.wallet.spend.privateKey)])
           );
           if (spentNullifiers.has(nullifier)) {
             continue;
@@ -169,14 +197,17 @@ describe("noid_solana", () => {
 
   async function proveDeposit(
     depositAmount: bigint,
-    c1: string, c2: string, relayerPk: string,
-    a1: bigint, r1: string, pk1: string,
+    c1: string, c2: string, c2Enabled: number, relayerUC: string,
+    a1: bigint, r1: string, uc1: string,
     a2: bigint, r2: string,
   ) {
     const input = {
       depositAmount: depositAmount.toString(),
-      c1, c2, a1: a1.toString(), r1, pk1,
-      a2: a2.toString(), r2, pk2: relayerPk,
+      c1, c2,
+      c2_enabled: c2Enabled.toString(),
+      uc2: relayerUC,
+      a1: a1.toString(), r1, uc1,
+      a2: a2.toString(), r2,
     };
     const { proof } = await snarkjs.groth16.fullProve(
       input,
@@ -187,8 +218,8 @@ describe("noid_solana", () => {
   }
 
   async function proveTransfer(
-    senderWallet: GeneratedWallet,
-    relayer: GeneratedWallet,
+    senderWallet: NoidWallet,
+    relayerUC: string,
     inputNote: Note,
     poolState: typeof poolStates[string],
     outputs: Array<{ amount: string; randomness: string; receiver: string; commitment: string }>,
@@ -199,12 +230,13 @@ describe("noid_solana", () => {
     const pathIndices  = merkleProof.pathIndices;
 
     const nullifier = poseidon.F.toString(
-      poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.zk.secretKey)])
+      poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.spend.privateKey)])
     );
 
     const input = {
-      sk: senderWallet.zk.secretKey, pk: senderWallet.zk.publicKey,
-      relayer: relayer.zk.publicKey,
+      sk: senderWallet.spend.privateKey,
+      owner_address: senderWallet.addressField,
+      relayer: relayerUC,
       enabled:  [1, 0, 0, 0],
       c_ins:    [inputNote.commitment, "0", "0", "0"],
       a_ins:    [inputNote.amount,     "0", "0", "0"],
@@ -217,7 +249,7 @@ describe("noid_solana", () => {
       c_outs:    outputs.map((o) => o.commitment),
       a_outs:    outputs.map((o) => o.amount),
       r_outs:    outputs.map((o) => o.randomness),
-      receivers: outputs.map((o) => o.receiver),
+      receivers: outputs.map((o) => o.receiver), // user commitments
     };
 
     const { proof } = await snarkjs.groth16.fullProve(
@@ -229,8 +261,8 @@ describe("noid_solana", () => {
   }
 
   async function proveWithdraw(
-    senderWallet: GeneratedWallet,
-    relayer: GeneratedWallet,
+    senderWallet: NoidWallet,
+    relayerUC: string,
     receiverDecimal: string,
     inputNote: Note,
     poolState: typeof poolStates[string],
@@ -244,13 +276,15 @@ describe("noid_solana", () => {
     const pathIndices  = merkleProof.pathIndices;
 
     const nullifier = poseidon.F.toString(
-      poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.zk.secretKey)])
+      poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.spend.privateKey)])
     );
 
     const input = {
-      sk: senderWallet.zk.secretKey, pk: senderWallet.zk.publicKey,
-      receiver: receiverDecimal, changeReceiver: senderWallet.zk.publicKey,
-      relayer:  relayer.zk.publicKey,
+      sk: senderWallet.spend.privateKey,
+      owner_address: senderWallet.addressField,
+      receiver: receiverDecimal,
+      changeReceiver: senderWallet.userCommitment,
+      relayer:  relayerUC,
       enabled:  [1, 0, 0, 0],
       c_ins:    [inputNote.commitment, "0", "0", "0"],
       a_ins:    [inputNote.amount,     "0", "0", "0"],
@@ -264,7 +298,7 @@ describe("noid_solana", () => {
       c_outs:  [changeOutput?.commitment ?? "0", relayerOutput?.commitment ?? "0"],
       a_outs:  [changeOutput?.amount     ?? "0", relayerOutput?.amount     ?? "0"],
       r_outs:  [changeOutput?.randomness ?? "0", relayerOutput?.randomness ?? "0"],
-      receivers: [senderWallet.zk.publicKey, relayer.zk.publicKey],
+      receivers: [senderWallet.userCommitment, relayerUC],
     };
 
     const { proof } = await snarkjs.groth16.fullProve(
@@ -280,6 +314,9 @@ describe("noid_solana", () => {
     const airdropAlice = await provider.connection.requestAirdrop(alice.publicKey, 10_000_000_000);
     await provider.connection.confirmTransaction(airdropAlice);
 
+    const airdropBob = await provider.connection.requestAirdrop(bob.publicKey, 2_000_000_000);
+    await provider.connection.confirmTransaction(airdropBob);
+
     const airdropAdmin = await provider.connection.requestAirdrop(admin.publicKey, 2_000_000_000);
     await provider.connection.confirmTransaction(airdropAdmin);
 
@@ -287,35 +324,38 @@ describe("noid_solana", () => {
     await provider.connection.confirmTransaction(airdropRelayer);
   });
 
-  it("Test 1: Generate deterministic private wallets and ZK keys", async () => {
-    relayerWallet = await generatePrivateWallet("noid-relayer-solana-seed");
-    const seeds = ["noid-alice-solana-seed", "noid-bob-solana-seed", "noid-charlie-solana-seed"];
-    for (let i = 0; i < seeds.length; i++) {
-      const w = await generatePrivateWallet(seeds[i]);
-      userWallets.push(w);
-    }
-    expect(userWallets.length).to.equal(3);
-    expect(relayerWallet.zk.publicKey).to.not.equal("0");
-    expect(userWallets[0].zk.publicKey).to.not.equal(userWallets[1].zk.publicKey);
+  it("Test 1: Derive noid keys from the REAL wallets (no new wallet)", async () => {
+    relayerWallet = await deriveNoidWallet(relayer);
+    aliceWallet   = await deriveNoidWallet(alice);
+    bobWallet     = await deriveNoidWallet(bob);
+
+    // the user keeps their real address
+    expect(aliceWallet.address).to.equal(alice.publicKey.toBase58());
+    expect(bobWallet.address).to.equal(bob.publicKey.toBase58());
+
+    // derivation is deterministic
+    const again = await deriveNoidWallet(alice);
+    expect(again.userCommitment).to.equal(aliceWallet.userCommitment);
+
+    expect(aliceWallet.userCommitment).to.not.equal(bobWallet.userCommitment);
   });
 
   it("Test 2: Encrypt and decrypt notes between users and relayer", async () => {
-    const user = userWallets[0];
-    const note = { amount: "100000000", randomness: randomField(), zkPublicKey: user.zk.publicKey };
+    const note = { amount: "100000000", randomness: randomField() };
     const plain = JSON.stringify(note);
-    const encToRelayer = encryptMessage(plain, relayerWallet.privateWallet.publicKey);
-    const decByRelayer = decryptMessage(encToRelayer, relayerWallet.privateWallet.privateKey);
+    const encToRelayer = encryptMessage(plain, relayerWallet.encryption.publicKey);
+    const decByRelayer = decryptMessage(encToRelayer, relayerWallet.encryption.privateKey);
     expect(decByRelayer).to.equal(plain);
 
-    const encToUser = encryptMessage(plain, user.privateWallet.publicKey);
-    const decByUser = decryptMessage(encToUser, user.privateWallet.privateKey);
+    const encToUser = encryptMessage(plain, aliceWallet.encryption.publicKey);
+    const decByUser = decryptMessage(encToUser, aliceWallet.encryption.privateKey);
     expect(decByUser).to.equal(plain);
   });
 
   it("Test 3: Initialize the privacy pool on Solana", async () => {
-    const relayerZkPubkeyBytes = Array.from(toBE32(relayerWallet.zk.publicKey));
+    const relayerCommitmentBytes = Array.from(toBE32(relayerWallet.userCommitment));
     await program.methods
-      .initialize(relayerZkPubkeyBytes, relayer.publicKey)
+      .initialize(relayerCommitmentBytes, relayer.publicKey)
       .accounts({
         admin: admin.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
@@ -329,33 +369,87 @@ describe("noid_solana", () => {
     expect(poolState.admin.toBase58()).to.equal(admin.publicKey.toBase58());
     expect(poolState.relayerAddress.toBase58()).to.equal(relayer.publicKey.toBase58());
     expect(poolState.lockedBalance.toNumber()).to.equal(0);
+    expect(beBytesToDecimal(poolState.relayerCommitment as number[])).to.equal(relayerWallet.userCommitment);
   });
 
-  it("Test 4: Alice deposits 1 SOL (sponsored deposit)", async () => {
-    walletStates["alice"]   = { wallet: userWallets[0], notes: [], balance: 0n };
-    walletStates["bob"]     = { wallet: userWallets[1], notes: [], balance: 0n };
-    walletStates["relayer"] = { wallet: relayerWallet,  notes: [], balance: 0n };
-    const user = userWallets[0];
+  it("Test 4: Register wallets onchain (already registered counts as success)", async () => {
+    const participants: Array<[string, NoidWallet]> = [
+      ["relayer", relayerWallet],
+      ["alice",   aliceWallet],
+      ["bob",     bobWallet],
+    ];
+
+    for (const [name, wallet] of participants) {
+      try {
+        await program.methods
+          .register(Array.from(toBE32(wallet.userCommitment)))
+          .accounts({
+            user: wallet.keypair.publicKey,
+            registration: registrationPda(wallet.keypair.publicKey),
+            systemProgram: anchor.web3.SystemProgram.programId,
+          })
+          .signers([wallet.keypair])
+          .rpc();
+        console.log(`${name} registered onchain`);
+      } catch (error) {
+        // register must fail ONLY because the wallet is already registered
+        console.log(`${name} already registered`);
+      }
+
+      // the registered user commitment must match the derived one
+      const onchain = await fetchUserCommitment(wallet.keypair.publicKey);
+      expect(onchain).to.equal(wallet.userCommitment);
+    }
+  });
+
+  it("Test 5: Second registration for the same wallet is rejected", async () => {
+    let threw = false;
+    try {
+      await program.methods
+        .register(Array.from(toBE32(aliceWallet.userCommitment)))
+        .accounts({
+          user: alice.publicKey,
+          registration: registrationPda(alice.publicKey),
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([alice])
+        .rpc();
+    } catch {
+      threw = true; // registration PDA already exists
+    }
+    expect(threw).to.be.true;
+  });
+
+  it("Test 6: Alice deposits 1 SOL with a relayer fee note", async () => {
+    walletStates["alice"]   = { wallet: aliceWallet,   notes: [], balance: 0n };
+    walletStates["bob"]     = { wallet: bobWallet,     notes: [], balance: 0n };
+    walletStates["relayer"] = { wallet: relayerWallet, notes: [], balance: 0n };
+
     const depositAmount = 1_000_000_000n; // 1 SOL
     const fee = 100_000_000n; // 0.1 SOL
     const userAmount = depositAmount - fee;
 
+    // receiver user commitment fetched from the chain
+    const aliceUC = await fetchUserCommitment(alice.publicKey);
+    const poolState0 = await program.account.poolState.fetch(poolStatePda);
+    const relayerUC = beBytesToDecimal(poolState0.relayerCommitment as number[]);
+
     const r1 = randomField(), r2 = randomField();
-    const c1 = await createCommitment(userAmount.toString(), r1, user.zk.publicKey);
-    const c2 = await createCommitment(fee.toString(), r2, relayerWallet.zk.publicKey);
+    const c1 = await createCommitment(userAmount.toString(), r1, aliceUC);
+    const c2 = await createCommitment(fee.toString(), r2, relayerUC);
 
     const encNote1 = encryptMessage(
       JSON.stringify({ amount: userAmount.toString(), randomness: r1 }),
-      user.privateWallet.publicKey
+      aliceWallet.encryption.publicKey
     );
     const encNote2 = encryptMessage(
       JSON.stringify({ amount: fee.toString(), randomness: r2 }),
-      relayerWallet.privateWallet.publicKey
+      relayerWallet.encryption.publicKey
     );
 
     const { proofA, proofB, proofC } = await proveDeposit(
-      depositAmount, c1.decimal, c2.decimal, relayerWallet.zk.publicKey,
-      userAmount, r1, user.zk.publicKey, fee, r2,
+      depositAmount, c1.decimal, c2.decimal, 1, relayerUC,
+      userAmount, r1, aliceUC, fee, r2,
     );
 
     const [commitment1Pda] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -367,9 +461,6 @@ describe("noid_solana", () => {
       program.programId
     );
 
-    // Call deposit instruction.
-    // Roots are now recomputed on-chain, so root1/root2 are no longer passed.
-    // Deposit is permissionless and signed by the user alone (no relayer co-signer).
     await program.methods
       .deposit(
         proofA, proofB, proofC,
@@ -403,21 +494,79 @@ describe("noid_solana", () => {
     emittedNoteEvents.push({ poolId: "0", commitment: c2.decimal, encryptedNote: encNote2 });
   });
 
-  it("Test 5: Rebuild Merkle trees from emitted events", async () => {
-    await rebuildWalletState();
-    expect(Object.keys(poolStates).length).to.be.greaterThan(0);
+  it("Test 7: Bob deposits without a relayer fee note (C2 = 0)", async () => {
+    const depositAmount = 500_000_000n; // 0.5 SOL
+
+    const bobUC = await fetchUserCommitment(bob.publicKey);
+    const poolState0 = await program.account.poolState.fetch(poolStatePda);
+    const relayerUC = beBytesToDecimal(poolState0.relayerCommitment as number[]);
+
+    const r1 = randomField();
+    const c1 = await createCommitment(depositAmount.toString(), r1, bobUC);
+
+    const encNote1 = encryptMessage(
+      JSON.stringify({ amount: depositAmount.toString(), randomness: r1 }),
+      bobWallet.encryption.publicKey
+    );
+
+    const { proofA, proofB, proofC } = await proveDeposit(
+      depositAmount, c1.decimal, "0", 0, relayerUC,
+      depositAmount, r1, bobUC, 0n, "0",
+    );
+
+    const [commitment1Pda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("commitment"), toBE32(c1.decimal)],
+      program.programId
+    );
+
+    const lockedBefore = (await program.account.poolState.fetch(poolStatePda)).lockedBalance.toNumber();
+
+    await program.methods
+      .deposit(
+        proofA, proofB, proofC,
+        new anchor.BN(depositAmount.toString()),
+        Array.from(toBE32(c1.decimal)),
+        Array.from(toBE32("0")), // C2 = 0 -> no relayer fee note
+      )
+      .accounts({
+        user: bob.publicKey,
+        poolState: poolStatePda,
+        vault: vaultPda,
+        commitment1: commitment1Pda,
+        commitment2: null, // optional account omitted
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .preInstructions([anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 1000000 })])
+      .signers([bob])
+      .rpc();
+
+    const lockedAfter = (await program.account.poolState.fetch(poolStatePda)).lockedBalance.toNumber();
+    expect(lockedAfter - lockedBefore).to.equal(Number(depositAmount));
+
+    emittedNoteEvents.push({ poolId: "0", commitment: c1.decimal, encryptedNote: encNote1 });
   });
 
-  it("Test 6: Deposit with duplicate commitment is rejected", async () => {
+  it("Test 8: Rebuild Merkle trees from emitted events", async () => {
+    await rebuildWalletState();
+    expect(Object.keys(poolStates).length).to.be.greaterThan(0);
+    expect(walletStates["alice"].notes.length).to.be.greaterThan(0);
+    expect(walletStates["bob"].notes.length).to.be.greaterThan(0);
+  });
+
+  it("Test 9: Deposit with duplicate commitment is rejected", async () => {
     await rebuildWalletState();
     const existingNote = walletStates["alice"].notes[0];
     const existingC1 = existingNote.commitment;
+    const aliceUC = await fetchUserCommitment(alice.publicKey);
+    const poolState0 = await program.account.poolState.fetch(poolStatePda);
+    const relayerUC = beBytesToDecimal(poolState0.relayerCommitment as number[]);
+
     const r_new  = randomField();
-    const c2_new = await createCommitment("100000000", r_new, relayerWallet.zk.publicKey);
+    const c2_new = await createCommitment("100000000", r_new, relayerUC);
 
     const { proofA, proofB, proofC } = await proveDeposit(
-      1_000_000_000n, existingC1, c2_new.decimal, relayerWallet.zk.publicKey,
-      900_000_000n, existingNote.randomness, userWallets[0].zk.publicKey, 100_000_000n, r_new,
+      1_000_000_000n, existingC1, c2_new.decimal, 1, relayerUC,
+      900_000_000n, existingNote.randomness, aliceUC, 100_000_000n, r_new,
     );
 
     const [commitment1Pda] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -455,10 +604,7 @@ describe("noid_solana", () => {
     expect(threw).to.be.true;
   });
 
-  it("Test 7: Transfer SOL privately (Alice -> Bob)", async () => {
-    walletStates["alice"]   = { wallet: userWallets[0], notes: [], balance: 0n };
-    walletStates["bob"]     = { wallet: userWallets[1], notes: [], balance: 0n };
-    walletStates["relayer"] = { wallet: relayerWallet,  notes: [], balance: 0n };
+  it("Test 10: Transfer SOL privately (Alice -> Bob, addressed by real address)", async () => {
     await rebuildWalletState();
 
     const inputNote = walletStates["alice"].notes[0];
@@ -470,31 +616,38 @@ describe("noid_solana", () => {
     const fee         = 10_000_000n; // fee
     const change      = inputAmount - transferAmt - fee;
 
+    // the receiver is addressed by their REAL wallet address:
+    // under the hood we fetch their registered user commitment
+    const bobUC = await fetchUserCommitment(bob.publicKey);
+    const aliceUC = aliceWallet.userCommitment;
+    const poolState0 = await program.account.poolState.fetch(poolStatePda);
+    const relayerUC = beBytesToDecimal(poolState0.relayerCommitment as number[]);
+
     const rReceiver = randomField(), rChange = randomField(), rRelayer = randomField();
-    const receiverCmx = await createCommitment(transferAmt.toString(), rReceiver, userWallets[1].zk.publicKey);
-    const changeCmx   = await createCommitment(change.toString(),      rChange,   userWallets[0].zk.publicKey);
-    const relayerCmx  = await createCommitment(fee.toString(),         rRelayer,  relayerWallet.zk.publicKey);
+    const receiverCmx = await createCommitment(transferAmt.toString(), rReceiver, bobUC);
+    const changeCmx   = await createCommitment(change.toString(),      rChange,   aliceUC);
+    const relayerCmx  = await createCommitment(fee.toString(),         rRelayer,  relayerUC);
 
     const { proof, nullifier } = await proveTransfer(
-      userWallets[0], relayerWallet, inputNote, state,
+      aliceWallet, relayerUC, inputNote, state,
       [
-        { amount: transferAmt.toString(), randomness: rReceiver, receiver: userWallets[1].zk.publicKey, commitment: receiverCmx.decimal },
-        { amount: change.toString(),      randomness: rChange,   receiver: userWallets[0].zk.publicKey, commitment: changeCmx.decimal   },
-        { amount: fee.toString(),         randomness: rRelayer,  receiver: relayerWallet.zk.publicKey,  commitment: relayerCmx.decimal   },
+        { amount: transferAmt.toString(), randomness: rReceiver, receiver: bobUC,     commitment: receiverCmx.decimal },
+        { amount: change.toString(),      randomness: rChange,   receiver: aliceUC,   commitment: changeCmx.decimal   },
+        { amount: fee.toString(),         randomness: rRelayer,  receiver: relayerUC, commitment: relayerCmx.decimal  },
       ],
     );
 
     const encNote1 = encryptMessage(
       JSON.stringify({ amount: transferAmt.toString(), randomness: rReceiver }),
-      userWallets[1].privateWallet.publicKey
+      bobWallet.encryption.publicKey
     );
     const encNote2 = encryptMessage(
       JSON.stringify({ amount: change.toString(), randomness: rChange }),
-      userWallets[0].privateWallet.publicKey
+      aliceWallet.encryption.publicKey
     );
     const encNote3 = encryptMessage(
       JSON.stringify({ amount: fee.toString(), randomness: rRelayer }),
-      relayerWallet.privateWallet.publicKey
+      relayerWallet.encryption.publicKey
     );
 
     // Prepare dynamic accounts for remaining accounts
@@ -522,8 +675,6 @@ describe("noid_solana", () => {
       { pubkey: relayerCmxPda, isWritable: true, isSigner: false },
     ];
 
-    // Submit transfer transaction.
-    // output_roots removed (computed on-chain). Permissionless, but signed by the relayer.
     await program.methods
       .transfer(
         proof.proofA, proof.proofB, proof.proofC,
@@ -547,11 +698,16 @@ describe("noid_solana", () => {
     emittedNoteEvents.push({ poolId: "0", commitment: receiverCmx.decimal, encryptedNote: encNote1 });
     emittedNoteEvents.push({ poolId: "0", commitment: changeCmx.decimal,   encryptedNote: encNote2 });
     emittedNoteEvents.push({ poolId: "0", commitment: relayerCmx.decimal,  encryptedNote: encNote3 });
+
+    // bob must find his new note
+    await rebuildWalletState();
+    const bobNote = walletStates["bob"].notes.find((n) => n.commitment === receiverCmx.decimal);
+    expect(bobNote).to.not.be.undefined;
   });
 
-  it("Test 8: Double-spend is rejected", async () => {
+  it("Test 11: Double-spend is rejected", async () => {
     const spentNull = emittedNullifierEvents[0].nullifier;
-    const fakeC = await createCommitment("100", randomField(), userWallets[0].zk.publicKey);
+    const fakeC = await createCommitment("100", randomField(), aliceWallet.userCommitment);
     const [nullifierPda] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("nullifier"), toBE32(spentNull)],
       program.programId
@@ -590,9 +746,11 @@ describe("noid_solana", () => {
     expect(threw).to.be.true;
   });
 
-  it("Test 9: Bob withdraws to public address", async () => {
+  it("Test 12: Bob withdraws to public address", async () => {
     await rebuildWalletState();
-    const inputNote = walletStates["bob"].notes[0];
+    const inputNote = walletStates["bob"].notes
+      .slice()
+      .sort((a, b) => (BigInt(a.amount) > BigInt(b.amount) ? -1 : 1))[0];
     expect(inputNote).to.not.be.undefined;
 
     const state = poolStates[inputNote.poolId];
@@ -601,18 +759,21 @@ describe("noid_solana", () => {
     const fee = 10_000_000n;
     const change = inputAmt - withdrawAmt - fee;
 
+    const poolState0 = await program.account.poolState.fetch(poolStatePda);
+    const relayerUC = beBytesToDecimal(poolState0.relayerCommitment as number[]);
+
     const rChange = randomField();
     const rRelayer = randomField();
-    const changeCmx = await createCommitment(change.toString(), rChange, userWallets[1].zk.publicKey);
-    const relayerCmx = await createCommitment(fee.toString(), rRelayer, relayerWallet.zk.publicKey);
+    const changeCmx = await createCommitment(change.toString(), rChange, bobWallet.userCommitment);
+    const relayerCmx = await createCommitment(fee.toString(), rRelayer, relayerUC);
 
-    // Derive receiver mod P
+    // Derive receiver mod P (must match the on-chain pubkey_to_u256_mod_p)
     const BN254_P = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
     const receiverU256 = BigInt("0x" + bob.publicKey.toBuffer().toString("hex"));
     const receiverDecimal = (receiverU256 % BN254_P).toString();
 
     const { proof, nullifier } = await proveWithdraw(
-      userWallets[1], relayerWallet, receiverDecimal,
+      bobWallet, relayerUC, receiverDecimal,
       inputNote, state, withdrawAmt,
       { amount: change.toString(), randomness: rChange, commitment: changeCmx.decimal },
       { amount: fee.toString(), randomness: rRelayer, commitment: relayerCmx.decimal }
@@ -620,11 +781,11 @@ describe("noid_solana", () => {
 
     const encNote1 = encryptMessage(
       JSON.stringify({ amount: change.toString(), randomness: rChange }),
-      userWallets[1].privateWallet.publicKey
+      bobWallet.encryption.publicKey
     );
     const encNote2 = encryptMessage(
       JSON.stringify({ amount: fee.toString(), randomness: rRelayer }),
-      relayerWallet.privateWallet.publicKey
+      relayerWallet.encryption.publicKey
     );
 
     const [nullifierPda] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -648,8 +809,6 @@ describe("noid_solana", () => {
 
     const bobBalanceBefore = await provider.connection.getBalance(bob.publicKey);
 
-    // Call withdraw instruction.
-    // output_roots removed (computed on-chain). Permissionless, but signed by the relayer.
     await program.methods
       .withdraw(
         proof.proofA, proof.proofB, proof.proofC,

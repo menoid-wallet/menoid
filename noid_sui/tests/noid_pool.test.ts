@@ -49,7 +49,7 @@ import * as fs from "fs";
 import * as dotenv from "dotenv";
 dotenv.config();
 import { randomBytes } from "crypto";
-import { generatePrivateWallet, GeneratedWallet } from "../helpers/wallets";
+import { deriveNoidWallet, NoidWallet } from "../helpers/wallets";
 import { encryptMessage, decryptMessage } from "../helpers/encryption";
 import { createCommitment } from "../helpers/commitments";
 
@@ -87,7 +87,7 @@ interface Note {
   root:       string;
 }
 interface WalletState {
-  wallet:  GeneratedWallet;
+  wallet:  NoidWallet;
   notes:   Note[];
   balance: bigint;
 }
@@ -97,8 +97,8 @@ interface ProofCalldata {
 
 // ─── Global state ──────────────────────────────────────────────────────────
 
-let relayerWallet: GeneratedWallet;
-const userWallets: GeneratedWallet[] = [];
+let relayerWallet: NoidWallet;
+const userWallets: NoidWallet[] = [];
 
 const poolStates: Record<string, {
   tree:        InstanceType<typeof IncrementalMerkleTree>;
@@ -247,11 +247,11 @@ async function rebuildWalletState() {
 
     for (const [name, ws] of Object.entries(walletStates)) {
       try {
-        const decrypted = decryptMessage(encryptedNote, ws.wallet.privateWallet.privateKey);
+        const decrypted = decryptMessage(encryptedNote, ws.wallet.encryption.privateKey);
         const parsed: { amount: string; randomness: string } = JSON.parse(decrypted);
         console.log(`  ${name} decrypted note:`, parsed);
         const nullifier = poseidon.F.toString(
-          poseidon([BigInt(2), BigInt(cmx), BigInt(parsed.randomness), BigInt(ws.wallet.zk.secretKey)])
+          poseidon([BigInt(2), BigInt(cmx), BigInt(parsed.randomness), BigInt(ws.wallet.spend.privateKey)])
         );
         if (spentNullifiers.has(nullifier)) {
           console.log("  Note already spent — skipping");
@@ -323,14 +323,17 @@ function randomField(): string {
 
 async function proveDeposit(
   depositAmount: bigint,
-  c1: string, c2: string, relayerPk: string,
-  a1: bigint, r1: string, pk1: string,
+  c1: string, c2: string, c2Enabled: number, relayerUC: string,
+  a1: bigint, r1: string, uc1: string,
   a2: bigint, r2: string,
 ): Promise<ProofCalldata> {
   const input = {
     depositAmount: depositAmount.toString(),
-    c1, c2, a1: a1.toString(), r1, pk1,
-    a2: a2.toString(), r2, pk2: relayerPk,
+    c1, c2,
+    c2_enabled: c2Enabled.toString(),
+    uc2: relayerUC,
+    a1: a1.toString(), r1, uc1,
+    a2: a2.toString(), r2,
   };
   console.log("\n========== DEPOSIT CIRCOM INPUT ==========\n", input);
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
@@ -359,8 +362,8 @@ function poseidonHash4(poseidon: any, a: any, b: any, c: any, d: any): bigint {
 }
 
 async function proveTransfer(
-  senderWallet: GeneratedWallet,
-  relayer: GeneratedWallet,
+  senderWallet: NoidWallet,
+  relayerUC: string,
   inputNote: Note,
   poolState: typeof poolStates[string],
   outputs: Array<{ amount: string; randomness: string; receiver: string; commitment: string }>,
@@ -371,7 +374,7 @@ async function proveTransfer(
   const pathIndices  = merkleProof.pathIndices;
 
   const nullifier = poseidon.F.toString(
-    poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.zk.secretKey)])
+    poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.spend.privateKey)])
   );
   console.log("\n========== TRANSFER NULLIFIER ==========\n", nullifier);
 
@@ -412,8 +415,9 @@ async function proveTransfer(
   const c_outs_hash = poseidonHash3(poseidon, c_outs[0], c_outs[1], c_outs[2]).toString();
 
   const input = {
-    sk: senderWallet.zk.secretKey, pk: senderWallet.zk.publicKey,
-    relayer: relayer.zk.publicKey,
+    sk: senderWallet.spend.privateKey,
+    owner_address: senderWallet.addressField,
+    relayer: relayerUC,
     enabled,
     enabled_hash,
     c_ins:    [inputNote.commitment, "0", "0", "0"],
@@ -444,8 +448,8 @@ async function proveTransfer(
 }
 
 async function proveWithdraw(
-  senderWallet: GeneratedWallet,
-  relayer: GeneratedWallet,
+  senderWallet: NoidWallet,
+  relayerUC: string,
   receiverDecimal: string,
   inputNote: Note,
   poolState: typeof poolStates[string],
@@ -459,7 +463,7 @@ async function proveWithdraw(
   const pathIndices  = merkleProof.pathIndices;
 
   const nullifier = poseidon.F.toString(
-    poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.zk.secretKey)])
+    poseidon([BigInt(2), BigInt(inputNote.commitment), BigInt(inputNote.randomness), BigInt(senderWallet.spend.privateKey)])
   );
   console.log("\n========== WITHDRAW NULLIFIER ==========\n", nullifier);
 
@@ -478,9 +482,10 @@ async function proveWithdraw(
   const c_outs_hash = poseidonHash2(poseidon, c_outs[0], c_outs[1]).toString();
 
   const input = {
-    sk: senderWallet.zk.secretKey, pk: senderWallet.zk.publicKey,
-    receiver: receiverDecimal, changeReceiver: senderWallet.zk.publicKey,
-    relayer:  relayer.zk.publicKey,
+    sk: senderWallet.spend.privateKey,
+    owner_address: senderWallet.addressField,
+    receiver: receiverDecimal, changeReceiver: senderWallet.userCommitment,
+    relayer:  relayerUC,
     enabled,
     enabled_hash,
     c_ins:    [inputNote.commitment, "0", "0", "0"],
@@ -500,7 +505,7 @@ async function proveWithdraw(
     c_outs_hash,
     a_outs:  [changeOutput?.amount     ?? "0", relayerOutput?.amount     ?? "0"],
     r_outs:  [changeOutput?.randomness ?? "0", relayerOutput?.randomness ?? "0"],
-    receivers: [senderWallet.zk.publicKey, relayer.zk.publicKey],
+    receivers: [senderWallet.userCommitment, relayerUC],
   };
   console.log("\n========== WITHDRAW CIRCOM INPUT ==========\n", input);
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
@@ -639,6 +644,27 @@ async function execSponsored(
   return result.digest;
 }
 
+// ─── Registered user commitments (fetched from the chain) ───────────────────
+
+let aliceUC = "0";
+let bobUC = "0";
+let relayerUC = "0";
+
+/** Fetch a wallet's registered user commitment from the PoolState table. */
+async function fetchUserCommitment(walletAddr: string): Promise<string> {
+  const obj = await suiClient.getObject({ id: POOL_STATE_ID, options: { showContent: true } });
+  const fields = (obj.data?.content as any)?.fields;
+  const tableId = fields?.registered?.fields?.id?.id;
+  if (!tableId) throw new Error("registered table not found in PoolState");
+  const entry = await suiClient.getDynamicFieldObject({
+    parentId: tableId,
+    name: { type: "address", value: walletAddr },
+  });
+  const value = (entry.data?.content as any)?.fields?.value;
+  if (value === undefined) throw new Error(`wallet ${walletAddr} is not registered`);
+  return BigInt(value).toString();
+}
+
 // ─── Test runner ───────────────────────────────────────────────────────────
 
 interface TestResult { name: string; passed: boolean; error?: string }
@@ -700,31 +726,89 @@ async function main() {
 
   // ─── TEST 1 ────────────────────────────────────────────────────────────
 
-  await test("Generate deterministic private wallets and ZK keys", async () => {
-    relayerWallet = await generatePrivateWallet("noid-relayer-sui-seed");
-    console.log("\n========== RELAYER WALLET ==========\n", relayerWallet);
-    const seeds = ["noid-alice-sui-seed", "noid-bob-sui-seed", "noid-charlie-sui-seed"];
-    for (let i = 0; i < seeds.length; i++) {
-      const w = await generatePrivateWallet(seeds[i]);
-      userWallets.push(w);
-      console.log(`\n========== USER ${i + 1} WALLET ==========\n`, w);
+  await test("Derive noid keys from the REAL wallets", async () => {
+    relayerWallet = await deriveNoidWallet(relayerKeypair);
+    userWallets.length = 0;
+    userWallets.push(await deriveNoidWallet(aliceKeypair));
+    userWallets.push(await deriveNoidWallet(bobKeypair));
+    console.log("\n========== RELAYER ==========\n", {
+      address: relayerWallet.address, userCommitment: relayerWallet.userCommitment,
+    });
+    console.log("\n========== ALICE ==========\n", {
+      address: userWallets[0].address, userCommitment: userWallets[0].userCommitment,
+    });
+    console.log("\n========== BOB ==========\n", {
+      address: userWallets[1].address, userCommitment: userWallets[1].userCommitment,
+    });
+    // the users keep their REAL addresses
+    assert(userWallets[0].address === aliceAddress, "alice keeps her real address");
+    assert(userWallets[1].address === bobAddress, "bob keeps his real address");
+    // derivation is deterministic
+    const again = await deriveNoidWallet(aliceKeypair);
+    assert(again.userCommitment === userWallets[0].userCommitment, "derivation must be deterministic");
+    assert(userWallets[0].userCommitment !== userWallets[1].userCommitment, "distinct user commitments");
+  });
+
+  await test("Register wallets onchain (already registered counts as success)", async () => {
+    const participants: Array<[string, NoidWallet, Ed25519Keypair]> = [
+      ["relayer", relayerWallet, relayerKeypair],
+      ["alice",   userWallets[0], aliceKeypair],
+      ["bob",     userWallets[1], bobKeypair],
+    ];
+    for (const [name, wallet, kp] of participants) {
+      try {
+        const tx = new Transaction();
+        tx.moveCall({
+          target: `${PACKAGE_ID}::pool::register`,
+          arguments: [
+            tx.object(POOL_STATE_ID),
+            tx.pure.u256(BigInt(wallet.userCommitment)),
+          ],
+        });
+        await execSigned(tx, kp, 50_000_000);
+        console.log(`  ${name} registered onchain`);
+      } catch (e: any) {
+        // register must fail ONLY because the wallet is already registered
+        console.log(`  ${name} already registered`);
+      }
+      const onchain = await fetchUserCommitment(kp.getPublicKey().toSuiAddress());
+      assert(BigInt(onchain) === BigInt(wallet.userCommitment), `${name} onchain user commitment must match`);
     }
-    assert(userWallets.length === 3, "Should have 3 user wallets");
-    assert(relayerWallet.zk.publicKey !== "0", "Relayer PK must be non-zero");
-    assert(userWallets[0].zk.publicKey !== userWallets[1].zk.publicKey, "Users must have distinct ZK keys");
+
+    // the tests below address users by their REAL wallet address:
+    // under the hood we fetch the registered user commitments from the chain
+    relayerUC = await fetchUserCommitment(relayerAddress);
+    aliceUC   = await fetchUserCommitment(aliceAddress);
+    bobUC     = await fetchUserCommitment(bobAddress);
+  });
+
+  await test("Second registration for the same wallet is rejected", async () => {
+    let threw = false;
+    try {
+      const tx = new Transaction();
+      tx.moveCall({
+        target: `${PACKAGE_ID}::pool::register`,
+        arguments: [
+          tx.object(POOL_STATE_ID),
+          tx.pure.u256(BigInt(userWallets[0].userCommitment)),
+        ],
+      });
+      await execSigned(tx, aliceKeypair, 50_000_000);
+    } catch { threw = true; }
+    assert(threw, "duplicate registration must be rejected");
   });
 
   // ─── TEST 2 ────────────────────────────────────────────────────────────
 
   await test("Encrypt and decrypt notes between users and relayer", async () => {
     const user  = userWallets[0];
-    const note  = { amount: "100000000", randomness: randomField(), zkPublicKey: user.zk.publicKey };
+    const note  = { amount: "100000000", randomness: randomField() };
     const plain = JSON.stringify(note);
-    const encToRelayer = encryptMessage(plain, relayerWallet.privateWallet.publicKey);
-    const decByRelayer = decryptMessage(encToRelayer, relayerWallet.privateWallet.privateKey);
+    const encToRelayer = encryptMessage(plain, relayerWallet.encryption.publicKey);
+    const decByRelayer = decryptMessage(encToRelayer, relayerWallet.encryption.privateKey);
     assert(decByRelayer === plain, "Relayer must decrypt correctly");
-    const encToUser = encryptMessage(plain, user.privateWallet.publicKey);
-    const decByUser = decryptMessage(encToUser, user.privateWallet.privateKey);
+    const encToUser = encryptMessage(plain, user.encryption.publicKey);
+    const decByUser = decryptMessage(encToUser, user.encryption.privateKey);
     assert(decByUser === plain, "User must decrypt correctly");
   });
 
@@ -749,12 +833,13 @@ async function main() {
     const user = userWallets[0];
     const depositAmount = 100_000_000n, fee = 10_000_000n, userAmount = depositAmount - fee;
     const r1 = randomField(), r2 = randomField();
-    const c1 = await createCommitment(userAmount.toString(), r1, user.zk.publicKey);
-    const c2 = await createCommitment(fee.toString(),        r2, relayerWallet.zk.publicKey);
+    const c1 = await createCommitment(userAmount.toString(), r1, aliceUC);
+    const c2 = await createCommitment(fee.toString(),        r2, relayerUC);
     const input = {
-      depositAmount: depositAmount.toString(), pk2: relayerWallet.zk.publicKey,
+      depositAmount: depositAmount.toString(),
       c1: c1.decimal, c2: c2.decimal,
-      a1: userAmount.toString(), r1, pk1: user.zk.publicKey,
+      c2_enabled: "1", uc2: relayerUC,
+      a1: userAmount.toString(), r1, uc1: aliceUC,
       a2: fee.toString(), r2,
     };
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
@@ -786,33 +871,31 @@ async function main() {
     const user = userWallets[0];
     const depositAmount = 100_000_000n, fee = 10_000_000n, userAmount = depositAmount - fee;
     const r1 = randomField(), r2 = randomField();
-    const c1 = await createCommitment(userAmount.toString(), r1, user.zk.publicKey);
-    const c2 = await createCommitment(fee.toString(),        r2, relayerWallet.zk.publicKey);
+    const c1 = await createCommitment(userAmount.toString(), r1, aliceUC);
+    const c2 = await createCommitment(fee.toString(),        r2, relayerUC);
     console.log("\n========== COMMITMENTS ==========\n", c1, "\n", c2);
 
     const encNote1 = encryptMessage(
       JSON.stringify({ amount: userAmount.toString(), randomness: r1 }),
-      user.privateWallet.publicKey,
+      user.encryption.publicKey,
     );
     const encNote2 = encryptMessage(
       JSON.stringify({ amount: fee.toString(), randomness: r2 }),
-      relayerWallet.privateWallet.publicKey,
+      relayerWallet.encryption.publicKey,
     );
 
     const { proofBytes } = await proveDeposit(
-      depositAmount, c1.decimal, c2.decimal, relayerWallet.zk.publicKey,
-      userAmount, r1, user.zk.publicKey, fee, r2,
+      depositAmount, c1.decimal, c2.decimal, 1, relayerUC,
+      userAmount, r1, aliceUC, fee, r2,
     );
 
     // Roots are recomputed on-chain — no off-chain root computation needed.
 
-    // Alice splits the exact deposit amount from her own SUI coin
-    const aliceCoinId = await getCoinForAmount(aliceKeypair, depositAmount);
-
     console.log(`\nSubmitting DEPOSIT tx (signed by Alice) to ${NET_LABEL}...`);
     const tx = new Transaction();
 
-    const [depositCoin] = tx.splitCoins(tx.object(aliceCoinId), [depositAmount.toString()]);
+    // Alice splits the exact deposit amount from her gas coin
+    const [depositCoin] = tx.splitCoins(tx.gas, [depositAmount.toString()]);
 
     tx.moveCall({
       target:    `${PACKAGE_ID}::pool::deposit`,
@@ -844,9 +927,9 @@ async function main() {
     flushToPersisted();
 
     console.log("\n========== ALICE DECRYPTED ==========\n",
-      decryptMessage(encNote1, user.privateWallet.privateKey));
+      decryptMessage(encNote1, user.encryption.privateKey));
     console.log("\n========== RELAYER DECRYPTED ==========\n",
-      decryptMessage(encNote2, relayerWallet.privateWallet.privateKey));
+      decryptMessage(encNote2, relayerWallet.encryption.privateKey));
   });
 
   // ─── TEST 6 ────────────────────────────────────────────────────────────
@@ -873,17 +956,16 @@ async function main() {
   await test("Deposit with duplicate commitment is rejected", async () => {
     const existingC1 = emittedNoteEvents[0].commitment;
     const r_new  = randomField();
-    const c2_new = await createCommitment("10000000", r_new, relayerWallet.zk.publicKey);
+    const c2_new = await createCommitment("10000000", r_new, relayerUC);
 
     let threw = false;
     try {
       const { proofBytes } = await proveDeposit(
-        100_000_000n, existingC1, c2_new.decimal, relayerWallet.zk.publicKey,
-        90_000_000n, randomField(), userWallets[0].zk.publicKey, 10_000_000n, r_new,
+        100_000_000n, existingC1, c2_new.decimal, 1, relayerUC,
+        90_000_000n, randomField(), aliceUC, 10_000_000n, r_new,
       );
       const tx = new Transaction();
-      const aliceCoinId = await getCoinForAmount(aliceKeypair, 100_000_000n);
-      const [split] = tx.splitCoins(tx.object(aliceCoinId), ["100000000"]);
+      const [split] = tx.splitCoins(tx.gas, ["100000000"]);
       tx.moveCall({
         target: `${PACKAGE_ID}::pool::deposit`,
         arguments: [
@@ -922,30 +1004,30 @@ async function main() {
     const change      = inputAmount - transferAmt - fee;
 
     const rReceiver = randomField(), rChange = randomField(), rRelayer = randomField();
-    const receiverCmx = await createCommitment(transferAmt.toString(), rReceiver, userWallets[1].zk.publicKey);
-    const changeCmx   = await createCommitment(change.toString(),      rChange,   userWallets[0].zk.publicKey);
-    const relayerCmx  = await createCommitment(fee.toString(),         rRelayer,  relayerWallet.zk.publicKey);
+    const receiverCmx = await createCommitment(transferAmt.toString(), rReceiver, bobUC);
+    const changeCmx   = await createCommitment(change.toString(),      rChange,   aliceUC);
+    const relayerCmx  = await createCommitment(fee.toString(),         rRelayer,  relayerUC);
 
     const { calldata: { proofBytes }, nullifier } = await proveTransfer(
-      userWallets[0], relayerWallet, inputNote, state,
+      userWallets[0], relayerUC, inputNote, state,
       [
-        { amount: transferAmt.toString(), randomness: rReceiver, receiver: userWallets[1].zk.publicKey, commitment: receiverCmx.decimal },
-        { amount: change.toString(),      randomness: rChange,   receiver: userWallets[0].zk.publicKey, commitment: changeCmx.decimal   },
-        { amount: fee.toString(),         randomness: rRelayer,  receiver: relayerWallet.zk.publicKey,  commitment: relayerCmx.decimal   },
+        { amount: transferAmt.toString(), randomness: rReceiver, receiver: bobUC, commitment: receiverCmx.decimal },
+        { amount: change.toString(),      randomness: rChange,   receiver: aliceUC, commitment: changeCmx.decimal   },
+        { amount: fee.toString(),         randomness: rRelayer,  receiver: relayerUC,  commitment: relayerCmx.decimal   },
       ],
     );
 
     const encNote1 = encryptMessage(
       JSON.stringify({ amount: transferAmt.toString(), randomness: rReceiver }),
-      userWallets[1].privateWallet.publicKey,
+      userWallets[1].encryption.publicKey,
     );
     const encNote2 = encryptMessage(
       JSON.stringify({ amount: change.toString(), randomness: rChange }),
-      userWallets[0].privateWallet.publicKey,
+      userWallets[0].encryption.publicKey,
     );
     const encNote3 = encryptMessage(
       JSON.stringify({ amount: fee.toString(), randomness: rRelayer }),
-      relayerWallet.privateWallet.publicKey,
+      relayerWallet.encryption.publicKey,
     );
 
     console.log(`\nSubmitting TRANSFER tx (relayer) to ${NET_LABEL}...`);
@@ -987,7 +1069,7 @@ async function main() {
     const spentNull = emittedNullifierEvents[0].nullifier;
     let threw = false;
     try {
-      const fakeC = await createCommitment("100", randomField(), userWallets[0].zk.publicKey);
+      const fakeC = await createCommitment("100", randomField(), aliceUC);
       const tx = new Transaction();
       tx.moveCall({
         target: `${PACKAGE_ID}::pool::transfer`,
@@ -1042,10 +1124,10 @@ async function main() {
     const rChange  = randomField();
     const rRelayer = randomField();
     const changeCmx  = change > 0n
-      ? await createCommitment(change.toString(),   rChange,  userWallets[1].zk.publicKey)
+      ? await createCommitment(change.toString(),   rChange,  bobUC)
       : null;
     const relayerCmx = fee > 0n
-      ? await createCommitment(fee.toString(),      rRelayer, relayerWallet.zk.publicKey)
+      ? await createCommitment(fee.toString(),      rRelayer, relayerUC)
       : null;
 
     // Convert Bob's Sui address to a BN254 scalar field element (mod P).
@@ -1057,7 +1139,7 @@ async function main() {
     console.log(`\nBob addr u256: ${receiverU256}, mod P: ${receiverDecimal}`);
 
     const { calldata: { proofBytes }, nullifier } = await proveWithdraw(
-      userWallets[1], relayerWallet, receiverDecimal,
+      userWallets[1], relayerUC, receiverDecimal,
       inputNote, state, withdrawAmt,
       changeCmx  ? { amount: change.toString(),   randomness: rChange,  commitment: changeCmx.decimal  } : null,
       relayerCmx ? { amount: fee.toString(),       randomness: rRelayer, commitment: relayerCmx.decimal } : null,
@@ -1065,11 +1147,11 @@ async function main() {
 
     const encNote1 = encryptMessage(
       JSON.stringify({ amount: change.toString(), randomness: rChange }),
-      userWallets[1].privateWallet.publicKey,
+      userWallets[1].encryption.publicKey,
     );
     const encNote2 = encryptMessage(
       JSON.stringify({ amount: fee.toString(), randomness: rRelayer }),
-      relayerWallet.privateWallet.publicKey,
+      relayerWallet.encryption.publicKey,
     );
 
     const bobBalBefore = await getSuiBalance(bobAddress);
@@ -1155,15 +1237,15 @@ async function main() {
   await test("Poseidon domain-separator consistency (off-chain smoke test)", async () => {
     const poseidon = await getPoseidon();
     const sk = "12345678901234567890";
-    const pk = poseidon.F.toString(poseidon([BigInt(3), BigInt(sk)]));
-    assert(BigInt(pk) > 0n, "PK must be non-zero");
-    const c  = (await createCommitment("100000000", "999888777", pk)).decimal;
+    const uc = poseidon.F.toString(poseidon([BigInt("1234"), BigInt("5678"), BigInt("91011")]));
+    assert(BigInt(uc) > 0n, "user commitment must be non-zero");
+    const c  = (await createCommitment("100000000", "999888777", uc)).decimal;
     assert(BigInt(c) > 0n, "Commitment must be non-zero");
     const n  = poseidon.F.toString(poseidon([BigInt(2), BigInt(c), BigInt("999888777"), BigInt(sk)]));
     assert(BigInt(n) > 0n, "Nullifier must be non-zero");
-    const c2 = (await createCommitment("100000000", "999888778", pk)).decimal;
+    const c2 = (await createCommitment("100000000", "999888778", uc)).decimal;
     assert(c !== c2, "Different r must yield different commitment");
-    console.log(`\n   sk=${sk} pk=${pk} cmx=${c} nullifier=${n}`);
+    console.log(`\n   sk=${sk} uc=${uc} cmx=${c} nullifier=${n}`);
   });
 
   // ─── TEST 14 ───────────────────────────────────────────────────────────

@@ -53,12 +53,12 @@ module noid::verifier {
     /// We store bytes (not parsed points) so the resource can be updated
     /// without redeploying the module.
     struct VerificationKeys has key {
-        // Deposit circuit (4 public signals → 5 IC points)
+        // Deposit circuit (5 public signals → 6 IC points)
         dep_alpha: vector<u8>,   // G1, 64 bytes
         dep_beta:  vector<u8>,   // G2, 128 bytes
         dep_gamma: vector<u8>,   // G2, 128 bytes
         dep_delta: vector<u8>,   // G2, 128 bytes
-        dep_ic:    vector<u8>,   // 5 * 64 = 320 bytes
+        dep_ic:    vector<u8>,   // 6 * 64 = 384 bytes
 
         // Transfer circuit (19 public signals → 20 IC points)
         tra_alpha: vector<u8>,
@@ -159,7 +159,7 @@ module noid::verifier {
     // ─────────────────────────────────────────────────────────────────────────
 
     /// Verify a deposit proof.
-    /// public_signals = [depositAmount, c1, c2, relayerZkPubkey]  (4 signals)
+    /// public_signals = [depositAmount, c1, c2, c2_enabled, relayerCommitment]  (5 signals)
     public fun verify_deposit(
         vks_addr:       address,
         a_bytes:        &vector<u8>,
@@ -168,7 +168,7 @@ module noid::verifier {
         public_signals: &vector<u256>,
     ): bool acquires VerificationKeys {
         assert!(exists<VerificationKeys>(vks_addr), E_NOT_INITIALIZED);
-        assert!(vector::length(public_signals) == 4, E_BAD_SIGNAL_COUNT);
+        assert!(vector::length(public_signals) == 5, E_BAD_SIGNAL_COUNT);
         let vks = borrow_global<VerificationKeys>(vks_addr);
         groth16_verify(
             &vks.dep_alpha, &vks.dep_beta, &vks.dep_gamma, &vks.dep_delta, &vks.dep_ic,
