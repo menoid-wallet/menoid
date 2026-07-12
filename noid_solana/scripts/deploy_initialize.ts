@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import bs58 from "bs58";
-import { generatePrivateWallet } from "../tests/helpers/wallets";
+import { deriveNoidWallet } from "../tests/helpers/wallets";
 import { toBE32 } from "../tests/helpers/proofs";
 
 // Manual dotenv loading
@@ -28,7 +28,8 @@ const PROGRAM_ID = "3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC";
 // reused across redeploys, we derive a FRESH, deterministic admin keypair from
 // the deployer key so each fresh deployment gets a brand-new (empty) pool PDA
 // instead of colliding with a previous, populated pool.
-const POOL_ADMIN_SEED_TAG = "menoid-solana-pool-admin-v2";
+// v3: user-commitment architecture (register onchain).
+const POOL_ADMIN_SEED_TAG = "menoid-solana-pool-admin-v3";
 
 function deriveAdminKeypair(deployerKey: string): anchor.web3.Keypair {
   const seed = crypto.createHash("sha256").update(deployerKey + POOL_ADMIN_SEED_TAG).digest();
@@ -58,12 +59,18 @@ async function main() {
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
   anchor.setProvider(provider);
 
-  // 1. Derive relayer ZK wallet (seed = deployer key + "Menoid wallet"). This is
-  //    the key the backend + clients must use to build/decrypt relayer fee notes.
-  const relayerWallet = await generatePrivateWallet(deployerKey + "Menoid wallet");
-  console.log("\n========== DERIVED RELAYER ZK WALLET ==========");
-  console.log(JSON.stringify(relayerWallet.zk, null, 2));
-  console.log("===============================================\n");
+  // 1. Derive the relayer noid keys from the REAL deployer wallet.
+  //    The relayer signs "menoid_Wallet"; its user commitment is
+  //    Poseidon(address mod p, spendPk.x, spendPk.y).
+  const relayerWallet = await deriveNoidWallet(deployerKeypair);
+  console.log("\n========== RELAYER NOID WALLET ==========");
+  console.log(JSON.stringify({
+    address: relayerWallet.address,
+    spendPublicKey: relayerWallet.spend.publicKey,
+    encryptionPublicKey: relayerWallet.encryption.publicKey,
+    userCommitment: relayerWallet.userCommitment,
+  }, null, 2));
+  console.log("=========================================\n");
 
   // 2. Load program IDL
   const idlPath = path.join(__dirname, "../target/idl/noid_solana.json");
@@ -86,7 +93,7 @@ async function main() {
   console.log(`Pool State PDA: ${poolStatePda.toBase58()}`);
   console.log(`Vault PDA:      ${vaultPda.toBase58()}`);
 
-  const relayerZkPubkeyBytes = Array.from(toBE32(relayerWallet.zk.publicKey));
+  const relayerCommitmentBytes = Array.from(toBE32(relayerWallet.userCommitment));
 
   // Check if this (admin) pool is already initialized
   let alreadyInitialized = false;
@@ -114,7 +121,7 @@ async function main() {
     }
 
     const tx = await program.methods
-      .initialize(relayerZkPubkeyBytes, deployerKeypair.publicKey)
+      .initialize(relayerCommitmentBytes, deployerKeypair.publicKey)
       .accounts({
         admin: adminKeypair.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
@@ -128,24 +135,49 @@ async function main() {
   } else {
     console.log("Updating relayer configuration via set_relayer...");
     const tx = await program.methods
-      .setRelayer(relayerZkPubkeyBytes, deployerKeypair.publicKey)
+      .setRelayer(relayerCommitmentBytes, deployerKeypair.publicKey)
       .accounts({ admin: adminKeypair.publicKey })
       .signers([adminKeypair])
       .rpc();
     console.log(`set_relayer successful! Tx signature: ${tx}`);
   }
 
+  // 4. Register the relayer wallet (one-time; "already in use" on re-runs is fine)
+  const [registrationPda] = anchor.web3.PublicKey.findProgramAddressSync(
+    [Buffer.from("registration"), deployerKeypair.publicKey.toBuffer()],
+    programId
+  );
+  try {
+    const tx = await program.methods
+      .register(relayerCommitmentBytes)
+      .accounts({
+        user: deployerKeypair.publicKey,
+        registration: registrationPda,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([deployerKeypair])
+      .rpc();
+    console.log(`Relayer registered! Tx signature: ${tx}`);
+  } catch (err: any) {
+    console.log("Relayer registration skipped (already registered)");
+  }
+  const registration = await program.account.registration.fetch(registrationPda);
+  const onchainUC = BigInt("0x" + Buffer.from(registration.userCommitment).toString("hex")).toString();
+  if (onchainUC !== relayerWallet.userCommitment) {
+    throw new Error(`On-chain relayer registration mismatch: ${onchainUC} != ${relayerWallet.userCommitment}`);
+  }
+
   // Fetch and print final state
   const poolState = await program.account.poolState.fetch(poolStatePda);
   console.log("\n========== FINAL ON-CHAIN POOL STATE ==========");
-  console.log(`Program ID:      ${PROGRAM_ID}`);
-  console.log(`Pool State PDA:  ${poolStatePda.toBase58()}`);
-  console.log(`Vault PDA:       ${vaultPda.toBase58()}`);
-  console.log(`Admin:           ${poolState.admin.toBase58()}`);
-  console.log(`Relayer Address: ${poolState.relayerAddress.toBase58()}`);
-  console.log(`Relayer ZK pk:   ${BigInt("0x" + Buffer.from(poolState.relayerZkPubkey).toString("hex")).toString(10)}`);
-  console.log(`Locked Balance:  ${poolState.lockedBalance.toString()} lamports`);
-  console.log(`Next Index:      ${poolState.nextIdx.toString()}`);
+  console.log(`Program ID:         ${PROGRAM_ID}`);
+  console.log(`Pool State PDA:     ${poolStatePda.toBase58()}`);
+  console.log(`Vault PDA:          ${vaultPda.toBase58()}`);
+  console.log(`Admin:              ${poolState.admin.toBase58()}`);
+  console.log(`Relayer Address:    ${poolState.relayerAddress.toBase58()}`);
+  console.log(`Relayer Commitment: ${BigInt("0x" + Buffer.from(poolState.relayerCommitment).toString("hex")).toString(10)}`);
+  console.log(`Locked Balance:     ${poolState.lockedBalance.toString()} lamports`);
+  console.log(`Next Index:         ${poolState.nextIdx.toString()}`);
   console.log("===============================================\n");
 }
 

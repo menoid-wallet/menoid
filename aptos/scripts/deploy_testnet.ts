@@ -8,7 +8,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { generatePrivateWallet } from "../helpers/wallets";
+import { deriveNoidWallet } from "../helpers/wallets";
 
 // Manual dotenv loading
 function loadEnv() {
@@ -99,13 +99,18 @@ async function main() {
   const deployer = Account.fromPrivateKey({ privateKey: deployerPrivateKey });
   console.log(`Deployer address: ${deployer.accountAddress.toString()}`);
   
-  // 1. Generate private wallet ZK keypair. Seed = deployer key + "Menoid wallet"
-  //    — the same convention used by the Solana/Sui deploys and the backend, so
-  //    the relayer fee-note key is consistent across chains.
-  console.log("\nGenerating private wallet ZK keypair...");
-  const relayerWallet = await generatePrivateWallet(deployerPkHex + "Menoid wallet");
-  console.log("Derived ZK Relayer Wallet:");
-  console.log(JSON.stringify(relayerWallet, null, 2));
+  // 1. Derive the relayer noid keys from the REAL deployer wallet.
+  //    The relayer signs "menoid_Wallet"; its user commitment is
+  //    Poseidon(address mod p, spendPk.x, spendPk.y) — same convention on all chains.
+  console.log("\nDeriving relayer noid keys...");
+  const relayerWallet = await deriveNoidWallet(deployer);
+  console.log("Relayer noid wallet:");
+  console.log(JSON.stringify({
+    address: relayerWallet.address,
+    spendPublicKey: relayerWallet.spend.publicKey,
+    encryptionPublicKey: relayerWallet.encryption.publicKey,
+    userCommitment: relayerWallet.userCommitment,
+  }, null, 2));
   
   // Helper to execute and wait for transactions
   const execTx = async (funcName: string, args: any[]): Promise<void> => {
@@ -198,9 +203,9 @@ async function main() {
     // 4. Initialize pool state
     console.log("\n[3/4] Initializing Pool State...");
     const poolArgs = [
-      BigInt(relayerWallet.zk.publicKey),
+      BigInt(relayerWallet.userCommitment),
       deployer.accountAddress.toString(),
-      toMoveArg(Buffer.from("noid-pool-seed-v2")),
+      toMoveArg(Buffer.from("noid-pool-seed-v3")),
     ];
     
     await execTx("pool::initialize", poolArgs);
@@ -210,12 +215,35 @@ async function main() {
     console.log("\nUpdating Relayer State on-chain...");
     const poolArgs = [
       deployer.accountAddress.toString(), // pool_addr
-      BigInt(relayerWallet.zk.publicKey),  // relayer_zk_pubkey
+      BigInt(relayerWallet.userCommitment), // relayer user commitment
       deployer.accountAddress.toString(), // relayer_address
     ];
     await execTx("pool::set_relayer", poolArgs);
     console.log("Pool relayer successfully updated!");
   }
+
+  // 5. Register the relayer wallet (one-time; failure means already registered)
+  console.log("\n[4/4] Registering relayer wallet...");
+  try {
+    await execTx("pool::register", [
+      deployer.accountAddress.toString(),
+      BigInt(relayerWallet.userCommitment),
+    ]);
+    console.log("Relayer registered!");
+  } catch (err: any) {
+    console.log("Relayer registration skipped (already registered)");
+  }
+  const [onchainUC] = await aptos.view({
+    payload: {
+      function: `${moduleAddr}::pool::registered_commitment`,
+      typeArguments: [],
+      functionArguments: [deployer.accountAddress.toString(), deployer.accountAddress.toString()],
+    },
+  });
+  if (BigInt(onchainUC as string) !== BigInt(relayerWallet.userCommitment)) {
+    throw new Error(`On-chain relayer registration mismatch: ${onchainUC}`);
+  }
+  console.log("Relayer registration verified on-chain.");
 }
 
 main().catch((err) => {

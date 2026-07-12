@@ -1,64 +1,103 @@
 ================================================================================
+        MENOID TESTNET DEPLOYMENTS — user-commitment (register) architecture
+================================================================================
+Architecture (all chains):
+  - Users keep their REAL wallet address. The wallet signs the message
+    "menoid_Wallet"; from that signature a BabyJubJub spending keypair and an
+    encryption keypair are derived.
+  - user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
+  - One-time on-chain registration: register(user_commitment). Re-register fails.
+  - Note commitment = Poseidon(1, amount, r, user_commitment)
+  - Nullifier       = Poseidon(2, commitment, r, spend_sk)
+  - Deposit public signals: [amount, c1, c2, c2_enabled, relayerCommitment]
+    (C2 = relayer fee note, optional / may be zero)
+  - relayerCommitment = the relayer's own user commitment.
+
+================================================================================
+                                MONAD (TESTNET)
+================================================================================
+PoseidonT3 Library:  0xa83bae4656047F030BA1dd6Cec2524B95996196b
+PoseidonHasher:      0x222b160E8d5Bfb745c23128C4E886B08e118c168
+DepositVerifier:     0x11564fFE3887Ed9048985062a2306898E9AeCc57
+TransferVerifier:    0x6E5f75aAc6371366E18A8f24b4e987dc38728457
+WithdrawVerifier:    0x01383197ee10432b5A879f126E8a416068B96751
+NoidPool:            0x2A90ba0E96cb282D908f59AcCb52A85E31943900
+Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
+Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
+  (bytes32: 0x1344a6df713eb690ad6ff1ba512be5b0b03074c7505563936f5aecccab70fa33)
+
+================================================================================
+                             BASE SEPOLIA (TESTNET)
+================================================================================
+PoseidonT3 Library:  0x2e1a8D27829cD7b18C6838CD10e37267da4d65B1
+PoseidonHasher:      0x31c2A4DCe7563E007f5F81Bd212bbDceE5964752
+DepositVerifier:     0xCa9D63A1c7b102E46771640D28FA032BAA3dd3b5
+TransferVerifier:    0xC08C5F8E0cbb8Cb82c9F382E2356d3640404bf1E
+WithdrawVerifier:    0x6582c1659954B6c503cD4DeC01f47612Bb49c70F
+NoidPool:            0x2A34aB5d909E755371B060294B1274A9089935e7
+Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
+Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
+
+================================================================================
+                            ETHEREUM SEPOLIA (TESTNET)
+================================================================================
+PoseidonT3 Library: 0x6C8090422f8cD0C45023BB45ab100FC2a71a3eDc
+PoseidonHasher: 0x9122992fba2BDBaE6432E187Bf6fA184BBa33138
+DepositVerifier: 0x5160E1cAF6E8D53cF7Dc9225Ca39b745A9Ea7559
+TransferVerifier: 0x7235FbeBBc994CCa4e6EDACa6Fd7DA5977Aa3430
+WithdrawVerifier: 0xfBF41daaFA0752EFbe364E0f01609BA31F3fA893
+NoidPool: 0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60
+Relayer registered: 0x1344a6df713eb690ad6ff1ba512be5b0b03074c7505563936f5aecccab70fa33
+
+================================================================================
                                 SOLANA (DEVNET)
 ================================================================================
-Program ID: 3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC
-Pool State PDA: BUEFPcHFn62xVdvM9SfmXeSyczCCjdLC2Ha6s1uDdEsb
-Vault PDA: E9wc8Zp9jnWKzSEHBmKu44gq563VZdSp29fUtxWpJNXn
-Pool Admin (PDA owner, derived from deployer): EGx6RbBzcAYLzzDC2iWXF9N5fdGaHynQArJQB6j699ic
-Deployer Address (Relayer Address): 7s3XTUSX4VCQw7QKfba4oGUh5bE9n1gqVNGFrNGrnFW4
+Program ID:          3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC
+Pool State PDA:      285h75BTpGyFUCPoyFucNZKVfPYVv8msDEaEceTTETZj
+Vault PDA:           2yorEgfekG4qdMgc2vmifhZmRjarTnpQBAhpikCiNWE4
+Pool Admin:          A9gJaBaAf5QdP4wuuYw46kiDXP1rFKCd9DLqZMYzwwwW
+  (deterministic, seed tag "menoid-solana-pool-admin-v3")
+Relayer Address:     7s3XTUSX4VCQw7QKfba4oGUh5bE9n1gqVNGFrNGrnFW4
+Relayer Commitment:  9379914363607614888841477418738034063542225044724940624927279910002672104395
+Registration PDA:    seeds [b"registration", wallet_pubkey]
 
 Notes:
-  - Program upgraded in place to the latest (permissionless) code. Anyone may call
-    deposit/transfer/withdraw; the Merkle root is recomputed on-chain.
-  - A fresh PoolState PDA was initialized under a new deterministic admin (the prior
-    deployer-admin pool was already populated). The deployer remains the relayer.
-
-Derived ZK Relayer Wallet (seed = SOLANA_DEPLOYER_PRIVATE_KEY + "Menoid wallet"):
-  - Private Wallet Address: J5JNvWK3LGeJA9ijqyorF6Cto7BojsztDPdwuBp1BvBm
-  - Private Key (base58, 64-byte secret key): 3sTpohvF9kvKnQRDic7vHcnDGjJDYtPpXwiFwHsYyZJLXmpXSAeEenvg8zTyGbL69WRfX6pWN1hTXbzzgGskGHaK
-  - Public Key (base58): J5JNvWK3LGeJA9ijqyorF6Cto7BojsztDPdwuBp1BvBm
-  - ZK Secret Key (sk): 64929929974147655047382553993497321761420514642588663010952407153386043861354
-  - ZK Public Key (pk): 3852964350609267225049219726772570519019263320437084078553963579031855167714
+  - Program upgraded in place with the register/user-commitment architecture.
+  - Fresh PoolState PDA under the v3 admin (prior pools contain old-format notes).
+  - deposit's commitment2 account is OPTIONAL (pass null when C2 == 0).
 
 ================================================================================
                                  SUI (TESTNET)
 ================================================================================
-Package ID: 0x0612ba9aec07eebbf0940b2f3334a92dc02131bca754f8d7cda2b42376a6b6ee
-PoolState Object ID: 0xfe2b2ee932de17bee89e4fb2526d3a08e7b38c283bf11b786e7450b63a7784ee
-VerifierConfig Object ID: 0x6eeab199388238932894d200c575fd39aa0b5014d5b2cb371b5573d0b7700a9b
-Deployer Address (Relayer Address): 0xe80cb32c8d5940d1dabc8e7b2463c8a0f4fd367345b969e9ce6850d5fec2ab80
+Package ID:          0x198edf8b1081a2ddccd0fa681b39d564493a774bfdd2218af2b05aabd52d0a4d
+PoolState Object:    0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c
+VerifierConfig:      0x2dafdd674032eb3ce4f9266078bee9faefbf3337379d6a3dfd04d3ee7afab287
+Relayer Address:     0xe80cb32c8d5940d1dabc8e7b2463c8a0f4fd367345b969e9ce6850d5fec2ab80
+Relayer Commitment:  20953428617304958278032008812831888955156352542017296366999977213860580495022
 
 Notes:
-  - Freshly published package + fresh shared PoolState/VerifierConfig objects.
-    Permissionless: anyone may call deposit/transfer/withdraw; root recomputed on-chain.
-
-Derived ZK Relayer Wallet (seed = SUI_DEPLOYER_SECRET_KEY + "Menoid wallet"):
-  - Private Wallet Address: 0xa3594864af4b5b55c723c2dd7a6b0d1d2d6219486a0ffd9eeaf700d6f0d9f7c5
-  - Private Key (Bech32): suiprivkey1qppdn899qwlazxkn6fex2h39uydcz8tjcguzs4spryprr738aq7f7vc08hd
-  - Public Key (base64): bSzVaZDb7tNaUw7O7GHVTh6/2GM9cFxSt4PSX7fr9pc=
-  - ZK Secret Key (sk): 30237134940768636176032892220363555809120385420517414396352469629151929187487
-  - ZK Public Key (pk): 2607370412129534889181438450466258087890990305867284730705849757538967138242
+  - Fresh package (old one at 0x0612ba9a... is the incompatible previous version).
+  - registered map is a Table<address, u256> on PoolState; read a user's
+    commitment via a dynamic-field lookup on the table object.
+  - RPC note: https://fullnode.testnet.sui.io:443 JSON-RPC returns 404 now;
+    use https://rpc-testnet.suiscan.xyz:443 (works with @mysten/sui 1.45).
 
 ================================================================================
                                 APTOS (TESTNET)
 ================================================================================
-Module Address (noid, object code deployment): 0x3d4f846b4023cba619dc1e1523b0a80716887da90cbdcdaa3e50f453a9b915cc
-Pool Address (PoolState resource account holder = deployer): 0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
-Pool Resource Account (holds locked APT): 0x95d0e7ae768af7e34ed3d0daf84ba4130af5b655abbeb56e74d732802c810a95
-Deployer Address (Relayer Address): 0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
+Module Address:      0xcaf04754afdea6523026a6bc9de0199f5665f4399e471ef84ae4456de01f546c
+  (fresh object code deployment; prior object 0x3d4f846b... is the old version)
+Pool Address:        0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
+  (PoolState resource lives on the deployer account; pool seed "noid-pool-seed-v3")
+Pool Resource Acct:  0x073bc5497e54f4cd2bbe1211e4de5ab61e9717ebfcbbd714f22e58306be38489
+  (holds the locked APT)
+Relayer Address:     0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
+Relayer Commitment:  13774348722495564069889615312880436665823221519290869157567563219868191293670
 
 Notes:
-  - New code published to a fresh OBJECT address owned by the deployer (the prior
-    deployer-account module was the old, incompatible version and cannot be upgraded).
-  - The pool_addr passed to every entry function is the deployer address (where the
-    PoolState resource lives); the module/function prefix is the object address above.
-  - Mutex flow on the backend: deposit/transfer/withdraw queue commitments, then
-    pool::update_root is called once per commitment with a `new_root` ZK proof.
-
-Derived ZK Relayer Wallet (seed = APTOS_DEPLOYER_PRIVATE_KEY + "Menoid wallet"):
-  - Private Wallet Address: 0xda877ce23180dce07c4984a11438db23991dfa04ae2647b319e7e2206ccce888
-  - Private Key (hex, 32-byte seed): 0xfe00b4da2cdc88227fedffff16c4943899dff5e4204a8c183ccc21d906c94f1f
-  - Public Key (hex): 0xd5f7279fa985510a70bec6407a0f26ffed4f7eeb48352f2b47dfa31f77cf22b3
-  - ZK Secret Key (sk): 114888711736484920731347037763501914882927833375504202836958034307348660047647
-  - ZK Public Key (pk): 17810881700342760866141180582042364935095449631086251734257466560551763189486
+  - Entry functions are called as <module_addr>::pool::<fn> with pool_addr =
+    the Pool Address above (first argument).
+  - deposit/transfer/withdraw queue commitments; pool::update_root is called
+    once per pending commitment with a new_root ZK proof (unchanged flow).
+  - registered map: pool::is_registered / pool::registered_commitment views.
 ================================================================================
