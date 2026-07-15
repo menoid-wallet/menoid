@@ -1,11 +1,11 @@
 {
     "network": "monad",
-    "poseidonT3": "0xa83bae4656047F030BA1dd6Cec2524B95996196b",
-    "poseidonHasher": "0x222b160E8d5Bfb745c23128C4E886B08e118c168",
-    "depositVerifier": "0x11564fFE3887Ed9048985062a2306898E9AeCc57",
-    "transferVerifier": "0x6E5f75aAc6371366E18A8f24b4e987dc38728457",
-    "withdrawVerifier": "0x01383197ee10432b5A879f126E8a416068B96751",
-    "noidPool": "0x2A90ba0E96cb282D908f59AcCb52A85E31943900",
+    "poseidonT3": "0x67f955F8130ccd99F6Bc09CAd761781dd96b77f9",
+    "poseidonHasher": "0x152fe8cf3796dE9070C2044E9Ef30e2EA899c852",
+    "depositVerifier": "0x9Fc8BEA01E0429E1FFF9C29361885593630d6A47",
+    "transferVerifier": "0x28b1c1e4F995947aE257C7AbF8179f45911c4Dff",
+    "withdrawVerifier": "0x6EAe5E30cf8EaEffBBf6DC7eC6E38003E742109b",
+    "noidPool": "0x4327bD4A8DA693517766699e21109BF21764CB53",
     "relayer": {
         "address": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
         "userCommitment": {

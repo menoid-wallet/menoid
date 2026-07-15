@@ -1,6 +1,7 @@
 pragma circom 2.1.0;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
+include "./range_check.circom";
 
 /**
  * Deposit
@@ -40,6 +41,19 @@ template DepositProof() {
 
     // enabled flag constraint
     c2_enabled * (1 - c2_enabled) === 0;
+
+    // amount range constraints
+    // depositAmount === a1 + fee is a field equation. Without a bound on the
+    // amounts it is satisfiable by wrapping around the prime (pick a huge a1,
+    // then a2 = depositAmount - a1 mod p), which mints a note of arbitrary
+    // value from a dust deposit. Bounding both to 128 bits keeps a1 + fee far
+    // below the prime, so the equation holds over the integers.
+    // 128 matches the bound transfer/withdraw enforce on the same amounts.
+    component a1Range = RangeCheck(128);
+    a1Range.in <== a1;
+
+    component a2Range = RangeCheck(128);
+    a2Range.in <== a2;
 
     component hasher1 = Poseidon(4);
     hasher1.inputs[0] <== 1; //<--- domain seperator

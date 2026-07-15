@@ -1,6 +1,9 @@
 ================================================================================
         MENOID TESTNET DEPLOYMENTS — user-commitment (register) architecture
 ================================================================================
+Last updated: 2026-07-15 — deposit circuit range-check fix rolled out to all 6
+chains. See "DEPOSIT RANGE-CHECK FIX" at the bottom for what changed and why.
+
 Architecture (all chains):
   - Users keep their REAL wallet address. The wallet signs the message
     "menoid_Wallet"; from that signature a BabyJubJub spending keypair and an
@@ -12,42 +15,56 @@ Architecture (all chains):
   - Deposit public signals: [amount, c1, c2, c2_enabled, relayerCommitment]
     (C2 = relayer fee note, optional / may be zero)
   - relayerCommitment = the relayer's own user commitment.
+  - All amounts are range-constrained to 128 bits in EVERY circuit
+    (deposit, transfer, withdraw).
 
 ================================================================================
                                 MONAD (TESTNET)
 ================================================================================
-PoseidonT3 Library:  0xa83bae4656047F030BA1dd6Cec2524B95996196b
-PoseidonHasher:      0x222b160E8d5Bfb745c23128C4E886B08e118c168
-DepositVerifier:     0x11564fFE3887Ed9048985062a2306898E9AeCc57
-TransferVerifier:    0x6E5f75aAc6371366E18A8f24b4e987dc38728457
-WithdrawVerifier:    0x01383197ee10432b5A879f126E8a416068B96751
-NoidPool:            0x2A90ba0E96cb282D908f59AcCb52A85E31943900
+Chain ID:            10143
+RPC:                 https://testnet-rpc.monad.xyz
+PoseidonT3 Library:  0x67f955F8130ccd99F6Bc09CAd761781dd96b77f9
+PoseidonHasher:      0x152fe8cf3796dE9070C2044E9Ef30e2EA899c852
+DepositVerifier:     0x9Fc8BEA01E0429E1FFF9C29361885593630d6A47
+TransferVerifier:    0x28b1c1e4F995947aE257C7AbF8179f45911c4Dff
+WithdrawVerifier:    0x6EAe5E30cf8EaEffBBf6DC7eC6E38003E742109b
+NoidPool:            0x4327bD4A8DA693517766699e21109BF21764CB53
+NoidPool deploy blk: 45044210
 Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
 Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
   (bytes32: 0x1344a6df713eb690ad6ff1ba512be5b0b03074c7505563936f5aecccab70fa33)
 
+Notes:
+  - RPC caps eth_getLogs to a 100-BLOCK RANGE. Any event scanning (backend
+    indexer, wallet note discovery) must page in <=100 block windows.
+
 ================================================================================
                              BASE SEPOLIA (TESTNET)
 ================================================================================
-PoseidonT3 Library:  0x2e1a8D27829cD7b18C6838CD10e37267da4d65B1
-PoseidonHasher:      0x31c2A4DCe7563E007f5F81Bd212bbDceE5964752
-DepositVerifier:     0xCa9D63A1c7b102E46771640D28FA032BAA3dd3b5
-TransferVerifier:    0xC08C5F8E0cbb8Cb82c9F382E2356d3640404bf1E
-WithdrawVerifier:    0x6582c1659954B6c503cD4DeC01f47612Bb49c70F
-NoidPool:            0x2A34aB5d909E755371B060294B1274A9089935e7
+Chain ID:            84532
+PoseidonT3 Library:  0x9122992fba2BDBaE6432E187Bf6fA184BBa33138
+PoseidonHasher:      0x5160E1cAF6E8D53cF7Dc9225Ca39b745A9Ea7559
+DepositVerifier:     0x7235FbeBBc994CCa4e6EDACa6Fd7DA5977Aa3430
+TransferVerifier:    0xfBF41daaFA0752EFbe364E0f01609BA31F3fA893
+WithdrawVerifier:    0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60
+NoidPool:            0x768bE43037Be62Ca081F7ccBecf49795CF25CE43
+NoidPool deploy blk: 44163129
 Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
 Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
 
 ================================================================================
                             ETHEREUM SEPOLIA (TESTNET)
 ================================================================================
-PoseidonT3 Library: 0x6C8090422f8cD0C45023BB45ab100FC2a71a3eDc
-PoseidonHasher: 0x9122992fba2BDBaE6432E187Bf6fA184BBa33138
-DepositVerifier: 0x5160E1cAF6E8D53cF7Dc9225Ca39b745A9Ea7559
-TransferVerifier: 0x7235FbeBBc994CCa4e6EDACa6Fd7DA5977Aa3430
-WithdrawVerifier: 0xfBF41daaFA0752EFbe364E0f01609BA31F3fA893
-NoidPool: 0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60
-Relayer registered: 0x1344a6df713eb690ad6ff1ba512be5b0b03074c7505563936f5aecccab70fa33
+Chain ID:            11155111
+PoseidonT3 Library:  0x1e889f751ee2af91e2a4F629722Eb9F5adfEA7A0
+PoseidonHasher:      0x4AC55619Ea2A84AFA73E542e7b580245901f9CD2
+DepositVerifier:     0xf13A1bC1256C2Caf505786Fd66eBcd61ef0205de
+TransferVerifier:    0xf266448520D9239ebcd2e68941FF76ED358F0e2A
+WithdrawVerifier:    0x8D93f391e2edC1C6f9C28be8bE0229d07C9f25d8
+NoidPool:            0xEf758FB0606AaB7fbAf96F4772883B970e8436AE
+NoidPool deploy blk: 11275852
+Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
+Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
 
 ================================================================================
                                 SOLANA (DEVNET)
@@ -62,9 +79,14 @@ Relayer Commitment:  93799143636076148888414774187380340635422250447249406249272
 Registration PDA:    seeds [b"registration", wallet_pubkey]
 
 Notes:
-  - Program upgraded in place with the register/user-commitment architecture.
-  - Fresh PoolState PDA under the v3 admin (prior pools contain old-format notes).
-  - deposit's commitment2 account is OPTIONAL (pass null when C2 == 0).
+  - ADDRESSES UNCHANGED. The verifying keys are compiled into the program
+    (programs/noid_solana/src/verifying_keys.rs), so the range-check fix was
+    rolled out by UPGRADING the program in place at the same Program ID
+    (upgrade authority = the relayer/deployer key).
+  - Pool was empty (next_idx = 0, 0 lamports locked) so it was kept as-is.
+  - deposit's `commitment2` account is OPTIONAL (pass null when C2 == 0).
+  - Regenerate verifying_keys.rs with `node app/parse_vk.js` — it reads the
+    VKs from ../../aptos/zk_build (Solana shares Aptos's circuit artifacts).
 
 ================================================================================
                                  SUI (TESTNET)
@@ -76,17 +98,20 @@ Relayer Address:     0xe80cb32c8d5940d1dabc8e7b2463c8a0f4fd367345b969e9ce6850d5f
 Relayer Commitment:  20953428617304958278032008812831888955156352542017296366999977213860580495022
 
 Notes:
-  - Fresh package (old one at 0x0612ba9a... is the incompatible previous version).
+  - ADDRESSES UNCHANGED. VKs live in the shared VerifierConfig object, so the
+    fix was rolled out with `scripts/update_vks_testnet.ts`, which calls
+    verifier::reinitialize_vks (admin-gated) — no republish needed.
   - registered map is a Table<address, u256> on PoolState; read a user's
     commitment via a dynamic-field lookup on the table object.
   - RPC note: https://fullnode.testnet.sui.io:443 JSON-RPC returns 404 now;
     use https://rpc-testnet.suiscan.xyz:443 (works with @mysten/sui 1.45).
+  - The testnet faucet rate-limits aggressively; tests/noid_pool.test.ts needs
+    it to fund Alice/Bob and will fail with "Too Many Requests" when throttled.
 
 ================================================================================
                                 APTOS (TESTNET)
 ================================================================================
 Module Address:      0xcaf04754afdea6523026a6bc9de0199f5665f4399e471ef84ae4456de01f546c
-  (fresh object code deployment; prior object 0x3d4f846b... is the old version)
 Pool Address:        0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
   (PoolState resource lives on the deployer account; pool seed "noid-pool-seed-v3")
 Pool Resource Acct:  0x073bc5497e54f4cd2bbe1211e4de5ab61e9717ebfcbbd714f22e58306be38489
@@ -95,9 +120,112 @@ Relayer Address:     0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2e
 Relayer Commitment:  13774348722495564069889615312880436665823221519290869157567563219868191293670
 
 Notes:
-  - Entry functions are called as <module_addr>::pool::<fn> with pool_addr =
-    the Pool Address above (first argument).
+  - ADDRESSES UNCHANGED. VKs are a resource on the deployer account, so the fix
+    was rolled out with `scripts/update_vks_testnet.ts`, which calls
+    verifier::reinitialize_vks — no republish needed.
+  - MODULE ADDR != POOL ADDR on testnet (object-code deployment). Entry
+    functions are <module_addr>::pool::<fn> with pool_addr = the Pool Address
+    above as the first argument. Only on localnet do the two coincide.
   - deposit/transfer/withdraw queue commitments; pool::update_root is called
     once per pending commitment with a new_root ZK proof (unchanged flow).
   - registered map: pool::is_registered / pool::registered_commitment views.
+
+================================================================================
+                          DEPOSIT RANGE-CHECK FIX (2026-07-15)
+================================================================================
+WHAT WAS WRONG
+  circuits/deposit_proof.circom never bounded its private amount inputs a1/a2
+  (identical file on all 4 chain codebases). Its only value constraint is
+
+      depositAmount === a1 + fee        // fee = c2_enabled * a2
+
+  which is a FIELD equation mod the BN254 prime p. With no range check it is
+  satisfiable by wrapping around p:
+
+      msg.value = 1 wei
+      a1 = 2^128 - 1
+      a2 = (1 - a1) mod p
+      => a1 + fee == 1 (mod p)  — proof verifies
+
+  uc1 is private and unconstrained, so the attacker locks the inflated note to
+  their own user commitment. 2^128-1 PASSES the RangeCheck(128) that
+  transfer/withdraw already applied to a_ins, so the note stayed spendable and
+  the pool could be drained. Transfer/withdraw were never affected.
+
+THE FIX
+  deposit_proof.circom now includes ./range_check.circom and constrains both
+  amounts to 128 bits, matching transfer/withdraw:
+
+      component a1Range = RangeCheck(128); a1Range.in <== a1;
+      component a2Range = RangeCheck(128); a2Range.in <== a2;
+
+  With both < 2^128, a1 + fee < 2^129 << p, so the equation holds over the
+  integers and wraparound is impossible. depositAmount needs no separate bound
+  since it is forced to equal a sum of two bounded values.
+  Circuit: 859 non-linear constraints (was ~603). Public signals unchanged (5).
+
+ROLLOUT
+  New trusted setup for the deposit circuit on every chain => new deposit zkey
+  + new deposit VK. Transfer/withdraw/new_root setups were NOT touched.
+    - EVM x3 : fresh full deployment (NoidPool stores `immutable
+               depositVerifier`, so the verifier cannot be swapped in place).
+               Old pools remain live on the OLD vulnerable verifier — do not
+               point anything at them.
+    - Solana : program upgraded in place (VK is compiled in), same Program ID.
+    - Aptos  : verifier::reinitialize_vks, same addresses.
+    - Sui    : verifier::reinitialize_vks, same addresses.
+
+VERIFIED
+    - EVM       : 11/11 localnet E2E, incl. a new regression test asserting the
+                  field-wrapping proof fails to witness ("Should reject a
+                  deposit proof that wraps the field to mint value").
+    - Solana    : 12/12 E2E green on the rebuilt program.
+    - Aptos     : real testnet deposit accepted
+                  0x68a13039545c5e8966f5ffdd4af771c8566c18a8a57104b89295522a178664c2
+    - Sui       : real testnet deposit accepted
+                  EZofJP6hgw6HWg1KAx2hY5aUZBSwXWjzifYGCyAoN9Kv
+    - The exploit proof no longer witnesses on any chain: it now dies on a2's
+      RangeCheck (Num2Bits assert), off-chain, before a proof is even produced.
+
+HOUSEKEEPING
+    - OLD (vulnerable) EVM pools, now abandoned:
+        Monad        0x2A90ba0E96cb282D908f59AcCb52A85E31943900  (had 2.501 MON)
+        Sepolia      0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60  (0)
+        BaseSepolia  0x2A34aB5d909E755371B060294B1274A9089935e7  (0)
+      All other chains were empty at migration time.
+
+    - The Aptos and Sui verification probes each deposited a small amount
+      (0.01 APT / 0.01 SUI) whose note randomness was discarded, so both notes
+      are unspendable and that dust is permanently locked. Each pool therefore
+      starts with ONE dead leaf at index 0 — harmless (it just fails to decrypt
+      for every wallet, like any note not addressed to you), but do not expect a
+      pristine empty tree there:
+        Aptos  leaf 0 = 7155101199236594775413476708341693853699049550140663794592129356023063714639
+        Sui    leaf 0 = 11208557736435266047033203116310416544347773260938304090463464328129726438078
+
+    - The Aptos probe also left its commitment QUEUED, which BLOCKS the pool
+      (deposit/transfer/withdraw all assert pending_commitments is empty —
+      E_PENDING_TASKS). Drained via pool::update_root; pending is back to 0 and
+      next_index = 1. Anything that submits an Aptos deposit outside the backend
+      route must drain the queue afterwards or the pool stays blocked:
+        node wallet/backend/drain_aptos_pending.js
+
+STATE RECONCILIATION (2026-07-15)
+  The backend treats its Mongo DB as the source of truth — no indexer scans the
+  chain (see poolIndexer.js / aptosIndexer.js / suiIndexer.js). So the DB must
+  hold exactly the leaves the chain holds, or every Merkle proof it builds is
+  against a root that does not exist on-chain. State is keyed by NETWORK NAME,
+  not pool address.
+
+  Done after the migration:
+    - monad / sepolia / base_sepolia : stale old-pool documents deleted
+                                       (wallet/backend/reset_network_state.js)
+    - aptos                          : pending queue drained + leaf recorded
+                                       (wallet/backend/drain_aptos_pending.js)
+    - sui                            : DB rebuilt from on-chain NoteCreatedEvent
+                                       (wallet/backend/reconcile_sui_state.js)
+    - solana                         : already consistent (both empty)
+
+  Verified: DB leaf count == chain leaf count on all 6 networks, and the Aptos
+  DB root matches pool::current_root exactly.
 ================================================================================

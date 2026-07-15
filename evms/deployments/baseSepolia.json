@@ -1,11 +1,11 @@
 {
     "network": "baseSepolia",
-    "poseidonT3": "0x2e1a8D27829cD7b18C6838CD10e37267da4d65B1",
-    "poseidonHasher": "0x31c2A4DCe7563E007f5F81Bd212bbDceE5964752",
-    "depositVerifier": "0xCa9D63A1c7b102E46771640D28FA032BAA3dd3b5",
-    "transferVerifier": "0xC08C5F8E0cbb8Cb82c9F382E2356d3640404bf1E",
-    "withdrawVerifier": "0x6582c1659954B6c503cD4DeC01f47612Bb49c70F",
-    "noidPool": "0x2A34aB5d909E755371B060294B1274A9089935e7",
+    "poseidonT3": "0x9122992fba2BDBaE6432E187Bf6fA184BBa33138",
+    "poseidonHasher": "0x5160E1cAF6E8D53cF7Dc9225Ca39b745A9Ea7559",
+    "depositVerifier": "0x7235FbeBBc994CCa4e6EDACa6Fd7DA5977Aa3430",
+    "transferVerifier": "0xfBF41daaFA0752EFbe364E0f01609BA31F3fA893",
+    "withdrawVerifier": "0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60",
+    "noidPool": "0x768bE43037Be62Ca081F7ccBecf49795CF25CE43",
     "relayer": {
         "address": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
         "userCommitment": {

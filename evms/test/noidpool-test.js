@@ -465,6 +465,86 @@ describe("Menoid user-commitment architecture", function () {
     });
 
 
+    // Regression: the deposit circuit must bound its amounts.
+    //
+    // depositAmount === a1 + fee is a field equation. Without a range check on
+    // a1/a2 it is satisfiable by wrapping around the BN254 prime: deposit 1 wei,
+    // set a1 = 2^128 - 1 (which still passes the RangeCheck(128) that
+    // transfer/withdraw apply, so the note stays spendable) and solve
+    // a2 = (1 - a1) mod p. That mints a note of arbitrary value from dust and
+    // lets the pool be drained. Witness generation must fail on a2's range check.
+    it("Should reject a deposit proof that wraps the field to mint value", async function () {
+
+        const p =
+            21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+        const depositAmount = 1n;
+
+        // largest value that still passes RangeCheck(128) downstream
+        const a1 = (1n << 128n) - 1n;
+
+        // the a2 that balances the field equation - huge, must be rejected
+        const a2 = (depositAmount - a1 + p) % p;
+
+        const r1 = randomFieldElement();
+        const r2 = randomFieldElement();
+
+        const uc1 =
+            toDecimal(
+                await privatePool.registered(wallets["user1"].address)
+            );
+
+        const uc2 =
+            toDecimal(
+                await privatePool.relayerCommitment()
+            );
+
+        const commitment1 =
+            await createCommitment(a1.toString(), r1, uc1);
+
+        const commitment2 =
+            await createCommitment(a2.toString(), r2, uc2);
+
+        const input = {
+            depositAmount: depositAmount.toString(),
+            c1: commitment1.decimal,
+            c2: commitment2.decimal,
+            c2_enabled: "1",
+            uc2: uc2,
+            a1: a1.toString(),
+            r1: r1,
+            uc1: uc1,
+            a2: a2.toString(),
+            r2: r2
+        };
+
+        let rejected = false;
+
+        try {
+
+            await snarkjs.groth16.fullProve(
+                input,
+                "build/deposit_proof_js/deposit_proof.wasm",
+                "build/deposit_proof_final.zkey"
+            );
+
+        } catch (error) {
+
+            rejected = true;
+
+            // the range check on a2 is what stops it
+            expect(error.message).to.include("Assert Failed");
+        }
+
+        expect(
+            rejected,
+            "field-wrapping deposit proof was generated - range checks are missing"
+        ).to.equal(true);
+
+        console.log("\n========== INFLATION PROOF REJECTED ==========");
+    });
+
+
     it("Should verify deposit proof directly", async function () {
 
         const depositVerifier =
