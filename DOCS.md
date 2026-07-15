@@ -1,4 +1,4 @@
-# 🌑 Menoid — A Private Crypto Wallet
+# 🔐 Menoid — A Private Crypto Wallet
 
 > Introducing Privacy for the Multi-Chain World
 >
