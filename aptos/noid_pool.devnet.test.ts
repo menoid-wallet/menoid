@@ -773,7 +773,11 @@ async function main() {
         await submitRelayer(signer, {
           function:      `${MODULE_ADDR}::pool::register`,
           typeArguments: [],
-          functionArguments: [MODULE_ADDR, u256ToMoveArg(BigInt(wallet.userCommitment))],
+          functionArguments: [
+            MODULE_ADDR,
+            u256ToMoveArg(BigInt(wallet.userCommitment)),
+            Array.from(Buffer.from(wallet.encryption.publicKey.replace(/^0x/, ""), "hex")),
+          ],
         }, 100_000);
         console.log(`  ${name} registered onchain`);
       } catch (e: any) {
@@ -782,7 +786,26 @@ async function main() {
       }
       const [onchain] = await viewFunction("registered_commitment", [], [MODULE_ADDR, signer.accountAddress.toString()]);
       assert(BigInt(onchain as string) === BigInt(wallet.userCommitment), `${name} onchain user commitment must match`);
+
+      // one view call answers everything a sender needs — no off-chain lookup
+      const [isReg, uc, encKey] = await viewFunction(
+        "registration_of", [], [MODULE_ADDR, signer.accountAddress.toString()]
+      );
+      assert(isReg === true, `${name} must read back as registered`);
+      assert(BigInt(uc as string) === BigInt(wallet.userCommitment), `${name} registration_of commitment must match`);
+      assert(
+        String(encKey).toLowerCase() === wallet.encryption.publicKey.toLowerCase(),
+        `${name} encryption key must come back byte-for-byte`
+      );
     }
+
+    // an address that never registered answers (false, 0, []) — it must not abort,
+    // or "not registered" becomes indistinguishable from "the node did not answer"
+    const stranger = Account.generate();
+    const [strangerReg] = await viewFunction(
+      "registration_of", [], [MODULE_ADDR, stranger.accountAddress.toString()]
+    );
+    assert(strangerReg === false, "an unregistered address must answer false, not abort");
 
     // the tests below address users by their REAL wallet address:
     // under the hood we fetch the registered user commitments from the chain
@@ -798,7 +821,11 @@ async function main() {
       await submitRelayer(aliceSigner, {
         function:      `${MODULE_ADDR}::pool::register`,
         typeArguments: [],
-        functionArguments: [MODULE_ADDR, u256ToMoveArg(BigInt(userWallets[0].userCommitment))],
+        functionArguments: [
+          MODULE_ADDR,
+          u256ToMoveArg(BigInt(userWallets[0].userCommitment)),
+          Array.from(Buffer.from(userWallets[0].encryption.publicKey.replace(/^0x/, ""), "hex")),
+        ],
       }, 100_000);
     } catch { threw = true; }
     assert(threw, "duplicate registration must be rejected");

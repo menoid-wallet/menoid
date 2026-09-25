@@ -412,7 +412,10 @@ describe("Menoid user-commitment architecture", function () {
                 const tx =
                     await privatePool
                         .connect(wallet.signer)
-                        .register(wallet.userCommitment.bytes32);
+                        .register(
+                            wallet.userCommitment.bytes32,
+                            wallet.encryption.publicKey
+                        );
 
                 await tx.wait();
 
@@ -435,7 +438,71 @@ describe("Menoid user-commitment architecture", function () {
             expect(onchain).to.equal(
                 wallet.userCommitment.bytes32
             );
+
+            // and the encryption key must come back byte-for-byte, so a sender
+            // can resolve this receiver from the chain with no server involved
+            const resolved =
+                await privatePool.registrationOf(wallet.address);
+
+            expect(resolved[0]).to.equal(wallet.userCommitment.bytes32);
+
+            expect(resolved[1]).to.equal(
+                wallet.encryption.publicKey.toLowerCase()
+            );
+
+            expect(
+                await privatePool.isRegistered(wallet.address)
+            ).to.equal(true);
         }
+    });
+
+
+    it("Should report an unregistered address as not registered", async function () {
+
+        const stranger =
+            ethers.Wallet.createRandom().address;
+
+        expect(
+            await privatePool.isRegistered(stranger)
+        ).to.equal(false);
+
+        const resolved =
+            await privatePool.registrationOf(stranger);
+
+        expect(resolved[0]).to.equal(ethers.constants.HashZero);
+        expect(resolved[1]).to.equal("0x");
+    });
+
+
+    it("Should reject a registration with a malformed encryption key", async function () {
+
+        const stranger =
+            (await ethers.getSigners())[8];
+
+        let reverted = false;
+
+        try {
+
+            const tx =
+                await privatePool
+                    .connect(stranger)
+                    .register(
+                        wallets["user1"].userCommitment.bytes32,
+                        "0x04deadbeef"    // right prefix, wrong length
+                    );
+
+            await tx.wait();
+
+        } catch (error) {
+
+            reverted = true;
+
+            expect(
+                error.message
+            ).to.include("Invalid encryption public key");
+        }
+
+        expect(reverted).to.equal(true);
     });
 
 
@@ -448,7 +515,10 @@ describe("Menoid user-commitment architecture", function () {
             const tx =
                 await privatePool
                     .connect(userSigner)
-                    .register(wallets["user1"].userCommitment.bytes32);
+                    .register(
+                        wallets["user1"].userCommitment.bytes32,
+                        wallets["user1"].encryption.publicKey
+                    );
 
             await tx.wait();
 

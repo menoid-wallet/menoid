@@ -145,10 +145,18 @@ async function main() {
   console.log(`  RPC:      ${RPC_URL}`);
   console.log(`  Circuits: ${CIRCUIT_DIR}`);
 
-  const bal = await suiClient.getBalance({ owner: deployer });
-  if (BigInt(bal.totalBalance) < 500_000_000n) {
-    console.log("  Requesting faucet...");
-    await requestFaucet(deployer);
+  // Balance probe, not a gate. The testnet RPC we use (suiscan) serves no index
+  // store, so suix_getBalance 400s there — which says nothing about the wallet.
+  // Let the transactions themselves report an actual shortfall.
+  try {
+    const bal = await suiClient.getBalance({ owner: deployer });
+    console.log(`  Balance: ${Number(bal.totalBalance) / 1e9} SUI`);
+    if (BigInt(bal.totalBalance) < 500_000_000n) {
+      console.log("  Requesting faucet...");
+      await requestFaucet(deployer);
+    }
+  } catch (e: any) {
+    console.log(`  Balance check skipped (${e?.message ?? e})`);
   }
 
   const PACKAGE_ID = process.env.NOID_PACKAGE_ID;
@@ -205,6 +213,7 @@ async function main() {
     arguments: [
       regTx.object(psId),
       regTx.pure.u256(BigInt(relayerWallet.userCommitment)),
+      regTx.pure.vector("u8", Array.from(Buffer.from(relayerWallet.encryption.publicKey, "base64"))),
     ],
   });
   await execTx(regTx);

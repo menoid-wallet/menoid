@@ -1,16 +1,18 @@
 {
     "network": "baseSepolia",
-    "poseidonT3": "0x9122992fba2BDBaE6432E187Bf6fA184BBa33138",
-    "poseidonHasher": "0x5160E1cAF6E8D53cF7Dc9225Ca39b745A9Ea7559",
-    "depositVerifier": "0x7235FbeBBc994CCa4e6EDACa6Fd7DA5977Aa3430",
-    "transferVerifier": "0xfBF41daaFA0752EFbe364E0f01609BA31F3fA893",
-    "withdrawVerifier": "0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60",
-    "noidPool": "0x768bE43037Be62Ca081F7ccBecf49795CF25CE43",
+    "poseidonT3": "0x4AC55619Ea2A84AFA73E542e7b580245901f9CD2",
+    "poseidonHasher": "0xf13A1bC1256C2Caf505786Fd66eBcd61ef0205de",
+    "depositVerifier": "0xf266448520D9239ebcd2e68941FF76ED358F0e2A",
+    "transferVerifier": "0x8D93f391e2edC1C6f9C28be8bE0229d07C9f25d8",
+    "withdrawVerifier": "0xEf758FB0606AaB7fbAf96F4772883B970e8436AE",
+    "noidPool": "0x1597b5e8b6876d6b0d5610D74902E0659CDF9bd6",
     "relayer": {
         "address": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
         "userCommitment": {
             "decimal": "8715241437374753171751027262351160259845566882498627192697092997010519292467",
             "bytes32": "0x1344a6df713eb690ad6ff1ba512be5b0b03074c7505563936f5aecccab70fa33"
-        }
-    }
+        },
+        "encryptionPublicKey": "0x043fd681124c78e9706fa93a4f94e609f39a615a5d18cffdc8302163a52d843bf4be8e079cb80d900fa774fe1d957b1f2685caac267432b5660ce13ca1190911c9"
+    },
+    "deployBlock": 47271477
 }

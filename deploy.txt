@@ -1,15 +1,19 @@
 ================================================================================
         MENOID TESTNET DEPLOYMENTS — user-commitment (register) architecture
 ================================================================================
-Last updated: 2026-07-15 — deposit circuit range-check fix rolled out to all 6
-chains. See "DEPOSIT RANGE-CHECK FIX" at the bottom for what changed and why.
+Last updated: 2026-09-25 — ON-CHAIN ENCRYPTION KEY rollout. Every chain was
+redeployed from scratch; all six pools start EMPTY. See "ON-CHAIN ENCRYPTION
+KEY" at the bottom for what changed and why.
 
 Architecture (all chains):
   - Users keep their REAL wallet address. The wallet signs the message
     "menoid_Wallet"; from that signature a BabyJubJub spending keypair and an
     encryption keypair are derived.
   - user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
-  - One-time on-chain registration: register(user_commitment). Re-register fails.
+  - One-time on-chain registration:
+        register(user_commitment, encryption_public_key)
+    Re-register fails. BOTH values live on-chain, so a sender can resolve a
+    receiver from the chain alone — no backend, no database.
   - Note commitment = Poseidon(1, amount, r, user_commitment)
   - Nullifier       = Poseidon(2, commitment, r, spend_sk)
   - Deposit public signals: [amount, c1, c2, c2_enabled, relayerCommitment]
@@ -23,13 +27,13 @@ Architecture (all chains):
 ================================================================================
 Chain ID:            10143
 RPC:                 https://testnet-rpc.monad.xyz
-PoseidonT3 Library:  0x67f955F8130ccd99F6Bc09CAd761781dd96b77f9
-PoseidonHasher:      0x152fe8cf3796dE9070C2044E9Ef30e2EA899c852
-DepositVerifier:     0x9Fc8BEA01E0429E1FFF9C29361885593630d6A47
-TransferVerifier:    0x28b1c1e4F995947aE257C7AbF8179f45911c4Dff
-WithdrawVerifier:    0x6EAe5E30cf8EaEffBBf6DC7eC6E38003E742109b
-NoidPool:            0x4327bD4A8DA693517766699e21109BF21764CB53
-NoidPool deploy blk: 45044210
+PoseidonT3 Library:  0x7B92135e6f137f284490869F332b3d25ae345807
+PoseidonHasher:      0xDA54Da706d70AbA5CDA2151CEB3b08ab97F4cE3C
+DepositVerifier:     0x1f3F313208d453269eecf12536Fb36aF23D89590
+TransferVerifier:    0x691Dbda51847588D66A0Ec34E172eaa47Af97342
+WithdrawVerifier:    0xA967ECc44A283271904d700b14b1F62286B35a75
+NoidPool:            0xf859f66DC79a1ea2ABA7832c22c82339E2a0D7c4
+NoidPool deploy blk: 65480322
 Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
 Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
   (bytes32: 0x1344a6df713eb690ad6ff1ba512be5b0b03074c7505563936f5aecccab70fa33)
@@ -42,13 +46,13 @@ Notes:
                              BASE SEPOLIA (TESTNET)
 ================================================================================
 Chain ID:            84532
-PoseidonT3 Library:  0x9122992fba2BDBaE6432E187Bf6fA184BBa33138
-PoseidonHasher:      0x5160E1cAF6E8D53cF7Dc9225Ca39b745A9Ea7559
-DepositVerifier:     0x7235FbeBBc994CCa4e6EDACa6Fd7DA5977Aa3430
-TransferVerifier:    0xfBF41daaFA0752EFbe364E0f01609BA31F3fA893
-WithdrawVerifier:    0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60
-NoidPool:            0x768bE43037Be62Ca081F7ccBecf49795CF25CE43
-NoidPool deploy blk: 44163129
+PoseidonT3 Library:  0x4AC55619Ea2A84AFA73E542e7b580245901f9CD2
+PoseidonHasher:      0xf13A1bC1256C2Caf505786Fd66eBcd61ef0205de
+DepositVerifier:     0xf266448520D9239ebcd2e68941FF76ED358F0e2A
+TransferVerifier:    0x8D93f391e2edC1C6f9C28be8bE0229d07C9f25d8
+WithdrawVerifier:    0xEf758FB0606AaB7fbAf96F4772883B970e8436AE
+NoidPool:            0x1597b5e8b6876d6b0d5610D74902E0659CDF9bd6
+NoidPool deploy blk: 47271477
 Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
 Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
 
@@ -56,176 +60,219 @@ Relayer Commitment:  87152414373747531717510272623511602598455668824986271926970
                             ETHEREUM SEPOLIA (TESTNET)
 ================================================================================
 Chain ID:            11155111
-PoseidonT3 Library:  0x1e889f751ee2af91e2a4F629722Eb9F5adfEA7A0
-PoseidonHasher:      0x4AC55619Ea2A84AFA73E542e7b580245901f9CD2
-DepositVerifier:     0xf13A1bC1256C2Caf505786Fd66eBcd61ef0205de
-TransferVerifier:    0xf266448520D9239ebcd2e68941FF76ED358F0e2A
-WithdrawVerifier:    0x8D93f391e2edC1C6f9C28be8bE0229d07C9f25d8
-NoidPool:            0xEf758FB0606AaB7fbAf96F4772883B970e8436AE
-NoidPool deploy blk: 11275852
+RPC:                 https://ethereum-sepolia-rpc.publicnode.com
+PoseidonT3 Library:  0x6f9ECFB4e81Ea842f270a3eA2dEeB30f04DaA7c9
+PoseidonHasher:      0xe0B4c4F731b4D913ae95031BE2d5277B4019c487
+DepositVerifier:     0x320D75d60759Ed7B95917F97925375c3855feeF4
+TransferVerifier:    0xAae171c7de409f6c37BA92a6c3B83d52bd5dEac5
+WithdrawVerifier:    0xCc0857d3526674048235948d0d250F812b938751
+NoidPool:            0xD184D35c4Fe39ecC2aE86a9E34f0Fb9a40198E02
+NoidPool deploy blk: 11776881
 Relayer Address:     0x983B81da8b49c5e4EA9DA94613a89C8af4527715
 Relayer Commitment:  8715241437374753171751027262351160259845566882498627192697092997010519292467
+
+Notes:
+  - DO NOT use rpc.ankr.com/eth_sepolia. It answers eth_estimateGas on the
+    NoidPool creation with a bogus "execution reverted" — the identical tx
+    estimates at 4.79M gas on publicnode and 1rpc, and deploys fine. Reads are
+    also flakier there. publicnode is the primary endpoint now.
 
 ================================================================================
                                 SOLANA (DEVNET)
 ================================================================================
 Program ID:          3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC
-Pool State PDA:      285h75BTpGyFUCPoyFucNZKVfPYVv8msDEaEceTTETZj
-Vault PDA:           2yorEgfekG4qdMgc2vmifhZmRjarTnpQBAhpikCiNWE4
-Pool Admin:          A9gJaBaAf5QdP4wuuYw46kiDXP1rFKCd9DLqZMYzwwwW
-  (deterministic, seed tag "menoid-solana-pool-admin-v3")
+Pool State PDA:      A4CFTtV8LXLya3bGVV4YdKmXD2KF7qWYSrv3KdyDZZVc
+Vault PDA:           F9qVTH3DLprQ3JuKhsjUXhgkZtS8RDDza4BYXYsvQL6Z
+Pool Admin:          6XVpQ66WssX1uz72qmG6EKwk1YHt5ZgfMCEq3WT5Wo3S
+  (deterministic, seed tag "menoid-solana-pool-admin-v4")
+Pool init slot:      503819308
 Relayer Address:     7s3XTUSX4VCQw7QKfba4oGUh5bE9n1gqVNGFrNGrnFW4
 Relayer Commitment:  9379914363607614888841477418738034063542225044724940624927279910002672104395
-Registration PDA:    seeds [b"registration", wallet_pubkey]
+Registration PDA:    seeds [b"registration_v2", wallet_pubkey]
 
 Notes:
-  - ADDRESSES UNCHANGED. The verifying keys are compiled into the program
-    (programs/noid_solana/src/verifying_keys.rs), so the range-check fix was
-    rolled out by UPGRADING the program in place at the same Program ID
-    (upgrade authority = the relayer/deployer key).
-  - Pool was empty (next_idx = 0, 0 lamports locked) so it was kept as-is.
+  - PROGRAM ID UNCHANGED — the program was UPGRADED in place (upgrade authority
+    = the relayer/deployer key). The pool PDA is seeded with a deterministic
+    admin key, so bumping the admin seed tag to v4 is what produced a fresh,
+    empty pool without touching the program ID.
+  - Registration PDA seed is now "registration_v2": the v1 account layout had no
+    encryption key and is 32 bytes too small to deserialize as the current
+    Registration, so v1 accounts get their own address space instead of
+    colliding. Old v1 registrations are simply invisible.
   - deposit's `commitment2` account is OPTIONAL (pass null when C2 == 0).
   - Regenerate verifying_keys.rs with `node app/parse_vk.js` — it reads the
     VKs from ../../aptos/zk_build (Solana shares Aptos's circuit artifacts).
+  - Building needs four crates pinned back for the Solana toolchain's rustc
+    1.84 (see "BUILD PINS" at the bottom).
 
 ================================================================================
                                  SUI (TESTNET)
 ================================================================================
-Package ID:          0x198edf8b1081a2ddccd0fa681b39d564493a774bfdd2218af2b05aabd52d0a4d
-PoolState Object:    0xcd8f1c778c0cc807f98e5aaf15b7fcd9911d8f2ba3e14126c4f6cb7f33d67d1c
-VerifierConfig:      0x2dafdd674032eb3ce4f9266078bee9faefbf3337379d6a3dfd04d3ee7afab287
+RPC:                 https://sui-testnet-rpc.publicnode.com
+Package ID:          0x9467f20713dc371b452d3def674ee873d50c5850b2eaa944a3856f61dfdbaa60
+PoolState Object:    0x65ce5b0d1f57a527979dc92d7e3a7eb44650343ff012e13197087a9b9065eba2
+VerifierConfig:      0xdf706068123102ad8e2e3d52569deaf663315a9f4d2f1d21ea9e010297d8081a
+UpgradeCap:          0xcd432527390035b293d46dbd4f346e4d363b7ca4973a84b9f66ac03c1ae60301
+Pool checkpoint:     387496031
 Relayer Address:     0xe80cb32c8d5940d1dabc8e7b2463c8a0f4fd367345b969e9ce6850d5fec2ab80
 Relayer Commitment:  20953428617304958278032008812831888955156352542017296366999977213860580495022
 
 Notes:
-  - ADDRESSES UNCHANGED. VKs live in the shared VerifierConfig object, so the
-    fix was rolled out with `scripts/update_vks_testnet.ts`, which calls
-    verifier::reinitialize_vks (admin-gated) — no republish needed.
-  - registered map is a Table<address, u256> on PoolState; read a user's
-    commitment via a dynamic-field lookup on the table object.
-  - RPC note: https://fullnode.testnet.sui.io:443 JSON-RPC returns 404 now;
-    use https://rpc-testnet.suiscan.xyz:443 (works with @mysten/sui 1.45).
-  - The testnet faucet rate-limits aggressively; tests/noid_pool.test.ts needs
-    it to fund Alice/Bob and will fail with "Too Many Requests" when throttled.
+  - FRESH PACKAGE. PoolState gained an `encryption_keys` field, which is not an
+    upgrade-compatible struct change, so this is a new package ID with a new
+    PoolState object. The old package is abandoned.
+  - registered      is a Table<address, u256>       on PoolState
+    encryption_keys is a Table<address, vector<u8>> on PoolState
+    Read either via a dynamic-field lookup on that table's object id.
+  - RPC: use https://sui-testnet-rpc.publicnode.com. fullnode.testnet.sui.io has
+    JSON-RPC switched off entirely, and rpc-testnet.suiscan.xyz serves NO INDEX
+    STORE — suix_getCoins / suix_getBalance 400 there, so it cannot even pay for
+    a transaction. suiscan still answers sui_getObject and
+    suix_getDynamicFieldObject, so it is a usable READ-ONLY fallback.
+  - The testnet faucet rate-limits aggressively.
 
 ================================================================================
                                 APTOS (TESTNET)
 ================================================================================
-Module Address:      0xcaf04754afdea6523026a6bc9de0199f5665f4399e471ef84ae4456de01f546c
+Module Address:      0x4f79d41d0085866c731825690954720e4543b71c254030f7c86c56b86f8f8c76
 Pool Address:        0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
-  (PoolState resource lives on the deployer account; pool seed "noid-pool-seed-v3")
-Pool Resource Acct:  0x073bc5497e54f4cd2bbe1211e4de5ab61e9717ebfcbbd714f22e58306be38489
+  (PoolState resource lives on the deployer account; pool seed "noid-pool-seed-v4")
+Pool Resource Acct:  0x0453fe5b0113fbf868c063bfb8967b5417c3ff90ea12474cf6e179cb363722e3
   (holds the locked APT)
+Pool init version:   11399495186
 Relayer Address:     0xb50ddea69fa72666f7fc54ad9e1814a66e47ea61288131b0991e17a2ef08dabb
 Relayer Commitment:  13774348722495564069889615312880436665823221519290869157567563219868191293670
 
 Notes:
-  - ADDRESSES UNCHANGED. VKs are a resource on the deployer account, so the fix
-    was rolled out with `scripts/update_vks_testnet.ts`, which calls
-    verifier::reinitialize_vks — no republish needed.
+  - NEW MODULE ADDRESS. PoolState gained an `encryption_keys` field, which Move
+    does not allow in a compatible upgrade, so the package was republished as a
+    NEW object (`aptos move deploy-object --address-name noid`). The old module
+    at 0xcaf047… is abandoned.
   - MODULE ADDR != POOL ADDR on testnet (object-code deployment). Entry
     functions are <module_addr>::pool::<fn> with pool_addr = the Pool Address
     above as the first argument. Only on localnet do the two coincide.
   - deposit/transfer/withdraw queue commitments; pool::update_root is called
     once per pending commitment with a new_root ZK proof (unchanged flow).
-  - registered map: pool::is_registered / pool::registered_commitment views.
+  - Views: pool::is_registered / pool::registered_commitment /
+           pool::registered_encryption_key / pool::registration_of
 
 ================================================================================
-                          DEPOSIT RANGE-CHECK FIX (2026-07-15)
+                    ON-CHAIN ENCRYPTION KEY (2026-09-25)
 ================================================================================
 WHAT WAS WRONG
-  circuits/deposit_proof.circom never bounded its private amount inputs a1/a2
-  (identical file on all 4 chain codebases). Its only value constraint is
+  register() bound a wallet address to its user commitment and nothing else.
+  But a sender needs TWO things about a receiver:
 
-      depositAmount === a1 + fee        // fee = c2_enabled * a2
+      user_commitment       — to lock the note commitment to them
+      encryption_public_key — to encrypt the note so only they can read it
 
-  which is a FIELD equation mod the BN254 prime p. With no range check it is
-  satisfiable by wrapping around p:
+  and the second cannot be recovered from the first (the commitment is a
+  Poseidon hash). So the encryption key was written to Mongo at registration
+  time and every send asked the BACKEND, not the chain:
 
-      msg.value = 1 wei
-      a1 = 2^128 - 1
-      a2 = (1 - a1) mod p
-      => a1 + fee == 1 (mod p)  — proof verifies
+      GET /api/register/:network/status/:address
 
-  uc1 is private and unconstrained, so the attacker locks the inflated note to
-  their own user commitment. 2^128-1 PASSES the RangeCheck(128) that
-  transfer/withdraw already applied to a_ins, so the note stayed spendable and
-  the pool could be drained. Transfer/withdraw were never affected.
+  That put a server on the critical path of a privacy decision, and it has
+  three ways to answer wrong:
+
+    1. The backend is down / cold-starting  → the lookup throws.
+    2. The backend's configured pool address is stale, or its RPC answers a
+       rate-limited eth_call as a revert → "registered: false" for a wallet
+       that IS registered.
+    3. Mongo has no row (registered on another device, DB reset, a different
+       backend) → "registered on-chain, but no encryption key on record".
+
+  Cases 2 and 3 are what produced the reported bug: paste an address that is
+  demonstrably registered, and the send modal says it is not. Worse, a
+  "registered: false" is ACTED ON — the modal falls back to a public withdraw.
+  Quietly sending in the clear is the one outcome a privacy wallet must never
+  produce by accident.
 
 THE FIX
-  deposit_proof.circom now includes ./range_check.circom and constrains both
-  amounts to 128 bits, matching transfer/withdraw:
+  register() now takes the encryption public key too, and stores it on-chain:
 
-      component a1Range = RangeCheck(128); a1Range.in <== a1;
-      component a2Range = RangeCheck(128); a2Range.in <== a2;
+      EVM     register(bytes32 userCommitment, bytes encryptionPublicKey)
+              mapping(address => bytes) public encryptionKeys
+              registrationOf(addr) -> (bytes32, bytes)
+              isRegistered(addr)   -> bool
+      Solana  register(user_commitment: [u8;32], encryption_public_key: [u8;32])
+              Registration { wallet, user_commitment, encryption_public_key, bump }
+      Aptos   register(user, pool_addr, user_commitment, encryption_public_key)
+              #[view] registration_of(pool_addr, wallet) -> (bool, u256, vector<u8>)
+      Sui     register(state, user_commitment, encryption_public_key, ctx)
+              registration_of(state, wallet) -> (bool, u256, vector<u8>)
 
-  With both < 2^128, a1 + fee < 2^129 << p, so the equation holds over the
-  integers and wraparound is impossible. depositAmount needs no separate bound
-  since it is forced to equal a sum of two bounded values.
-  Circuit: 859 non-linear constraints (was ~603). Public signals unchanged (5).
+  Key format per chain (raw bytes on-chain, encoded in the wallet):
+      EVM     65-byte uncompressed secp256k1 (0x04 ‖ X ‖ Y) -> 0x hex
+      Solana  32-byte ed25519                                -> base58
+      Sui     32-byte ed25519                                -> base64
+      Aptos   32-byte ed25519                                -> 0x hex
 
-ROLLOUT
-  New trusted setup for the deposit circuit on every chain => new deposit zkey
-  + new deposit VK. Transfer/withdraw/new_root setups were NOT touched.
-    - EVM x3 : fresh full deployment (NoidPool stores `immutable
-               depositVerifier`, so the verifier cannot be swapped in place).
-               Old pools remain live on the OLD vulnerable verifier — do not
-               point anything at them.
-    - Solana : program upgraded in place (VK is compiled in), same Program ID.
-    - Aptos  : verifier::reinitialize_vks, same addresses.
-    - Sui    : verifier::reinitialize_vks, same addresses.
+  The combined readers NEVER abort on an unregistered address — they answer
+  (false, 0, empty). A wallet has to be able to tell "not registered" from "the
+  node did not answer", and an abort makes those two look identical.
+
+  The wallet (extension + app) now resolves a recipient straight from the chain
+  through its own RPC list, with the backend only relaying the signed register
+  transaction. The /register/:net/status/:addr endpoint still exists and now
+  also reads the key from the chain, but nothing in the send path needs it.
+
+ROLLOUT — EVERY CHAIN REDEPLOYED, EVERY POOL EMPTY
+    - EVM x3 : fresh full deployment (new pool, new verifiers).
+    - Solana : program upgraded in place (same Program ID); fresh pool PDA via
+               admin seed v4; registration PDA seed bumped to v2.
+    - Aptos  : republished as a NEW object (struct change); pool seed v4.
+    - Sui    : NEW package published (struct change); new PoolState object.
+
+  Circuits were NOT touched. Verifying keys are byte-identical to the
+  2026-07-15 set, so no new trusted setup was needed.
 
 VERIFIED
-    - EVM       : 11/11 localnet E2E, incl. a new regression test asserting the
-                  field-wrapping proof fails to witness ("Should reject a
-                  deposit proof that wraps the field to mint value").
-    - Solana    : 12/12 E2E green on the rebuilt program.
-    - Aptos     : real testnet deposit accepted
-                  0x68a13039545c5e8966f5ffdd4af771c8566c18a8a57104b89295522a178664c2
-    - Sui       : real testnet deposit accepted
-                  EZofJP6hgw6HWg1KAx2hY5aUZBSwXWjzifYGCyAoN9Kv
-    - The exploit proof no longer witnesses on any chain: it now dies on a2's
-      RangeCheck (Num2Bits assert), off-chain, before a proof is even produced.
+    - EVM    : 11/11 localnet E2E green, including two new registration tests
+               ("Should report an unregistered address as not registered" and
+               "Should reject a registration with a malformed encryption key").
+    - Monad  : registrationOf(relayer) returns the commitment AND the 65-byte
+               key; isRegistered(stranger) = false.
+    - Aptos  : registration_of(relayer) -> (true, uc, 0x7b1ce76b…);
+               registration_of(0x1)     -> (false, 0, 0x)   [does not abort]
+    - Sui    : both tables read back byte-for-byte; a stranger lookup returns
+               dynamicFieldNotFound, which is the ANSWER "not registered".
+    - Solana : relayer registration round-trips through the v2 PDA.
 
-HOUSEKEEPING
-    - OLD (vulnerable) EVM pools, now abandoned:
-        Monad        0x2A90ba0E96cb282D908f59AcCb52A85E31943900  (had 2.501 MON)
-        Sepolia      0xb0167d48b8b24A113257aC261d8BC5ccEcF1aa60  (0)
-        BaseSepolia  0x2A34aB5d909E755371B060294B1274A9089935e7  (0)
-      All other chains were empty at migration time.
-
-    - The Aptos and Sui verification probes each deposited a small amount
-      (0.01 APT / 0.01 SUI) whose note randomness was discarded, so both notes
-      are unspendable and that dust is permanently locked. Each pool therefore
-      starts with ONE dead leaf at index 0 — harmless (it just fails to decrypt
-      for every wallet, like any note not addressed to you), but do not expect a
-      pristine empty tree there:
-        Aptos  leaf 0 = 7155101199236594775413476708341693853699049550140663794592129356023063714639
-        Sui    leaf 0 = 11208557736435266047033203116310416544347773260938304090463464328129726438078
-
-    - The Aptos probe also left its commitment QUEUED, which BLOCKS the pool
-      (deposit/transfer/withdraw all assert pending_commitments is empty —
-      E_PENDING_TASKS). Drained via pool::update_root; pending is back to 0 and
-      next_index = 1. Anything that submits an Aptos deposit outside the backend
-      route must drain the queue afterwards or the pool stays blocked:
-        node wallet/backend/drain_aptos_pending.js
-
-STATE RECONCILIATION (2026-07-15)
+DATABASE
   The backend treats its Mongo DB as the source of truth — no indexer scans the
-  chain (see poolIndexer.js / aptosIndexer.js / suiIndexer.js). So the DB must
-  hold exactly the leaves the chain holds, or every Merkle proof it builds is
-  against a root that does not exist on-chain. State is keyed by NETWORK NAME,
-  not pool address.
+  chain (see poolIndexer.js / aptosIndexer.js / suiIndexer.js). State is keyed
+  by NETWORK NAME, not pool address, so every network's documents had to be
+  cleared: all six pools are empty on-chain and the DB must say the same, or
+  every Merkle proof it builds is against a root that does not exist.
 
-  Done after the migration:
-    - monad / sepolia / base_sepolia : stale old-pool documents deleted
-                                       (wallet/backend/reset_network_state.js)
-    - aptos                          : pending queue drained + leaf recorded
-                                       (wallet/backend/drain_aptos_pending.js)
-    - sui                            : DB rebuilt from on-chain NoteCreatedEvent
-                                       (wallet/backend/reconcile_sui_state.js)
-    - solana                         : already consistent (both empty)
+      node wallet/backend/reset_network_state.js --all
 
-  Verified: DB leaf count == chain leaf count on all 6 networks, and the Aptos
-  DB root matches pool::current_root exactly.
+  NoidRegistration rows were dropped too. They described wallets registered
+  against the old pools, which no longer exist; the encryption key now comes
+  from the chain, so nothing depends on that collection any more.
+
+BUILD PINS (Solana)
+  cargo-build-sbf ships rustc 1.84, which cannot parse edition2024 manifests or
+  build crates that require 1.85. Four crates are pinned back in Cargo.lock:
+
+      proc-macro-crate      3.5.0  -> 3.3.0   (pulled toml_datetime 1.1 / edition2024)
+      indexmap              2.14.0 -> 2.7.1   (pulled hashbrown 0.17 / edition2024)
+      hashbrown             0.17.1 -> 0.15.5  (follows indexmap)
+      unicode-segmentation  1.13.3 -> 1.12.0  (requires rustc 1.85)
+
+  Keep them pinned until the Solana toolchain's rustc moves past 1.85.
+
+HOUSEKEEPING — ABANDONED DEPLOYMENTS
+  These hold no funds and nothing should point at them:
+      Monad        0xf859f6… replaces 0x4327bD4A8DA693517766699e21109BF21764CB53
+      Sepolia      0xD184D3… replaces 0xEf758FB0606AaB7fbAf96F4772883B970e8436AE
+      BaseSepolia  0x1597b5… replaces 0x768bE43037Be62Ca081F7ccBecf49795CF25CE43
+      Aptos module 0x4f79d4… replaces 0xcaf04754afdea6523026a6bc9de0199f5665f4399e471ef84ae4456de01f546c
+      Sui package  0x9467f2… replaces 0x198edf8b1081a2ddccd0fa681b39d564493a774bfdd2218af2b05aabd52d0a4d
+      Solana pool  A4CFTt… replaces 285h75BTpGyFUCPoyFucNZKVfPYVv8msDEaEceTTETZj
+
+  The 0.01 APT / 0.01 SUI dust locked in the previous Aptos and Sui pools stays
+  locked there; those pools are gone from the wallet's view. The new Aptos and
+  Sui pools start with a genuinely empty tree (next_index = 0).
 ================================================================================

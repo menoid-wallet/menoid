@@ -12,6 +12,7 @@ import { buildPoseidon } from "circomlibjs";
 import { deriveNoidWallet, NoidWallet } from "./helpers/wallets";
 import { encryptMessage, decryptMessage } from "./helpers/encryption";
 import { createCommitment } from "./helpers/commitments";
+import bs58 from "bs58";
 import { formatProofForSolana, toBE32 } from "./helpers/proofs";
 
 // Monkeypatch BorshInstructionCoder to handle large instruction data (> 1000 bytes)
@@ -109,7 +110,7 @@ describe("noid_solana", () => {
 
   function registrationPda(wallet: anchor.web3.PublicKey): anchor.web3.PublicKey {
     return anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("registration"), wallet.toBuffer()],
+      [Buffer.from("registration_v2"), wallet.toBuffer()],
       program.programId
     )[0];
   }
@@ -382,7 +383,10 @@ describe("noid_solana", () => {
     for (const [name, wallet] of participants) {
       try {
         await program.methods
-          .register(Array.from(toBE32(wallet.userCommitment)))
+          .register(
+            Array.from(toBE32(wallet.userCommitment)),
+            Array.from(bs58.decode(wallet.encryption.publicKey))
+          )
           .accounts({
             user: wallet.keypair.publicKey,
             registration: registrationPda(wallet.keypair.publicKey),
@@ -399,14 +403,34 @@ describe("noid_solana", () => {
       // the registered user commitment must match the derived one
       const onchain = await fetchUserCommitment(wallet.keypair.publicKey);
       expect(onchain).to.equal(wallet.userCommitment);
+
+      // ...and so must the encryption key, so a sender can resolve this
+      // receiver from the chain with no off-chain lookup
+      const registration = await program.account.registration.fetch(
+        registrationPda(wallet.keypair.publicKey)
+      );
+      expect(
+        bs58.encode(Buffer.from(registration.encryptionPublicKey))
+      ).to.equal(wallet.encryption.publicKey);
     }
+
+    // an address that never registered has no PDA at all — fetchNullable
+    // answers null, which is the ONE shape that means "not registered"
+    const stranger = anchor.web3.Keypair.generate();
+    const none = await program.account.registration.fetchNullable(
+      registrationPda(stranger.publicKey)
+    );
+    expect(none).to.equal(null);
   });
 
   it("Test 5: Second registration for the same wallet is rejected", async () => {
     let threw = false;
     try {
       await program.methods
-        .register(Array.from(toBE32(aliceWallet.userCommitment)))
+        .register(
+          Array.from(toBE32(aliceWallet.userCommitment)),
+          Array.from(bs58.decode(aliceWallet.encryption.publicKey))
+        )
         .accounts({
           user: alice.publicKey,
           registration: registrationPda(alice.publicKey),

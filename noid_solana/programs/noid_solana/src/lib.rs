@@ -73,25 +73,43 @@ pub mod noid_solana {
         Ok(())
     }
 
-    /// One-time binding of a real wallet address to its user commitment.
+    /// One-time binding of a real wallet address to its private identity.
     ///
     /// Wallet responsibilities (off-chain):
     /// - Sign the message "menoid_Wallet" with the real wallet's private key
     /// - Derive the BabyJubJub spending keypair from that signature
+    /// - Derive the ed25519 encryption keypair from the same signature
     /// - user_commitment = Poseidon(walletAddress mod p, spendPk.x, spendPk.y)
     ///
+    /// `encryption_public_key` is stored here on purpose. A sender needs BOTH
+    /// the receiver's commitment (to lock the note) and this key (to encrypt
+    /// it), and the key cannot be recovered from the commitment hash. Kept
+    /// off-chain, a lookup miss is indistinguishable from "never registered" —
+    /// and a wallet that reads that as "send in the clear" is the one failure
+    /// a privacy wallet must not have.
+    ///
     /// Registering twice fails: the registration PDA already exists.
-    pub fn register(ctx: Context<Register>, user_commitment: [u8; 32]) -> Result<()> {
+    pub fn register(
+        ctx: Context<Register>,
+        user_commitment: [u8; 32],
+        encryption_public_key: [u8; 32],
+    ) -> Result<()> {
         require!(user_commitment != [0u8; 32], ErrorCode::InvalidUserCommitment);
+        require!(
+            encryption_public_key != [0u8; 32],
+            ErrorCode::InvalidEncryptionKey
+        );
 
         let registration = &mut ctx.accounts.registration;
         registration.wallet = ctx.accounts.user.key();
         registration.user_commitment = user_commitment;
+        registration.encryption_public_key = encryption_public_key;
         registration.bump = ctx.bumps.registration;
 
         emit!(WalletRegisteredEvent {
             wallet: ctx.accounts.user.key(),
             user_commitment,
+            encryption_public_key,
         });
 
         Ok(())
@@ -571,11 +589,15 @@ pub struct Register<'info> {
     pub user: Signer<'info>,
 
     // init fails if the wallet is already registered (PDA already exists)
+    //
+    // Seed is "registration_v2": v1 accounts were laid out without the
+    // encryption key and are 32 bytes too small to deserialize as the current
+    // Registration, so they get their own address space rather than colliding.
     #[account(
         init,
         payer = user,
-        space = 8 + 32 + 32 + 1,
-        seeds = [b"registration", user.key().as_ref()],
+        space = 8 + 32 + 32 + 32 + 1,
+        seeds = [b"registration_v2", user.key().as_ref()],
         bump
     )]
     pub registration: Account<'info, Registration>,
@@ -701,11 +723,16 @@ pub struct CommitmentAccount {
     pub bump: u8,
 }
 
-/// wallet address => user commitment (Poseidon(address mod p, spendPk.x, spendPk.y))
+/// wallet address => private identity.
+///
+/// Holds everything a sender needs to send this wallet a private note:
+/// the user commitment (Poseidon(address mod p, spendPk.x, spendPk.y)) and the
+/// ed25519 note-encryption public key.
 #[account]
 pub struct Registration {
     pub wallet: Pubkey,
     pub user_commitment: [u8; 32],
+    pub encryption_public_key: [u8; 32],
     pub bump: u8,
 }
 
@@ -725,6 +752,7 @@ pub struct NullifierSpentEvent {
 pub struct WalletRegisteredEvent {
     pub wallet: Pubkey,
     pub user_commitment: [u8; 32],
+    pub encryption_public_key: [u8; 32],
 }
 
 // Error Codes
@@ -736,6 +764,8 @@ pub enum ErrorCode {
     InvalidCommitment,
     #[msg("Commitments must be distinct")]
     DuplicateCommitment,
+    #[msg("Invalid encryption public key provided")]
+    InvalidEncryptionKey,
     #[msg("Caller is not the registered relayer")]
     NotRelayer,
     #[msg("ZK proof verification failed")]

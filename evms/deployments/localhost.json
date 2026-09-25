@@ -11,6 +11,8 @@
         "userCommitment": {
             "decimal": "6958545565294378797100137630236392165487199036818479801324695981481910662456",
             "bytes32": "0x0f6265b01b358d6809485209b18a2c4dbef4e2f9113779715dddf7da63b8f538"
-        }
-    }
+        },
+        "encryptionPublicKey": "0x0468a73436e59a1e898fa7daa17c390ed54fa0176defff465e37556b8c21ecf1a06a1c324bd664fbfd095a9011d83e9f360d754d02312e03a8e152a58b06a8b0ec"
+    },
+    "deployBlock": 6
 }

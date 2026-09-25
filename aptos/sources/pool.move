@@ -58,6 +58,7 @@ module noid::pool {
     const E_AMOUNT_MISMATCH: u64      = 23;
     const E_ALREADY_REGISTERED: u64   = 24;
     const E_INVALID_USER_COMMITMENT: u64 = 25;
+    const E_INVALID_ENCRYPTION_KEY: u64 = 26;
 
     // ── Events ────────────────────────────────────────────────────────────────
 
@@ -75,8 +76,9 @@ module noid::pool {
 
     #[event]
     struct WalletRegisteredEvent has drop, store {
-        wallet:          address,
-        user_commitment: u256,
+        wallet:                 address,
+        user_commitment:        u256,
+        encryption_public_key:  vector<u8>,
     }
 
     struct PendingCommitment has store, drop, copy {
@@ -100,6 +102,14 @@ module noid::pool {
         // wallet address => user commitment
         // user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
         registered:          Table<address, u256>,
+        // wallet address => note-encryption public key (32-byte ed25519)
+        //
+        // On-chain on purpose: a sender needs the receiver's commitment AND
+        // this key, and the key cannot be derived from the commitment hash.
+        // Kept off-chain, a lookup miss is indistinguishable from "never
+        // registered" — and a wallet that reads that as "send in the clear" is
+        // the one failure mode a privacy wallet must not have.
+        encryption_keys:     Table<address, vector<u8>>,
     }
 
     // ── Initialization ────────────────────────────────────────────────────────
@@ -135,6 +145,7 @@ module noid::pool {
             pool_resource_addr,
             pending_commitments: vector::empty<PendingCommitment>(),
             registered:          table::new<address, u256>(),
+            encryption_keys:     table::new<address, vector<u8>>(),
         });
     }
 
@@ -197,11 +208,16 @@ module noid::pool {
     //   - user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
 
     public entry fun register(
-        user:            &signer,
-        pool_addr:       address,
-        user_commitment: u256,
+        user:                  &signer,
+        pool_addr:             address,
+        user_commitment:       u256,
+        encryption_public_key: vector<u8>,
     ) acquires PoolState {
         assert!(user_commitment != 0u256, error::invalid_argument(E_INVALID_USER_COMMITMENT));
+        assert!(
+            vector::length(&encryption_public_key) == 32,
+            error::invalid_argument(E_INVALID_ENCRYPTION_KEY)
+        );
 
         let user_addr = signer::address_of(user);
         let state = borrow_global_mut<PoolState>(pool_addr);
@@ -211,7 +227,12 @@ module noid::pool {
         );
 
         table::add(&mut state.registered, user_addr, user_commitment);
-        event::emit(WalletRegisteredEvent { wallet: user_addr, user_commitment });
+        table::add(&mut state.encryption_keys, user_addr, encryption_public_key);
+        event::emit(WalletRegisteredEvent {
+            wallet: user_addr,
+            user_commitment,
+            encryption_public_key,
+        });
     }
 
     #[view]
@@ -222,6 +243,33 @@ module noid::pool {
     #[view]
     public fun registered_commitment(pool_addr: address, wallet: address): u256 acquires PoolState {
         *table::borrow(&borrow_global<PoolState>(pool_addr).registered, wallet)
+    }
+
+    #[view]
+    public fun registered_encryption_key(
+        pool_addr: address, wallet: address
+    ): vector<u8> acquires PoolState {
+        *table::borrow(&borrow_global<PoolState>(pool_addr).encryption_keys, wallet)
+    }
+
+    // Everything a sender needs about a receiver, in ONE view call.
+    //
+    // Never aborts on an unregistered address: it answers (false, 0, []). A
+    // wallet resolving a pasted address has to tell "not registered" apart from
+    // "the node did not answer", and an abort makes those two look the same.
+    #[view]
+    public fun registration_of(
+        pool_addr: address, wallet: address
+    ): (bool, u256, vector<u8>) acquires PoolState {
+        let state = borrow_global<PoolState>(pool_addr);
+        if (!table::contains(&state.registered, wallet)) {
+            return (false, 0u256, vector::empty<u8>())
+        };
+        (
+            true,
+            *table::borrow(&state.registered, wallet),
+            *table::borrow(&state.encryption_keys, wallet),
+        )
     }
 
     // ── DEPOSIT ───────────────────────────────────────────────────────────────

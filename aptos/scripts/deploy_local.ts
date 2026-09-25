@@ -115,7 +115,11 @@ async function main() {
   ]);
 
   // 5. register the relayer wallet
-  await exec(deployer, "pool::register", [MODULE_ADDR, relayerWallet.userCommitment]);
+  await exec(deployer, "pool::register", [
+    MODULE_ADDR,
+    relayerWallet.userCommitment,
+    Array.from(Buffer.from(relayerWallet.encryption.publicKey.replace(/^0x/, ""), "hex")),
+  ]);
 
   // fresh chain -> reset the persisted tree state used by the tests
   const stateFile = path.join(APTOS_DIR, ".noid-state.json");

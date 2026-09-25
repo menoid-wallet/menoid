@@ -41,6 +41,17 @@ contract NoidPool {
     // wallet address => user commitment (Poseidon(address, spendPk.x, spendPk.y))
     mapping(address => bytes32) public registered;
 
+    // wallet address => note-encryption public key (65-byte uncompressed secp256k1)
+    //
+    // Stored on-chain deliberately. A sender needs BOTH the receiver's user
+    // commitment (to lock the note) and this key (to encrypt it), and the key
+    // cannot be recovered from the commitment hash. Keeping it off-chain made
+    // every send depend on a server answering correctly: a miss there is
+    // indistinguishable from "this address never registered", and a wallet that
+    // silently downgrades a private send to a public one on a bad answer is the
+    // one failure a privacy wallet must not have. The chain now answers both.
+    mapping(address => bytes) public encryptionKeys;
+
     // verifiers
     IDepositVerifier public immutable depositVerifier;
     ITransferVerifier public immutable transferVerifier;
@@ -60,7 +71,11 @@ contract NoidPool {
     // nullfier spent
     event NullifierSpent(bytes32 nullifier);
     // wallet registration
-    event WalletRegistered(address indexed wallet, bytes32 userCommitment);
+    event WalletRegistered(
+        address indexed wallet,
+        bytes32 userCommitment,
+        bytes encryptionPublicKey
+    );
 
     constructor(
         address _depositVerifier,
@@ -83,20 +98,49 @@ contract NoidPool {
     PoolLib.Pool[] public pools;
 
     // Register
-    //  * One-time binding of a real wallet address to its user commitment.
+    //  * One-time binding of a real wallet address to its private identity.
     //  *
     //  * Wallet responsibilities (off-chain):
     //  * - Sign the message "menoid_Wallet" with the real wallet's private key
     //  * - Derive the BabyJubJub spending keypair from that signature
+    //  * - Derive the secp256k1 encryption keypair from the same signature
     //  * - Compute userCommitment = Poseidon(walletAddress, spendPk.x, spendPk.y)
-    //  * - Call register(userCommitment) from the real wallet
-    function register(bytes32 userCommitment) external {
+    //  * - Call register(userCommitment, encryptionPublicKey) from the real wallet
+    //  *
+    //  * encryptionPublicKey is the 65-byte UNCOMPRESSED secp256k1 public key
+    //  * (0x04 ‖ X ‖ Y). It is public by design — it only lets others encrypt TO
+    //  * this wallet.
+    function register(
+        bytes32 userCommitment,
+        bytes calldata encryptionPublicKey
+    ) external {
         require(userCommitment != bytes32(0), "Invalid user commitment");
+        require(
+            encryptionPublicKey.length == 65 && encryptionPublicKey[0] == 0x04,
+            "Invalid encryption public key"
+        );
         require(registered[msg.sender] == bytes32(0), "Already registered");
 
         registered[msg.sender] = userCommitment;
+        encryptionKeys[msg.sender] = encryptionPublicKey;
 
-        emit WalletRegistered(msg.sender, userCommitment);
+        emit WalletRegistered(msg.sender, userCommitment, encryptionPublicKey);
+    }
+
+    // Everything a sender needs about a receiver, in ONE call.
+    //
+    // One eth_call instead of two means the two halves can never disagree, and
+    // a wallet resolving a pasted address pays a single round trip.
+    function registrationOf(address wallet)
+        external
+        view
+        returns (bytes32 userCommitment, bytes memory encryptionPublicKey)
+    {
+        return (registered[wallet], encryptionKeys[wallet]);
+    }
+
+    function isRegistered(address wallet) external view returns (bool) {
+        return registered[wallet] != bytes32(0);
     }
 
     // Depsoit

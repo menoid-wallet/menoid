@@ -30,3 +30,8 @@ proofs/
 *.sym
 *.wasm
 witness.wtns
+# Claude Code workspace settings — local, never shared
+.claude/
+
+# macOS
+.DS_Store

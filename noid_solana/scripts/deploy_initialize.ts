@@ -29,7 +29,9 @@ const PROGRAM_ID = "3wxDTqw42qqftiAcTZ6kLeNtepuSmB1mR1skrEcwD9SC";
 // the deployer key so each fresh deployment gets a brand-new (empty) pool PDA
 // instead of colliding with a previous, populated pool.
 // v3: user-commitment architecture (register onchain).
-const POOL_ADMIN_SEED_TAG = "menoid-solana-pool-admin-v3";
+// v4: the note-encryption public key is registered on-chain alongside the user
+//     commitment, so a sender resolves a receiver from the chain alone.
+const POOL_ADMIN_SEED_TAG = "menoid-solana-pool-admin-v4";
 
 function deriveAdminKeypair(deployerKey: string): anchor.web3.Keypair {
   const seed = crypto.createHash("sha256").update(deployerKey + POOL_ADMIN_SEED_TAG).digest();
@@ -144,12 +146,13 @@ async function main() {
 
   // 4. Register the relayer wallet (one-time; "already in use" on re-runs is fine)
   const [registrationPda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("registration"), deployerKeypair.publicKey.toBuffer()],
+    [Buffer.from("registration_v2"), deployerKeypair.publicKey.toBuffer()],
     programId
   );
+  const relayerEncKeyBytes = Array.from(bs58.decode(relayerWallet.encryption.publicKey));
   try {
     const tx = await program.methods
-      .register(relayerCommitmentBytes)
+      .register(relayerCommitmentBytes, relayerEncKeyBytes)
       .accounts({
         user: deployerKeypair.publicKey,
         registration: registrationPda,
@@ -165,6 +168,10 @@ async function main() {
   const onchainUC = BigInt("0x" + Buffer.from(registration.userCommitment).toString("hex")).toString();
   if (onchainUC !== relayerWallet.userCommitment) {
     throw new Error(`On-chain relayer registration mismatch: ${onchainUC} != ${relayerWallet.userCommitment}`);
+  }
+  const onchainEnc = bs58.encode(Buffer.from(registration.encryptionPublicKey));
+  if (onchainEnc !== relayerWallet.encryption.publicKey) {
+    throw new Error(`On-chain relayer encryption key mismatch: ${onchainEnc} != ${relayerWallet.encryption.publicKey}`);
   }
 
   // Fetch and print final state

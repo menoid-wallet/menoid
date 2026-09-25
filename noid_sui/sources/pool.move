@@ -31,6 +31,7 @@ module noid::pool {
     const E_NOT_RELAYER: u64          = 21;
     const E_ALREADY_REGISTERED: u64   = 22;
     const E_INVALID_USER_COMMITMENT: u64 = 23;
+    const E_INVALID_ENCRYPTION_KEY: u64  = 24;
 
     public struct NoteCreatedEvent has copy, drop {
         pool_id:        u64,
@@ -43,8 +44,9 @@ module noid::pool {
     }
 
     public struct WalletRegisteredEvent has copy, drop {
-        wallet:          address,
-        user_commitment: u256,
+        wallet:                address,
+        user_commitment:       u256,
+        encryption_public_key: vector<u8>,
     }
 
     public struct PoolState has key {
@@ -60,6 +62,14 @@ module noid::pool {
         // wallet address => user commitment
         // user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
         registered:        Table<address, u256>,
+        // wallet address => note-encryption public key (32-byte ed25519)
+        //
+        // On-chain on purpose: a sender needs the receiver's commitment AND
+        // this key, and the key cannot be derived from the commitment hash.
+        // Kept off-chain, a lookup miss is indistinguishable from "never
+        // registered" — and a wallet that reads that as "send in the clear" is
+        // the one failure mode a privacy wallet must not have.
+        encryption_keys:   Table<address, vector<u8>>,
     }
 
     public entry fun initialize(
@@ -79,6 +89,7 @@ module noid::pool {
             relayer_address,
             admin:             sui::tx_context::sender(ctx),
             registered:        table::new<address, u256>(ctx),
+            encryption_keys:   table::new<address, vector<u8>>(ctx),
         };
         sui::transfer::share_object(state);
     }
@@ -101,15 +112,22 @@ module noid::pool {
     ///   - Derive the BabyJubJub spending keypair from that signature
     ///   - user_commitment = Poseidon(address mod p, spendPk.x, spendPk.y)
     public entry fun register(
-        state:           &mut PoolState,
-        user_commitment: u256,
-        ctx:             &sui::tx_context::TxContext,
+        state:                 &mut PoolState,
+        user_commitment:       u256,
+        encryption_public_key: vector<u8>,
+        ctx:                   &sui::tx_context::TxContext,
     ) {
         assert!(user_commitment != 0u256, E_INVALID_USER_COMMITMENT);
+        assert!(vector::length(&encryption_public_key) == 32, E_INVALID_ENCRYPTION_KEY);
         let sender = sui::tx_context::sender(ctx);
         assert!(!table::contains(&state.registered, sender), E_ALREADY_REGISTERED);
         table::add(&mut state.registered, sender, user_commitment);
-        event::emit(WalletRegisteredEvent { wallet: sender, user_commitment });
+        table::add(&mut state.encryption_keys, sender, encryption_public_key);
+        event::emit(WalletRegisteredEvent {
+            wallet: sender,
+            user_commitment,
+            encryption_public_key,
+        });
     }
 
     public fun is_registered(state: &PoolState, wallet: address): bool {
@@ -118,6 +136,28 @@ module noid::pool {
 
     public fun registered_commitment(state: &PoolState, wallet: address): u256 {
         *table::borrow(&state.registered, wallet)
+    }
+
+    public fun registered_encryption_key(state: &PoolState, wallet: address): vector<u8> {
+        *table::borrow(&state.encryption_keys, wallet)
+    }
+
+    /// Everything a sender needs about a receiver, in ONE read.
+    ///
+    /// Never aborts on an unregistered address: it answers (false, 0, []). A
+    /// wallet resolving a pasted address has to tell "not registered" apart
+    /// from "the node did not answer", and an abort makes those two look alike.
+    public fun registration_of(
+        state: &PoolState, wallet: address
+    ): (bool, u256, vector<u8>) {
+        if (!table::contains(&state.registered, wallet)) {
+            return (false, 0u256, vector[])
+        };
+        (
+            true,
+            *table::borrow(&state.registered, wallet),
+            *table::borrow(&state.encryption_keys, wallet),
+        )
     }
 
     public entry fun deposit(

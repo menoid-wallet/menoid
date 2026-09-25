@@ -180,9 +180,19 @@ async function main() {
 
     await noidPool.deployed();
 
+    // The block the pool landed in. The backend indexer and the wallet's note
+    // scan both start from here — starting at genesis on Sepolia is minutes of
+    // pointless eth_getLogs paging.
+    const deployReceipt =
+        await noidPool
+            .deployTransaction
+            .wait();
+
     console.log(
         "NoidPool:",
-        noidPool.address
+        noidPool.address,
+        "(block",
+        deployReceipt.blockNumber + ")"
     );
 
 
@@ -195,7 +205,10 @@ async function main() {
     const registerTx =
         await noidPool
             .connect(relayerSigner)
-            .register(relayerWallet.userCommitment.bytes32);
+            .register(
+                relayerWallet.userCommitment.bytes32,
+                relayerWallet.encryption.publicKey
+            );
 
     await registerTx.wait();
 
@@ -229,8 +242,13 @@ async function main() {
 
         relayer: {
             address: relayerSigner.address,
-            userCommitment: relayerWallet.userCommitment
-        }
+            userCommitment: relayerWallet.userCommitment,
+            encryptionPublicKey: relayerWallet.encryption.publicKey
+        },
+
+        // The block the pool was deployed in — the backend indexer and the
+        // wallet's note scan both start here instead of at genesis.
+        deployBlock: deployReceipt.blockNumber
     };
 
     const deploymentsDir =

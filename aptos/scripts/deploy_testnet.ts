@@ -67,6 +67,14 @@ function toMoveArg(b: Uint8Array): number[] {
   return Array.from(b);
 }
 
+// The PoolState resource lives on the deployer account and the pool's funds
+// live in a resource account derived from this seed. Bumping the seed is what
+// makes a redeploy start from an EMPTY tree instead of colliding with the
+// previous pool's resource account.
+// v4: the encryption public key is now registered on-chain alongside the
+//     user commitment, so a sender resolves a receiver from the chain alone.
+const POOL_SEED = "noid-pool-seed-v4";
+
 async function main() {
   loadEnv();
   
@@ -205,7 +213,7 @@ async function main() {
     const poolArgs = [
       BigInt(relayerWallet.userCommitment),
       deployer.accountAddress.toString(),
-      toMoveArg(Buffer.from("noid-pool-seed-v3")),
+      toMoveArg(Buffer.from(POOL_SEED)),
     ];
     
     await execTx("pool::initialize", poolArgs);
@@ -228,6 +236,7 @@ async function main() {
     await execTx("pool::register", [
       deployer.accountAddress.toString(),
       BigInt(relayerWallet.userCommitment),
+      Array.from(Buffer.from(relayerWallet.encryption.publicKey.replace(/^0x/, ""), "hex")),
     ]);
     console.log("Relayer registered!");
   } catch (err: any) {

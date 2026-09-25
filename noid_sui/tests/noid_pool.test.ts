@@ -665,6 +665,21 @@ async function fetchUserCommitment(walletAddr: string): Promise<string> {
   return BigInt(value).toString();
 }
 
+/** The receiver's note-encryption public key, read straight off the pool. */
+async function fetchEncryptionKey(walletAddr: string): Promise<string> {
+  const obj = await suiClient.getObject({ id: POOL_STATE_ID, options: { showContent: true } });
+  const fields = (obj.data?.content as any)?.fields;
+  const tableId = fields?.encryption_keys?.fields?.id?.id;
+  if (!tableId) throw new Error("encryption_keys table not found in PoolState");
+  const entry = await suiClient.getDynamicFieldObject({
+    parentId: tableId,
+    name: { type: "address", value: walletAddr },
+  });
+  const value = (entry.data?.content as any)?.fields?.value;
+  if (value === undefined) throw new Error(`wallet ${walletAddr} has no encryption key`);
+  return Buffer.from(Uint8Array.from(value)).toString("base64");
+}
+
 // ─── Test runner ───────────────────────────────────────────────────────────
 
 interface TestResult { name: string; passed: boolean; error?: string }
@@ -763,6 +778,7 @@ async function main() {
           arguments: [
             tx.object(POOL_STATE_ID),
             tx.pure.u256(BigInt(wallet.userCommitment)),
+            tx.pure.vector("u8", Array.from(Buffer.from(wallet.encryption.publicKey, "base64"))),
           ],
         });
         await execSigned(tx, kp, 50_000_000);
@@ -773,6 +789,14 @@ async function main() {
       }
       const onchain = await fetchUserCommitment(kp.getPublicKey().toSuiAddress());
       assert(BigInt(onchain) === BigInt(wallet.userCommitment), `${name} onchain user commitment must match`);
+
+      // the encryption key must come back byte-for-byte, so a sender can
+      // resolve this receiver from the chain with no off-chain lookup
+      const encKey = await fetchEncryptionKey(kp.getPublicKey().toSuiAddress());
+      assert(
+        encKey === wallet.encryption.publicKey,
+        `${name} encryption key must come back byte-for-byte`
+      );
     }
 
     // the tests below address users by their REAL wallet address:
@@ -791,6 +815,7 @@ async function main() {
         arguments: [
           tx.object(POOL_STATE_ID),
           tx.pure.u256(BigInt(userWallets[0].userCommitment)),
+          tx.pure.vector("u8", Array.from(Buffer.from(userWallets[0].encryption.publicKey, "base64"))),
         ],
       });
       await execSigned(tx, aliceKeypair, 50_000_000);

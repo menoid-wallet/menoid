@@ -20,6 +20,7 @@
 - [1. Noid Mode Registration](#1-noid-mode-registration)
 - [2. Overview](#2-overview)
 - [3. Deposit](#3-deposit)
+  - [Exception — Aptos updates the tree in a second step](#exception--aptos-updates-the-tree-in-a-second-step)
 - [4. Transfer](#4-transfer)
 - [5. Withdraw](#5-withdraw)
 - [Appendix A — Protocol Constants](#appendix-a--protocol-constants)
@@ -123,7 +124,7 @@ These terms appear throughout every section. Each section below also re-defines 
 | **Regular Wallet** | The user's existing wallet (MetaMask, Phantom, etc.). The only address a user ever sees or shares. Also called the *real wallet* or *open wallet*. |
 | **Wallet Generator** | The deterministic derivation step that turns one wallet signature into the Noid Mode keys. It generates keys — it does *not* create a new wallet or a new address. |
 | **Spending Key Pair** | A BabyJubJub keypair `(sk, spendPk)` derived from the signature. `sk` proves ownership of notes inside zero-knowledge proofs. |
-| **Encryption Key Pair** | A secp256k1 keypair derived from the same signature, used only to encrypt and decrypt notes off-chain. It is never an on-chain account. |
+| **Encryption Key Pair** | A keypair derived from the same signature, used only to encrypt and decrypt notes. It is never an on-chain account; its **public** half is registered on-chain so senders can find it, and its private half never leaves your device. |
 | **User Commitment (uc)** | `Poseidon(walletAddress, spendPk.x, spendPk.y)`. Your Noid Mode identity — a single field element that binds your real address to your spending key. |
 | **Note** | A private UTXO: an `(amount, randomness)` pair owned by a user commitment. Notes are the unit of value in Noid Mode. |
 | **Commitment (cmx)** | The on-chain, public fingerprint of a note: `Poseidon(1, amount, randomness, userCommitment)`. Reveals nothing about amount or owner. |
@@ -215,12 +216,21 @@ This one value carries the whole design:
 ## Register on-chain
 
 ```solidity
-function register(bytes32 userCommitment) external {
+function register(
+    bytes32 userCommitment,
+    bytes calldata encryptionPublicKey
+) external {
     require(userCommitment != bytes32(0), "Invalid user commitment");
+    require(
+        encryptionPublicKey.length == 65 && encryptionPublicKey[0] == 0x04,
+        "Invalid encryption public key"
+    );
     require(registered[msg.sender] == bytes32(0), "Already registered");
 
-    registered[msg.sender] = userCommitment;
-    emit WalletRegistered(msg.sender, userCommitment);
+    registered[msg.sender]      = userCommitment;
+    encryptionKeys[msg.sender]  = encryptionPublicKey;
+
+    emit WalletRegistered(msg.sender, userCommitment, encryptionPublicKey);
 }
 ```
 
@@ -228,13 +238,53 @@ function register(bytes32 userCommitment) external {
 - **Called by the real wallet.** `msg.sender` *is* the binding. There is no way to register a commitment on behalf of an address you don't control.
 - **The relayer registers too**, at deployment time. Its commitment is stored as the immutable `relayerCommitment` and is baked into every circuit as a public input.
 
+### Why the encryption key goes on-chain too
+
+A sender needs **two** things about a receiver, and one cannot be derived from
+the other:
+
+| | what it does |
+|---|---|
+| `userCommitment` | locks the note commitment to the receiver |
+| `encryptionPublicKey` | encrypts the note so only the receiver can read it |
+
+The commitment is a Poseidon hash, so the encryption key cannot be recovered
+from it. Registering only the commitment meant the key had to live somewhere
+else — in practice, a server's database — and that put a server on the critical
+path of a privacy decision. When that lookup missed, for any of the ordinary
+reasons a lookup misses, a wallet that *is* registered came back as **not
+registered**. That answer is acted on: the sender falls back to a public
+withdraw. Quietly sending in the clear is the one outcome a privacy wallet must
+never produce by accident.
+
+Registering both values together removes the whole class of failure. Every
+chain exposes a single read that answers with both, and answers
+`(false, 0, empty)` — rather than reverting — for an address that never
+registered, so "not registered" stays distinguishable from "the node did not
+answer":
+
+| Chain | read |
+|---|---|
+| EVM | `registrationOf(address) → (bytes32, bytes)` |
+| Aptos | `pool::registration_of(pool, addr) → (bool, u256, vector<u8>)` |
+| Sui | `pool::registration_of(state, addr) → (bool, u256, vector<u8>)` |
+| Solana | the `Registration` PDA, which holds both fields |
+
+The key format follows each chain's own convention — 65-byte uncompressed
+secp256k1 on EVM, 32-byte ed25519 on Solana, Sui and Aptos.
+
+The encryption key is public by design. It only lets other people encrypt
+*to* you; it never lets anyone decrypt, spend, or link your notes.
+
 ## What registration reveals — and what it doesn't
 
-Registration is a public transaction, so it is observable that a given address has enabled Noid Mode. That is all it says. It does not reveal:
+Registration is a public transaction, so it is observable that a given address has enabled Noid Mode, and its user commitment and encryption **public** key are readable by anyone. That is all it says. It does not reveal:
 
-- your spending key or encryption key,
+- your spending key, or your encryption **private** key,
 - your balance (you have none in the pool yet),
 - any past, present, or future activity inside the pool.
+
+The user commitment is a Poseidon hash of your address and spending public key: publishing it lets others pay you, and nothing else. The encryption public key only lets others encrypt *to* you. Neither can be used to spend, decrypt, or link a note.
 
 ## Why derive from a signature instead of generating a new wallet?
 
@@ -478,6 +528,82 @@ uint32 public constant ROOT_HISTORY_SIZE = 10;
 ```
 
 Each pool remembers its **last 10 roots** in a circular buffer, all of them accepted as valid. This exists for a very practical reason: you build a proof against the root as it is *now*, but by the time your transaction is mined, other people's deposits have changed the root. Without a history, your proof would be stale on arrival and every busy block would break every pending transaction. Ten roots of tolerance absorbs normal mempool delay. Roots older than that are evicted and rejected — so a proof left sitting for too long must simply be regenerated against a fresh root.
+
+---
+
+## Exception — Aptos updates the tree in a second step
+
+Everything above describes what happens on **EVM, Solana and Sui**: the
+contract receives a commitment, walks it up the tree, and stores the new root,
+all inside the same transaction.
+
+**Aptos cannot do that.** Its Groth16 verifier is written in pure Move, and the
+Merkle insertion on top of proof verification pushes a single transaction past
+`EXECUTION_LIMIT_REACHED`. So on Aptos the insertion is split off into its own
+transaction, proved by a **fourth circuit that exists only on this chain**:
+`new_root`.
+
+### The two-step flow
+
+```
+deposit / transfer / withdraw        →  commitment is QUEUED, not inserted
+                                        (pool.pending_commitments)
+
+pool::update_root(commitment, π)     →  one call per queued commitment,
+                                        proves the new root follows from the old
+```
+
+`update_root` takes the queue's **first** entry, verifies a `new_root` proof for
+it, inserts it, emits its `NoteCreatedEvent`, and pops it. Commitments are
+therefore inserted strictly in the order they were queued.
+
+### What the new_root proof actually proves
+
+The subtree array is committed as a **hash** rather than passed as 20 separate
+public signals — Aptos deserializes one G1 point per public signal, and 40
+subtree signals were what made the transaction unaffordable in the first place.
+
+```
+public inputs :  oldSubtreesHash, commitment, leafIndex
+public outputs:  newRoot, newSubtreesHash
+private       :  oldSubtrees[20]   (the relayer's copy of filled_subtrees)
+```
+
+The circuit checks that `oldSubtrees` hashes to the `oldSubtreesHash` the
+contract already holds, inserts `commitment` at `leafIndex`, and outputs the
+resulting root and the updated subtree hash. The contract accepts the new root
+only because the proof ties it to state it was already storing — so the relayer
+supplies the subtree array without being trusted with it.
+
+### The pool blocks while anything is queued
+
+```move
+assert!(vector::is_empty(&state.pending_commitments), E_PENDING_TASKS);
+```
+
+`deposit`, `transfer` and `withdraw` all refuse to run while the queue is
+non-empty. This is deliberate: a second operation proved against a root that is
+about to change would be proving against state that never existed. It also
+means **a queue left undrained blocks the pool for everyone**.
+
+The relayer drains the queue as part of the normal flow. Anything that submits
+an Aptos operation *outside* that path must drain it afterwards:
+
+```bash
+node wallet/backend/drain_aptos_pending.js
+```
+
+Two views exist for checking: `pool::pending_commitments_count` and
+`pool::current_root`.
+
+### What this does not change
+
+The circuits for deposit, transfer and withdraw are identical to every other
+chain, as are the commitment, nullifier and user-commitment formulas in
+[Appendix B](#appendix-b--formula-reference). A note created on Aptos is the
+same object as a note created on Monad. Only *when* the leaf lands in the tree
+differs — and a wallet notices only that its note becomes spendable one
+transaction later.
 
 ---
 

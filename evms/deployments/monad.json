@@ -1,16 +1,18 @@
 {
     "network": "monad",
-    "poseidonT3": "0x67f955F8130ccd99F6Bc09CAd761781dd96b77f9",
-    "poseidonHasher": "0x152fe8cf3796dE9070C2044E9Ef30e2EA899c852",
-    "depositVerifier": "0x9Fc8BEA01E0429E1FFF9C29361885593630d6A47",
-    "transferVerifier": "0x28b1c1e4F995947aE257C7AbF8179f45911c4Dff",
-    "withdrawVerifier": "0x6EAe5E30cf8EaEffBBf6DC7eC6E38003E742109b",
-    "noidPool": "0x4327bD4A8DA693517766699e21109BF21764CB53",
+    "poseidonT3": "0x7B92135e6f137f284490869F332b3d25ae345807",
+    "poseidonHasher": "0xDA54Da706d70AbA5CDA2151CEB3b08ab97F4cE3C",
+    "depositVerifier": "0x1f3F313208d453269eecf12536Fb36aF23D89590",
+    "transferVerifier": "0x691Dbda51847588D66A0Ec34E172eaa47Af97342",
+    "withdrawVerifier": "0xA967ECc44A283271904d700b14b1F62286B35a75",
+    "noidPool": "0xf859f66DC79a1ea2ABA7832c22c82339E2a0D7c4",
     "relayer": {
         "address": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
         "userCommitment": {
             "decimal": "8715241437374753171751027262351160259845566882498627192697092997010519292467",
             "bytes32": "0x1344a6df713eb690ad6ff1ba512be5b0b03074c7505563936f5aecccab70fa33"
-        }
-    }
+        },
+        "encryptionPublicKey": "0x043fd681124c78e9706fa93a4f94e609f39a615a5d18cffdc8302163a52d843bf4be8e079cb80d900fa774fe1d957b1f2685caac267432b5660ce13ca1190911c9"
+    },
+    "deployBlock": 65480322
 }

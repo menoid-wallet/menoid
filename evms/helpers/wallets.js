@@ -16,7 +16,10 @@ const circomlibjs = require("circomlibjs");
  *
  *   userCommitment = Poseidon(walletAddress, spendPk.x, spendPk.y)
  *
- * which is registered once via NoidPool.register(userCommitment).
+ * which is registered once via
+ * NoidPool.register(userCommitment, encryptionPublicKey) — the encryption
+ * public key goes on-chain with it, so a sender can resolve a receiver from
+ * the chain alone.
  */
 
 const REGISTRATION_MESSAGE = "menoid_Wallet";
@@ -147,7 +150,7 @@ async function deriveWallet(signer) {
  *
  * - derive the BabyJubJub spending keypair from the signature
  * - userCommitment = Poseidon(walletAddress, spendPk.x, spendPk.y)
- * - call the on-chain register(userCommitment) from the real wallet
+ * - call register(userCommitment, encryptionPublicKey) from the real wallet
  *
  * Throws if the wallet is already registered.
  */
@@ -159,7 +162,10 @@ async function registerWallet(signer, pool) {
     const tx =
         await pool
             .connect(signer)
-            .register(wallet.userCommitment.bytes32);
+            .register(
+                wallet.userCommitment.bytes32,
+                wallet.encryption.publicKey
+            );
 
     await tx.wait();
 
