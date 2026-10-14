@@ -13,6 +13,10 @@ const { toBytes32 } = require("./commitments");
  *      plaintext (70 B) = version(1) | flags(1) | token(20) | amount(16) | randomness(32)
  *      ciphertext       = ephemeralPk(33, compressed) | nonce(16) | tag(16) | encrypted plaintext
  *
+ *    flags & AMOUNT_FROM_EVENT: a swap's bought note. Its amount is unknown
+ *    when it is encrypted, so the plaintext carries 0 and the wallet reads the
+ *    amount from the Swapped event with the same commitment.
+ *
  * 2. Outgoing records — the SENDER's own record of a spend, for their
  *    outgoing viewing key (ovk). The key is derived from the spend's first
  *    nullifier, so a viewer who knows the nullifier opens it directly.
@@ -21,6 +25,9 @@ const { toBytes32 } = require("./commitments");
  *      record     = nonce(12) | AES-256-GCM(key, nonce, plaintext) | tag(16)
  *      plaintext  = version(1) | action(1) | token(20) | amount(16) | fee(16)
  *                   | counterpartyAddress(20) | counterpartyUserCommitment(32) | counterpartyNoteRandomness(32)
+ *
+ *    For a SWAP the last three fields hold tokenOut, minAmountOut and the
+ *    bought note's randomness (decoded as tokenOut / minAmountOut / outputRandomness).
  *
  *    The nonce is random: a reverted spend that is retried reuses its first
  *    nullifier (so the key), and a fixed nonce would then repeat.
@@ -39,7 +46,9 @@ const OUTGOING_VERSION = 1;
 const OUTGOING_PLAINTEXT_SIZE = 138;
 const OUTGOING_INFO = Buffer.from("menoid/v1m/outgoing-record", "utf8");
 
-const ACTION = { TRANSFER: 1, WITHDRAW: 2 };
+const ACTION = { TRANSFER: 1, WITHDRAW: 2, SWAP: 3 };
+
+const NOTE_FLAGS = { AMOUNT_FROM_EVENT: 1 };
 
 const hexToBuf = (hex) => Buffer.from(hex.replace(/^0x/, ""), "hex");
 const bufToHex = (buf) => "0x" + Buffer.from(buf).toString("hex");
@@ -110,7 +119,7 @@ function encodeOutgoingRecord(record) {
 
 function decodeOutgoingRecord(buf) {
     if (buf.length !== OUTGOING_PLAINTEXT_SIZE || buf[0] !== OUTGOING_VERSION) throw new Error("Unknown record format");
-    return {
+    const record = {
         action: buf[1],
         token: readAddress(buf, 2),
         amount: readUint(buf, 22, 16),
@@ -119,6 +128,12 @@ function decodeOutgoingRecord(buf) {
         counterpartyUserCommitment: readUint(buf, 74, 32),
         counterpartyNoteRandomness: readUint(buf, 106, 32)
     };
+    if (record.action === ACTION.SWAP) {
+        record.tokenOut = record.counterpartyAddress;
+        record.minAmountOut = record.counterpartyUserCommitment;
+        record.outputRandomness = record.counterpartyNoteRandomness;
+    }
+    return record;
 }
 
 function encryptOutgoingRecord(ovk, firstNullifier, record) {
@@ -144,6 +159,7 @@ function tryDecryptOutgoingRecord(ovk, firstNullifier, recordHex) {
 
 module.exports = {
     ACTION,
+    NOTE_FLAGS,
     encodeNote,
     decodeNote,
     encryptNote,

@@ -50,3 +50,31 @@ struct WithdrawCall {
     uint256 amount;                          // amount leaving the pool (public)
     WithdrawExtData ext;
 }
+
+/**
+ * A swap reuses the withdraw proof: amountIn of tokenIn leaves the private
+ * balance. Where it goes, and the note it buys, are bound here.
+ */
+struct SwapExtData {
+    address adapter;                        // whitelisted venue the pool routes through
+    address tokenOut;
+    uint256 minAmountOut;                   // the trade reverts below this
+    uint256 deadline;                       // unix seconds
+    bytes32 npkOut;                         // Poseidon(D_NPK, ownerUserCommitment, rOut): owner of the bought note
+    bytes routeData;                        // adapter-specific route (Uniswap V3: the path)
+    bytes encryptedOutput;                  // the bought note (amount is read from the Swapped event)
+    bytes[WITHDRAW_OUTS] encryptedOutputs;  // [change, relayer fee] in tokenIn
+    bytes outgoingRecord;
+}
+
+struct SwapCall {
+    Proof proof;
+    uint256 treeId;
+    bytes32 root;
+    bytes32[N_INS] nullifiers;
+    bytes32[WITHDRAW_OUTS] outCommitments;  // [change, relayer fee] in tokenIn
+    bytes32 relayer;
+    address tokenIn;                         // the withdraw proof's public token
+    uint256 amountIn;                        // the withdraw proof's public amount
+    SwapExtData ext;
+}

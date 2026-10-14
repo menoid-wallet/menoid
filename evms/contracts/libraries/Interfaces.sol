@@ -21,6 +21,24 @@ interface IWithdrawVerifier {
     ) external view returns (bool);
 }
 
+/**
+ * A swap venue the pool can route through (Uniswap V3, an aggregator, ...).
+ *
+ * The pool sends exactly amountIn of tokenIn to the adapter, calls swap, and
+ * then measures its own tokenOut balance. The return value is informational:
+ * the pool never trusts it.
+ */
+interface ISwapAdapter {
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address recipient,
+        bytes calldata routeData
+    ) external returns (uint256 amountOut);
+}
+
 // WMON / WETH / WPOL
 interface IWrappedNative {
     function deposit() external payable;

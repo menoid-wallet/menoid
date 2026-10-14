@@ -86,7 +86,7 @@ activity without giving anyone the power to spend:
 | **Deposit** | Public tokens → one private note. The contract computes the commitment itself | none |
 | **Transfer** | Private notes → private notes. Token, amounts, sender and receiver stay hidden | `transfer_proof` |
 | **Withdraw** | Private notes → public tokens at any address | `withdraw_proof` |
-| **Swap** 🚧 | Private notes of one token → a private note of another; the pool executes the trade | `withdraw_proof` |
+| **Swap** | Private notes of one token → a private note of another; the pool executes the trade | `withdraw_proof` |
 
 - **Fixed shape.** Every spend publishes 4 nullifiers and creates 3 (transfer)
   or 2 (withdraw) notes. Dummy notes fill the unused slots, so nobody learns
@@ -104,10 +104,12 @@ gas from the address they are trying to keep private. It is paid with the last
 output note of the same proof, in the same token. The relayer can refuse a
 transaction, but it cannot steal, redirect, forge or deanonymise.
 
-### Swaps 🚧
+### Swaps
 
-The next piece being built on this branch. One pool holds every token, so the
-pool itself calls the swap; there is no separate pool per token.
+One pool holds every token, so the pool itself calls the swap; there is no
+separate pool per token. The pool trades only through whitelisted adapters; the
+first is **Uniswap V3**, and Menoid's backend picks the route (every fee tier and
+two-hop paths, quoted on-chain), not the user.
 
 ```
 1. quote    tokenIn, amountIn → tokenOut, minOut, route (DEX path), deadline

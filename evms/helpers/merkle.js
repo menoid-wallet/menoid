@@ -22,16 +22,33 @@ class PoolMirror {
         this.notes = [];                 // every NoteCreated, in chain order
         this.nullifiers = new Set();     // decimal strings
         this.outgoing = new Map();       // firstNullifier (decimal) -> { record, txHash }
+        this.swapOutputs = new Map();    // bought note commitment (decimal) -> Swapped event fields
     }
 
     async sync() {
         await initCrypto();
 
-        const [noteEvents, nullifierEvents, outgoingEvents] = await Promise.all([
+        const [noteEvents, nullifierEvents, outgoingEvents, swapEvents] = await Promise.all([
             this.pool.queryFilter(this.pool.filters.NoteCreated(), this.fromBlock),
             this.pool.queryFilter(this.pool.filters.NullifierSpent(), this.fromBlock),
-            this.pool.queryFilter(this.pool.filters.OutgoingRecord(), this.fromBlock)
+            this.pool.queryFilter(this.pool.filters.OutgoingRecord(), this.fromBlock),
+            this.pool.queryFilter(this.pool.filters.Swapped(), this.fromBlock)
         ]);
+
+        // a swap's bought note carries no amount in its ciphertext; it is here
+        this.swapOutputs = new Map(
+            swapEvents.map((ev) => [
+                BigInt(ev.args.commitment).toString(),
+                {
+                    tokenIn: ev.args.tokenIn,
+                    tokenOut: ev.args.tokenOut,
+                    amountIn: BigInt(ev.args.amountIn.toString()),
+                    amountOut: BigInt(ev.args.amountOut.toString()),
+                    adapter: ev.args.adapter,
+                    txHash: ev.transactionHash
+                }
+            ])
+        );
 
         this.notes = noteEvents.map((ev) => ({
             treeId: ev.args.treeId.toNumber(),

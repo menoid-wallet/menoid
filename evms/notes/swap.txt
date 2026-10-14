@@ -1,0 +1,147 @@
+Swap Flow (v1-mainnet)
+
+    Private notes of tokenIn -> a private note of tokenOut.
+    One pool holds every token, so the POOL itself executes the trade.
+    The user never touches a DEX, and a relayer sends the transaction.
+
+    Code:     helpers/transactions.js buildSwap, helpers/uniswap.js findBestRoute
+    Contract: NoidPool.swap, adapters/UniswapV3Adapter.sol
+    Circuit:  the withdraw circuit, unchanged (see zk_proof_withdraw.txt)
+
+
+1. Who picks the venue and the route
+
+    Not the user. Menoid's backend (relayer) does:
+
+        venue   Uniswap V3 through a whitelisted adapter (UniswapV3Adapter)
+        route   findBestRoute: every fee tier (0.01 / 0.05 / 0.3 / 1 %) directly,
+                plus every two-hop route through connector tokens (WMON, USDC),
+                each quoted with Uniswap's QuoterV2; the best output wins
+
+    Why Uniswap V3 first:
+        - fully on-chain: quotes come from QuoterV2, no third-party API
+        - same contracts on Monad, Base, Polygon and Arbitrum
+          (addresses verified on-chain in helpers/uniswap.js)
+        - Monad's MON/USDC 0.3% pool held ~$427k USDC + 33.8M MON
+          when this was written
+
+    The pool only knows "adapters". Adding another venue later (e.g. an
+    aggregator such as KyberSwap, ~0.4% better on Monad today) is a new
+    adapter + setSwapAdapter. No new pool, no new circuit.
+
+
+2. Example: Alice swaps 80 USDC privately
+
+    She holds a private note (USDC, 100, r1).
+
+    Off-Chain (backend + Alice's wallet):
+
+        route        = findBestRoute(USDC -> WMON, 80)    e.g. the 0.3% pool
+        quote        = 3,189.89 WMON
+        minAmountOut = quote - 0.5% slippage
+        deadline     = now + a few minutes
+
+        The bought amount is not known yet, so Alice fixes only its OWNER:
+
+            rOut    = random
+            npkOut  = Poseidon(3, uc_alice, rOut)
+            encOut  = Encrypt(Alice's viewing key,
+                              (WMON, amount 0, rOut, flag AMOUNT_FROM_EVENT))
+
+        Withdraw proof (the same circuit as a withdrawal):
+            inputs:   her 100 USDC note (+ 3 dummies)
+            outputs:  change 19.9 USDC -> Alice, fee 0.1 USDC -> relayer
+            public:   token = USDC, amount = 80     (leaves her private balance)
+
+            100 = 19.9 + 0.1 + 80
+
+        extDataHash = keccak(chainId, pool, "menoid.v1m.swap",
+                             adapter, tokenOut, minAmountOut, deadline,
+                             npkOut, route, encOut, change/fee ciphertexts,
+                             outgoing record) mod p
+
+        Everything about the trade is locked into the proof.
+
+
+    On-Chain (NoidPool.swap, sent by the relayer):
+
+        checks:  swaps not paused, adapter whitelisted, tokenOut accepted,
+                 deadline not passed, minAmountOut > 0, root known,
+                 nullifiers unspent and different
+
+        verify the withdraw proof with the SWAP ext data hash
+        mark the nullifiers spent                     (before any external call)
+
+        send 80 USDC to the adapter
+        adapter -> Uniswap V3 SwapRouter02.exactInput(route, minAmountOut)
+        Uniswap sends WMON straight to the pool
+
+        amountOut = pool's WMON balance after - before     (measured, never trusted)
+        require   the pool lost exactly 80 USDC            (no partial fill, no refund)
+        require   amountOut >= minAmountOut
+
+        the pool finishes the note Alice could not:
+            commitment = Poseidon(4, WMON, amountOut, npkOut)
+
+        insert [change, fee, bought note, 0] as one 4-leaf chunk
+        emit NoteCreated x3, OutgoingRecord, Swapped(USDC, 80, WMON, amountOut, commitment)
+
+
+    Afterwards (Alice's wallet):
+
+        decrypt encOut          -> (WMON, rOut, "amount from event")
+        read Swapped            -> amountOut = 3,189.89
+        check Poseidon(4, WMON, 3189.89, Poseidon(3, uc_alice, rOut)) == commitment
+        -> a normal note (WMON, 3,189.89, rOut)
+
+    It is then spent exactly like any other note: same formula, same tree,
+    same nullifier, same circuits.
+
+
+3. What is public / hidden
+
+    public:   tokenIn, amountIn, tokenOut, amountOut, time, route, relayer
+              (the trade is a public DEX trade anyway)
+    hidden:   who swapped, their balance, the change, where the bought
+              tokens go next
+
+
+4. When it reverts (everything is undone, the notes stay unspent)
+
+    price moved below minAmountOut   Uniswap: "Too little received"
+    deadline passed                  "Swap expired"
+    relayer changed anything bound   "Invalid swap proof"
+      (route, adapter, minimum, deadline, npkOut, ciphertexts, amounts)
+    adapter misbehaves               "Insufficient output" / "Input not fully spent"
+    adapter or token re-enters       "ReentrancyGuard: reentrant call"
+
+    Retry = new quote + new proof. The same note gives the same nullifier,
+    which is fine because the reverted transaction never recorded it.
+
+
+5. Safety properties
+
+    - the adapter only ever holds the one trade's input, for one call
+    - the pool approves nobody; it re-measures what it received
+    - the swap domain ("menoid.v1m.swap") differs from the withdraw domain,
+      so a withdraw proof can never be replayed as a swap, or the reverse
+    - the owner can whitelist adapters and pause swaps, nothing else here;
+      a bad adapter can make swaps fail or fill at minAmountOut, it cannot
+      touch other funds
+    - MEV: the minimum is inside the proof, so a sandwich can take at most
+      the slippage the user allowed
+
+
+6. Outgoing record (for the sender's viewing key)
+
+    action SWAP: token = tokenIn, amount = amountIn, fee,
+                 tokenOut, minAmountOut, and the bought note's randomness.
+    A full viewing key therefore sees every swap: what went in, the minimum
+    accepted, and (from the Swapped event) what came out.
+
+
+7. Gas (local, real Uniswap V3)
+
+    swap, 1 hop    ~1.61M
+    swap, 2 hops   ~1.67M
+    On a fork of Monad mainnet against the real MON/USDC pool: ~1.25M.

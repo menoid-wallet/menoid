@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/NoidPool.sol": {
-      "lastModificationDate": 1791956578520,
-      "contentHash": "1275a7cca17b88c0642f444387aa746c",
+      "lastModificationDate": 1791960455729,
+      "contentHash": "86329d0aa3d43271d19a25ea0bd84775",
       "sourceName": "contracts/NoidPool.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -48,8 +48,8 @@
       ]
     },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/libraries/Interfaces.sol": {
-      "lastModificationDate": 1791956498327,
-      "contentHash": "fe2c559b9b5cc1ed1c372dd207c6d657",
+      "lastModificationDate": 1791960404188,
+      "contentHash": "ef381afd70f786dea160b150294e7e82",
       "sourceName": "contracts/libraries/Interfaces.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -81,6 +81,7 @@
         "^0.8.20"
       ],
       "artifacts": [
+        "ISwapAdapter",
         "ITransferVerifier",
         "IWithdrawVerifier",
         "IWrappedNative"
@@ -126,8 +127,8 @@
       ]
     },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/libraries/Types.sol": {
-      "lastModificationDate": 1791956495278,
-      "contentHash": "5d1d7df8b5a8726f83c5cb36595fbdc8",
+      "lastModificationDate": 1791960411138,
+      "contentHash": "27dc0491d1ae86290958649582d77579",
       "sourceName": "contracts/libraries/Types.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -580,8 +581,8 @@
       ]
     },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/mocks/Mocks.sol": {
-      "lastModificationDate": 1791956585803,
-      "contentHash": "65ed24a975e80e808cc30661b5642eea",
+      "lastModificationDate": 1791960471735,
+      "contentHash": "93d8961e553ac8f4ef9b8253737a4142",
       "sourceName": "contracts/mocks/Mocks.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -609,7 +610,8 @@
         }
       },
       "imports": [
-        "@openzeppelin/contracts/token/ERC20/ERC20.sol"
+        "@openzeppelin/contracts/token/ERC20/ERC20.sol",
+        "../libraries/Interfaces.sol"
       ],
       "versionPragmas": [
         "^0.8.20"
@@ -617,6 +619,7 @@
       "artifacts": [
         "MockERC20",
         "MockFeeOnTransferToken",
+        "MockMaliciousAdapter",
         "MockWrappedNative"
       ]
     },
@@ -692,6 +695,48 @@
       ],
       "artifacts": [
         "WithdrawVerifier"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/adapters/UniswapV3Adapter.sol": {
+      "lastModificationDate": 1791960463311,
+      "contentHash": "87fbd98224d719d3f6a27d7974cbe50e",
+      "sourceName": "contracts/adapters/UniswapV3Adapter.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "../libraries/Interfaces.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IUniswapV3SwapRouter02",
+        "UniswapV3Adapter"
       ]
     }
   }

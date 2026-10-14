@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../libraries/Interfaces.sol";
 
 // Test tokens for the local network only — never deployed to a live chain.
 
@@ -55,5 +56,54 @@ contract MockFeeOnTransferToken is ERC20 {
         if (fee != 0) {
             _burn(from, fee);
         }
+    }
+}
+
+// A swap adapter that misbehaves on purpose, to test the pool's own checks.
+// It pays out of a balance it was pre-funded with.
+contract MockMaliciousAdapter is ISwapAdapter {
+    enum Mode {
+        LieAboutOutput,   // claims a huge amountOut, pays the pool nothing
+        RefundInput,      // pays minAmountOut, but hands part of the input back
+        Reenter           // tries to call back into the pool mid-swap
+    }
+
+    Mode public mode;
+    address public reentryTarget;
+    bytes public reentryCall;
+
+    function setMode(Mode mode_) external {
+        mode = mode_;
+    }
+
+    function setReentry(address target, bytes calldata data) external {
+        reentryTarget = target;
+        reentryCall = data;
+    }
+
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address recipient,
+        bytes calldata
+    ) external returns (uint256) {
+        if (mode == Mode.LieAboutOutput) {
+            return type(uint128).max;
+        }
+        if (mode == Mode.RefundInput) {
+            IERC20(tokenOut).transfer(recipient, minAmountOut);
+            IERC20(tokenIn).transfer(recipient, amountIn / 2);
+            return minAmountOut;
+        }
+        (bool ok, bytes memory reason) = reentryTarget.call(reentryCall);
+        if (!ok) {
+            assembly {
+                revert(add(reason, 32), mload(reason))
+            }
+        }
+        IERC20(tokenOut).transfer(recipient, minAmountOut);
+        return minAmountOut;
     }
 }

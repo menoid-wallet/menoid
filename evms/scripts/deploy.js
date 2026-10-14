@@ -4,9 +4,15 @@
  *   npx hardhat node                                         (another shell)
  *   npx hardhat run scripts/deploy.js --network localhost
  *
- * On a local network this also deploys mock tokens (wrapped native + USDC).
- * On a live network set WRAPPED_NATIVE (WMON / WETH / WPOL address); accepted
- * tokens are then configured separately with configureToken.
+ * Local network: also deploys mock tokens (wrapped native, USDC, TKN), the real
+ * Uniswap V3 contracts with seeded pools, and a whitelisted UniswapV3Adapter —
+ * a complete environment for private swaps (and for the website to talk to).
+ *
+ * Live network: the chain's Uniswap V3 deployment and wrapped native token are
+ * taken from helpers/uniswap.js when the chain id matches one of them (Monad,
+ * Base, Polygon, Arbitrum); otherwise set WRAPPED_NATIVE (and optionally
+ * UNISWAP_V3_ROUTER). Accepted tokens are configured afterwards with
+ * configureToken.
  *
  * signers[0] deploys, owns the pool (move ownership to a multisig on a live
  * network), and is registered as the relayer identity.
@@ -17,25 +23,45 @@ const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-const { deployLocalSystem, deployNoidPool } = require("../helpers/deploy");
+const { deployLocalSystem, deployNoidPool, deployUniswapV3Adapter } = require("../helpers/deploy");
 const { deriveWallet, registerWallet } = require("../helpers/wallets");
+const { UNISWAP_V3 } = require("../helpers/uniswap");
 
 const LOCAL_NETWORKS = new Set(["hardhat", "localhost"]);
 
 async function main() {
     const { ethers, network } = hre;
     const [deployer] = await ethers.getSigners();
+    const chainId = (await ethers.provider.getNetwork()).chainId;
     const log = (line) => console.log("  " + line);
 
-    console.log(`Deploying Menoid v1-mainnet to ${network.name} with ${deployer.address}\n`);
+    console.log(`Deploying Menoid v1-mainnet to ${network.name} (chain ${chainId}) with ${deployer.address}\n`);
 
     let system;
+    let swapVenue;
     if (LOCAL_NETWORKS.has(network.name)) {
-        system = await deployLocalSystem(hre, { log });
+        system = await deployLocalSystem(hre, { log, uniswap: true });
+        swapVenue = {
+            factory: system.uniswap.factory.address,
+            swapRouter02: system.uniswap.router.address,
+            quoterV2: system.uniswap.quoter.address,
+            adapter: system.uniswap.adapter.address,
+            pools: system.uniswap.pools
+        };
     } else {
-        const wrappedNative = process.env.WRAPPED_NATIVE;
-        if (!wrappedNative) throw new Error("set WRAPPED_NATIVE to the chain's wrapped native token address");
+        // only trust a known deployment if the chain id really matches it
+        const known = Object.values(UNISWAP_V3).find((d) => d.chainId === chainId);
+        const wrappedNative = process.env.WRAPPED_NATIVE || (known && known.wrappedNative);
+        if (!wrappedNative) throw new Error("unknown chain: set WRAPPED_NATIVE to its wrapped native token address");
         system = await deployNoidPool(hre, { wrappedNative, log });
+
+        const router = process.env.UNISWAP_V3_ROUTER || (known && known.swapRouter02);
+        if (router) {
+            const adapter = await deployUniswapV3Adapter(hre, { pool: system.pool, router, log });
+            swapVenue = { ...(known || {}), swapRouter02: router, adapter: adapter.address };
+        } else {
+            log("no Uniswap V3 router for this chain: swaps stay disabled until an adapter is added");
+        }
     }
 
     // the relayer's identity: fee notes are locked to its user commitment
@@ -43,9 +69,13 @@ async function main() {
     await registerWallet(system.pool, relayer);
     log(`relayer registered (user commitment ${relayer.userCommitmentBytes32})`);
 
+    const tokens = {};
+    if (system.usdc) tokens.USDC = system.usdc.address;
+    if (system.tkn) tokens.TKN = system.tkn.address;
+
     const record = {
         network: network.name,
-        chainId: (await ethers.provider.getNetwork()).chainId,
+        chainId,
         version: "v1-mainnet",
         noidPool: system.pool.address,
         deployBlock: system.deployBlock,
@@ -53,8 +83,9 @@ async function main() {
         withdrawVerifier: system.withdrawVerifier.address,
         poseidonT3: system.poseidonT3.address,
         poseidonT5: system.poseidonT5.address,
-        wrappedNative: system.wrappedNative ? system.wrappedNative.address : process.env.WRAPPED_NATIVE,
-        tokens: system.usdc ? { USDC: system.usdc.address } : {},
+        wrappedNative: system.wrappedNative ? system.wrappedNative.address : system.pool.wrappedNative && (await system.pool.wrappedNative()),
+        tokens,
+        uniswapV3: swapVenue || null,
         owner: deployer.address,
         relayer: {
             address: relayer.address,

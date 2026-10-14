@@ -8,7 +8,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "test:localnet": "hardhat test --network localhost",
-    "deploy:localnet": "hardhat run scripts/deploy.js --network localhost"
+    "deploy:localnet": "hardhat run scripts/deploy.js --network localhost",
+    "test:fork": "MONAD_FORK_URL=https://rpc.monad.xyz hardhat test test/fork/monad-swap.fork.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,9 @@
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@nomiclabs/hardhat-waffle": "^2.0.6",
+    "@uniswap/swap-router-contracts": "^1.3.1",
+    "@uniswap/v3-core": "^1.0.1",
+    "@uniswap/v3-periphery": "^1.4.4",
     "autoprefixer": "^10.5.0",
     "chai": "^4.3.10",
     "ethereum-waffle": "^4.0.10",

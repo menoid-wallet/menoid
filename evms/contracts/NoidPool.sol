@@ -29,11 +29,15 @@ import "./libraries/Types.sol";
  *   transfer   notes -> notes (transfer proof). Token, amounts, sender and
  *              receiver stay hidden.
  *   withdraw   notes -> public funds at an address (withdraw proof).
+ *   swap       notes of tokenIn -> a note of tokenOut. Reuses the withdraw
+ *              proof; the pool trades through a whitelisted adapter and then
+ *              finishes the bought note's commitment once the amount is known.
  *
- * The owner can only choose which tokens are accepted for deposit and pause
- * deposits. Transfers and withdrawals can never be paused or blocked.
+ * The owner can choose which tokens are accepted, which swap adapters may be
+ * used, and pause deposits or swaps. Transfers and withdrawals can never be
+ * paused or blocked.
  *
- * Refer: notes/keys_and_registration.txt, deposit.txt, transfer.txt, withdraw.txt
+ * Refer: notes/keys_and_registration.txt, deposit.txt, transfer.txt, withdraw.txt, swap.txt
  */
 contract NoidPool is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -51,6 +55,7 @@ contract NoidPool is Ownable, ReentrancyGuard {
 
     bytes32 public constant TRANSFER_EXT_DOMAIN = keccak256("menoid.v1m.transfer");
     bytes32 public constant WITHDRAW_EXT_DOMAIN = keccak256("menoid.v1m.withdraw");
+    bytes32 public constant SWAP_EXT_DOMAIN = keccak256("menoid.v1m.swap");
 
     // ─── identity ────────────────────────────────────────────────────────────
 
@@ -74,6 +79,11 @@ contract NoidPool is Ownable, ReentrancyGuard {
 
     mapping(address => TokenConfig) public tokenConfig;
     bool public depositsPaused;
+
+    // ─── swaps ───────────────────────────────────────────────────────────────
+
+    mapping(address => bool) public swapAdapters;   // venues the pool may route through
+    bool public swapsPaused;
 
     // ─── notes ───────────────────────────────────────────────────────────────
 
@@ -100,10 +110,21 @@ contract NoidPool is Ownable, ReentrancyGuard {
 
     event Deposited(address indexed depositor, address indexed token, uint256 amount, bytes32 commitment);
     event Withdrawn(address indexed token, address indexed recipient, uint256 amount);
+    // the bought note's amount is public (the trade is public); wallets read it here
+    event Swapped(
+        address indexed tokenIn,
+        address indexed tokenOut,
+        uint256 amountIn,
+        uint256 amountOut,
+        bytes32 commitment,
+        address adapter
+    );
     event NewTree(uint256 indexed treeId);
 
     event TokenConfigured(address indexed token, bool depositsEnabled, uint256 maxDeposit);
     event DepositsPausedSet(bool paused);
+    event SwapAdapterSet(address indexed adapter, bool allowed);
+    event SwapsPausedSet(bool paused);
 
     constructor(address transferVerifier_, address withdrawVerifier_, address wrappedNative_) {
         require(
@@ -391,6 +412,112 @@ contract NoidPool is Ownable, ReentrancyGuard {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
+    //  Swap
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Private swap: notes of tokenIn -> a new note of tokenOut, executed by the
+     * pool itself through a whitelisted adapter.
+     *
+     * The withdraw proof is reused: amountIn of tokenIn leaves the private
+     * balance (change and fee notes stay private). The output amount is not
+     * known when the proof is made, so the user commits only to the bought
+     * note's owner (npkOut); the pool finishes the commitment after the trade:
+     *
+     *      commitment = Poseidon(D_CM, tokenOut, amountOut, npkOut)
+     *
+     * amountOut is measured from the pool's own balance, never taken from the
+     * adapter. Below minAmountOut, or after the deadline, everything reverts.
+     */
+    function swap(SwapCall[] calldata calls) external nonReentrant {
+        require(!swapsPaused, "Swaps paused");
+        require(calls.length != 0, "No calls");
+        for (uint256 i = 0; i < calls.length; i++) {
+            _swap(calls[i]);
+        }
+    }
+
+    function _swap(SwapCall calldata call) private {
+        SwapExtData calldata ext = call.ext;
+        require(call.amountIn != 0 && call.amountIn <= MAX_AMOUNT, "Invalid amount");
+        require(call.tokenIn != address(0) && ext.tokenOut != call.tokenIn, "Invalid token pair");
+        require(tokenConfig[ext.tokenOut].depositsEnabled, "Token not accepted");
+        require(swapAdapters[ext.adapter], "Adapter not allowed");
+        require(block.timestamp <= ext.deadline, "Swap expired");
+        require(ext.minAmountOut != 0, "Minimum output required");
+        require(ext.npkOut != bytes32(0) && uint256(ext.npkOut) < FIELD_SIZE, "Invalid note public key");
+        _checkInputs(call.treeId, call.root, call.nullifiers);
+
+        require(
+            withdrawVerifier.verifyProof(call.proof.a, call.proof.b, call.proof.c, _swapSignals(call)),
+            "Invalid swap proof"
+        );
+
+        // the input notes are spent before any external call
+        _spendNullifiers(call.nullifiers);
+
+        uint256 amountOut = _executeSwap(call.tokenIn, call.amountIn, ext);
+
+        // the pool finishes the bought note now that the amount is known
+        bytes32 commitment = bytes32(
+            PoseidonT5.hash([D_CM, uint256(uint160(ext.tokenOut)), amountOut, uint256(ext.npkOut)])
+        );
+        _insertSwapNotes(call, commitment);
+
+        emit OutgoingRecord(call.nullifiers[0], ext.outgoingRecord);
+        emit Swapped(call.tokenIn, ext.tokenOut, call.amountIn, amountOut, commitment, ext.adapter);
+    }
+
+    function _executeSwap(address tokenIn, uint256 amountIn, SwapExtData calldata ext)
+        private
+        returns (uint256 amountOut)
+    {
+        IERC20 inToken = IERC20(tokenIn);
+        IERC20 outToken = IERC20(ext.tokenOut);
+        uint256 inBefore = inToken.balanceOf(address(this));
+        uint256 outBefore = outToken.balanceOf(address(this));
+
+        // the adapter only ever holds this one trade's input; the pool approves nobody
+        inToken.safeTransfer(ext.adapter, amountIn);
+        ISwapAdapter(ext.adapter).swap(tokenIn, ext.tokenOut, amountIn, ext.minAmountOut, address(this), ext.routeData);
+
+        // exact input: the pool lost exactly amountIn — no partial fills, no refunds
+        require(inToken.balanceOf(address(this)) == inBefore - amountIn, "Input not fully spent");
+
+        amountOut = outToken.balanceOf(address(this)) - outBefore;
+        require(amountOut >= ext.minAmountOut, "Insufficient output");
+        require(amountOut <= MAX_AMOUNT, "Output above 128 bits");
+    }
+
+    // chunk: [change, relayer fee, bought note, 0]
+    function _insertSwapNotes(SwapCall calldata call, bytes32 boughtNote) private {
+        bytes32[4] memory chunk;
+        chunk[0] = call.outCommitments[0];
+        chunk[1] = call.outCommitments[1];
+        chunk[2] = boughtNote;
+        (uint256 treeId, uint256 startIndex) = _insertChunk(chunk, 3);
+
+        emit NoteCreated(treeId, startIndex, chunk[0], call.ext.encryptedOutputs[0]);
+        emit NoteCreated(treeId, startIndex + 1, chunk[1], call.ext.encryptedOutputs[1]);
+        emit NoteCreated(treeId, startIndex + 2, boughtNote, call.ext.encryptedOutput);
+    }
+
+    // same layout as the withdraw proof's signals; the ext data domain differs
+    function _swapSignals(SwapCall calldata call) private view returns (uint256[11] memory signals) {
+        signals[0] = uint256(call.root);
+        for (uint256 i = 0; i < N_INS; i++) {
+            signals[1 + i] = uint256(call.nullifiers[i]);
+        }
+        for (uint256 i = 0; i < WITHDRAW_OUTS; i++) {
+            signals[5 + i] = uint256(call.outCommitments[i]);
+        }
+        signals[7] = uint256(call.relayer);
+        signals[8] = uint256(uint160(call.tokenIn));
+        signals[9] = call.amountIn;
+        signals[10] = hashSwapExtData(call.ext);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
     //  External data binding
     // ═════════════════════════════════════════════════════════════════════════
 
@@ -403,6 +530,13 @@ contract NoidPool is Ownable, ReentrancyGuard {
     // Same for withdrawals; the recipient is bound here.
     function hashWithdrawExtData(WithdrawExtData calldata ext) public view returns (uint256) {
         return uint256(keccak256(abi.encode(block.chainid, address(this), WITHDRAW_EXT_DOMAIN, ext))) % FIELD_SIZE;
+    }
+
+    // Swaps: adapter, route, tokenOut, minAmountOut, deadline, npkOut and every
+    // ciphertext are bound. The separate domain means a withdraw proof can never
+    // be replayed as a swap, or a swap as a withdrawal.
+    function hashSwapExtData(SwapExtData calldata ext) public view returns (uint256) {
+        return uint256(keccak256(abi.encode(block.chainid, address(this), SWAP_EXT_DOMAIN, ext))) % FIELD_SIZE;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -472,7 +606,7 @@ contract NoidPool is Ownable, ReentrancyGuard {
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    //  Admin — deposit policy only; cannot touch notes or funds
+    //  Admin — deposit and swap policy only; cannot touch notes or funds
     // ═════════════════════════════════════════════════════════════════════════
 
     function configureToken(address token, bool depositsEnabled, uint256 maxDeposit) external onlyOwner {
@@ -485,5 +619,19 @@ contract NoidPool is Ownable, ReentrancyGuard {
     function setDepositsPaused(bool paused) external onlyOwner {
         depositsPaused = paused;
         emit DepositsPausedSet(paused);
+    }
+
+    // An adapter only ever receives the input of the swap that names it, and the
+    // pool re-measures the output, so a bad adapter can make swaps fail or fill
+    // at minAmountOut, but cannot touch other funds.
+    function setSwapAdapter(address adapter, bool allowed) external onlyOwner {
+        require(adapter != address(0), "Invalid adapter");
+        swapAdapters[adapter] = allowed;
+        emit SwapAdapterSet(adapter, allowed);
+    }
+
+    function setSwapsPaused(bool paused) external onlyOwner {
+        swapsPaused = paused;
+        emit SwapsPausedSet(paused);
     }
 }

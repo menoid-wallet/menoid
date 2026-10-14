@@ -1,6 +1,6 @@
 const { deriveIncomingViewingKey, deriveOutgoingViewingKey } = require("./wallets");
 const { notePublicKey, noteCommitment, noteNullifier } = require("./commitments");
-const { tryDecryptNote, tryDecryptOutgoingRecord } = require("./encryption");
+const { NOTE_FLAGS, tryDecryptNote, tryDecryptOutgoingRecord } = require("./encryption");
 
 /**
  * The viewing-key scanner — what a wallet or an auditor runs.
@@ -82,6 +82,13 @@ function scan(mirror, viewer) {
             const plain = tryDecryptNote(ivk, event.encryptedNote);
             if (!plain) continue;
 
+            // a swap's bought note: the pool published the amount after the trade
+            if (plain.flags & NOTE_FLAGS.AMOUNT_FROM_EVENT) {
+                const swapped = mirror.swapOutputs.get(event.commitment.toString());
+                if (!swapped) break;
+                plain.amount = swapped.amountOut;
+            }
+
             // a ciphertext anyone could have encrypted to us: only accept it if
             // it opens to the commitment the chain actually stored
             const npk = notePublicKey(viewer.userCommitment, plain.randomness);
@@ -90,7 +97,14 @@ function scan(mirror, viewer) {
             // zero-value notes are the dummy outputs of fixed-shape spends
             if (plain.amount === 0n) break;
 
-            const note = { ...event, token: plain.token, amount: plain.amount, randomness: plain.randomness, epoch };
+            const note = {
+                ...event,
+                token: plain.token,
+                amount: plain.amount,
+                randomness: plain.randomness,
+                epoch,
+                fromSwap: Boolean(plain.flags & NOTE_FLAGS.AMOUNT_FROM_EVENT)
+            };
             if (canSeeSpends) {
                 note.nullifier = noteNullifier(viewer.nullifierKey, note.commitment, note.randomness);
                 note.spent = mirror.isSpent(note.nullifier);

@@ -35,3 +35,6 @@ witness.wtns
 
 # macOS
 .DS_Store
+
+# Hardhat fork cache (downloaded mainnet state from test/fork)
+evms/cache/hardhat-network-fork/

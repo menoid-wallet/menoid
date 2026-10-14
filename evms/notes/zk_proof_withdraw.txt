@@ -78,6 +78,14 @@ What the contract adds
 - funds sent only after every state change (non-reentrant)
 
 
-Swaps (next step) will reuse this circuit unchanged: "an amount of a token
+Swaps reuse this circuit unchanged (see swap.txt): "an amount of a token
 leaves the private balance" is the same statement; only where the value goes
-(an address vs. a swap adapter) differs, and that goes in the ext data.
+(an address vs. the swap adapter) differs, and that goes in the ext data.
+
+    withdraw    extDataHash = keccak(chainId, pool, "menoid.v1m.withdraw", ...)
+    swap        extDataHash = keccak(chainId, pool, "menoid.v1m.swap", ...)
+
+The different domains mean one can never be replayed as the other. The
+swap's bought note is NOT a circuit output: the pool builds its commitment
+after the trade, like a deposit, from npkOut (bound in the ext data) and the
+measured amount.

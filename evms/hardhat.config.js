@@ -4,6 +4,10 @@ require("dotenv").config();
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 
+// MONAD_FORK_URL=https://rpc.monad.xyz npx hardhat test test/fork/monad-swap.fork.js
+// runs the in-process network on a fork of Monad mainnet (real Uniswap V3, WMON, USDC).
+const MONAD_FORK_URL = process.env.MONAD_FORK_URL;
+
 module.exports = {
     solidity: {
     version: "0.8.20",
@@ -22,6 +26,8 @@ module.exports = {
     },
 
     networks: {
+        hardhat: MONAD_FORK_URL ? { forking: { url: MONAD_FORK_URL } } : {},
+
         localhost: {
             url: "http://127.0.0.1:8545"
         },

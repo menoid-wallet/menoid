@@ -36,10 +36,11 @@ const KEY_TAGS = {
     OVK: "menoid/v1m/ovk"
 };
 
-// ext data domains — NoidPool.TRANSFER_EXT_DOMAIN / WITHDRAW_EXT_DOMAIN
+// ext data domains — NoidPool.TRANSFER_EXT_DOMAIN / WITHDRAW_EXT_DOMAIN / SWAP_EXT_DOMAIN
 const EXT_DOMAIN = {
     TRANSFER: ethers.utils.id("menoid.v1m.transfer"),
-    WITHDRAW: ethers.utils.id("menoid.v1m.withdraw")
+    WITHDRAW: ethers.utils.id("menoid.v1m.withdraw"),
+    SWAP: ethers.utils.id("menoid.v1m.swap")
 };
 
 // spend shape — contracts/libraries/Types.sol and the circuits

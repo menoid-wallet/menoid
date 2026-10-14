@@ -10,7 +10,7 @@ const {
     tokenField,
     toBytes32
 } = require("./commitments");
-const { ACTION, encryptNote, encryptOutgoingRecord } = require("./encryption");
+const { ACTION, NOTE_FLAGS, encryptNote, encryptOutgoingRecord } = require("./encryption");
 const { prove } = require("./prover");
 
 /**
@@ -60,6 +60,35 @@ function hashWithdrawExtData(chainId, poolAddress, ext) {
             poolAddress,
             EXT_DOMAIN.WITHDRAW,
             [ext.recipient, ext.unwrapNative, ext.encryptedOutputs, ext.outgoingRecord]
+        ]
+    );
+    return BigInt(ethers.utils.keccak256(encoded)) % FIELD_SIZE;
+}
+
+function hashSwapExtData(chainId, poolAddress, ext) {
+    const encoded = ethers.utils.defaultAbiCoder.encode(
+        [
+            "uint256",
+            "address",
+            "bytes32",
+            "tuple(address adapter, address tokenOut, uint256 minAmountOut, uint256 deadline, bytes32 npkOut, " +
+                "bytes routeData, bytes encryptedOutput, bytes[2] encryptedOutputs, bytes outgoingRecord)"
+        ],
+        [
+            chainId,
+            poolAddress,
+            EXT_DOMAIN.SWAP,
+            [
+                ext.adapter,
+                ext.tokenOut,
+                ext.minAmountOut,
+                ext.deadline,
+                ext.npkOut,
+                ext.routeData,
+                ext.encryptedOutput,
+                ext.encryptedOutputs,
+                ext.outgoingRecord
+            ]
         ]
     );
     return BigInt(ethers.utils.keccak256(encoded)) % FIELD_SIZE;
@@ -270,12 +299,121 @@ async function buildWithdraw({
     };
 }
 
+// ─── swap ───────────────────────────────────────────────────────────────────
+
+/**
+ * A private swap, built on the withdraw proof: amountIn of tokenIn leaves the
+ * private balance, and the pool buys tokenOut with it.
+ *
+ * The bought amount is unknown until the trade runs, so the wallet commits
+ * only to the bought note's OWNER:
+ *
+ *      npkOut          = Poseidon(D_NPK, sender userCommitment, rOut)
+ *      encryptedOutput = (tokenOut, amount 0, rOut, flags = AMOUNT_FROM_EVENT)
+ *
+ * and the pool finishes Poseidon(D_CM, tokenOut, amountOut, npkOut) after the
+ * trade. adapter + routeData come from the backend's route choice
+ * (helpers/uniswap.js findBestRoute); minAmountOut from its quote.
+ */
+async function buildSwap({
+    pool,
+    chainId,
+    mirror,
+    sender,
+    notes,
+    tokenIn,
+    amountIn,
+    tokenOut,
+    minAmountOut,
+    adapter,
+    routeData,
+    deadline,
+    relayer,
+    fee = 0n
+}) {
+    amountIn = BigInt(amountIn);
+    minAmountOut = BigInt(minAmountOut);
+    fee = BigInt(fee);
+    if (minAmountOut <= 0n) throw new Error("a swap needs a minimum output");
+
+    const { treeId, root, slots, nullifiers, total } = prepareInputs({ mirror, owner: sender, notes, token: tokenIn });
+    const change = total - amountIn - fee;
+    if (change < 0n) throw new Error(`notes hold ${total}, swap needs ${amountIn + fee}`);
+
+    // change and fee stay in tokenIn, exactly like a withdrawal
+    const outputs = [
+        createNote({ token: tokenIn, amount: change, owner: sender.userCommitment }),
+        createNote({ token: tokenIn, amount: fee, owner: relayer.userCommitment })
+    ];
+
+    // the bought note: owner fixed now, amount filled in by the pool
+    const outputRandomness = randomFieldElement();
+    const npkOut = notePublicKey(sender.userCommitment, outputRandomness);
+
+    const ext = {
+        adapter: ethers.utils.getAddress(adapter),
+        tokenOut: ethers.utils.getAddress(tokenOut),
+        minAmountOut,
+        deadline: BigInt(deadline),
+        npkOut: toBytes32(npkOut),
+        routeData,
+        encryptedOutput: encryptNote(sender.viewing.ivkPub, {
+            token: tokenOut,
+            amount: 0n,
+            randomness: outputRandomness,
+            flags: NOTE_FLAGS.AMOUNT_FROM_EVENT
+        }),
+        encryptedOutputs: [
+            encryptNote(sender.viewing.ivkPub, outputs[0]),
+            encryptNote(relayer.viewingPublicKey, outputs[1])
+        ],
+        outgoingRecord: encryptOutgoingRecord(sender.viewing.ovk, nullifiers[0], {
+            action: ACTION.SWAP,
+            token: tokenIn,
+            amount: amountIn,
+            fee,
+            counterpartyAddress: tokenOut,
+            counterpartyUserCommitment: minAmountOut,
+            counterpartyNoteRandomness: outputRandomness
+        })
+    };
+    const extDataHash = hashSwapExtData(chainId, pool.address, ext);
+
+    const { proof, rawProof, publicSignals } = await prove("withdraw", {
+        ...spendInput({ owner: sender, root, slots, nullifiers, outputs, relayer, extDataHash }),
+        publicToken: tokenField(tokenIn),
+        publicAmount: amountIn
+    });
+
+    return {
+        call: {
+            proof,
+            treeId,
+            root: toBytes32(root),
+            nullifiers: nullifiers.map(toBytes32),
+            outCommitments: outputs.map((o) => toBytes32(o.commitment)),
+            relayer: toBytes32(relayer.userCommitment),
+            tokenIn: ethers.utils.getAddress(tokenIn),
+            amountIn,
+            ext
+        },
+        outputs,
+        boughtNote: { token: ethers.utils.getAddress(tokenOut), randomness: outputRandomness, npk: npkOut },
+        nullifiers,
+        extDataHash,
+        publicSignals,
+        rawProof
+    };
+}
+
 module.exports = {
     buildDeposit,
     buildTransfer,
     buildWithdraw,
+    buildSwap,
     hashTransferExtData,
     hashWithdrawExtData,
+    hashSwapExtData,
     prepareInputs,
     spendInput
 };
