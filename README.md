@@ -28,49 +28,102 @@ are two views of the same wallet — no second address, no second seed phrase.
 
 ### One-time registration
 
-A wallet binds itself to a private identity once, per chain:
+The real wallet signs one readable message. Every key is derived from that
+signature, so there is nothing extra to store or back up:
 
 ```
-signature   = sign("menoid_Wallet")                     // the real wallet signs
-spendKey    = BabyJubJub keypair  derived from signature
-encKey      = encryption keypair  derived from signature
-userCommitment = Poseidon(address mod p, spendPk.x, spendPk.y)
+signature      = sign("Menoid v1-mainnet: create my private account keys. … Key index: 0")
+seed           = keccak("menoid/v1m/seed" ‖ signature)        // never stored, never sent
 
-register(userCommitment, encryptionPublicKey)           // on-chain, once
+sk             = keccak("menoid/v1m/spend" ‖ seed) mod l       // spending key (BabyJubJub)
+nk             = Poseidon(2, sk)                               // nullifier key
+ivk, ovk       = derived from seed, per viewing epoch          // incoming / outgoing viewing keys
+userCommitment = Poseidon(1, address, spendPk.x, spendPk.y)
+
+register(userCommitment, ivkPub)                               // on-chain, once per chain
 ```
 
-Both halves live **on-chain**. A sender needs the commitment to lock a note to
-you and the encryption key to encrypt it, and the second cannot be derived from
-the first — so both are registered together and anyone can resolve a recipient
-straight from the chain, with no server in the path.
+A sender resolves a recipient straight from the chain with one call,
+`registrationOf(address)`: the user commitment to lock the note to, and the
+viewing public key to encrypt it to. The message has no chain id, so the same
+identity works on every chain.
+
+Keys can change later, only from the registered wallet: `updateViewingKey`
+moves to a new viewing key with the same identity, and `rotateKeys` moves to a
+new identity if the signature ever leaks.
 
 ### Notes, commitments, nullifiers
 
 ```
-commitment = Poseidon(1, amount, r, userCommitment)     // a note you own
-nullifier  = Poseidon(2, commitment, r, spendSecretKey) // published when spent
+npk        = Poseidon(3, userCommitment, r)     // note public key: hides the owner
+commitment = Poseidon(4, token, amount, npk)    // a note; the token is inside it
+nullifier  = Poseidon(5, nk, commitment, r)     // published when the note is spent
 ```
 
-Commitments are inserted into an incremental Merkle forest. A nullifier is
-revealed only when a note is spent, which prevents double-spends without
-revealing *which* note was spent. The encrypted note itself is emitted as an
-event — only the receiver's encryption key can open it.
+Every token shares **one pool and one Merkle tree**. The token is a private
+field inside the commitment, so a transfer does not reveal which token moved.
+A nullifier is revealed only when a note is spent: it prevents double-spends
+without revealing *which* note was spent. Each note is emitted encrypted to its
+owner's viewing key, and only that key can open it. The leading numbers are
+domain separators, so no hash can be mistaken for another.
 
-### Three operations
+### Viewing keys
+
+Nullifiers use `nk` instead of the spending key, so a user can show their
+activity without giving anyone the power to spend:
+
+| You share | They see | Can spend |
+|---|---|---|
+| Incoming viewing key | notes you received | ❌ |
+| Full viewing key (`ivk` + `nk` + `ovk`) | received, spent, and who you paid | ❌ |
+| Epoch viewing key | the same, for one period only | ❌ |
+| Payment receipt | one payment, no key at all | ❌ |
+
+### Operations
 
 | Operation | What it does | Proof |
 |---|---|---|
-| **Deposit** | Public funds → one or two private notes | `deposit_proof` |
-| **Transfer** | Private notes → private notes, new owner | `transfer_proof` |
-| **Withdraw** | Private notes → public funds at a real address | `withdraw_proof` |
+| **Deposit** | Public tokens → one private note. The contract computes the commitment itself | none |
+| **Transfer** | Private notes → private notes. Token, amounts, sender and receiver stay hidden | `transfer_proof` |
+| **Withdraw** | Private notes → public tokens at any address | `withdraw_proof` |
+| **Swap** 🚧 | Private notes of one token → a private note of another; the pool executes the trade | `withdraw_proof` |
 
-Every amount is range-constrained to 128 bits in **every** circuit, so a proof
-cannot satisfy a balance equation by wrapping around the BN254 field.
+- **Fixed shape.** Every spend publishes 4 nullifiers and creates 3 (transfer)
+  or 2 (withdraw) notes. Dummy notes fill the unused slots, so nobody learns
+  how many notes were really spent.
+- **Bound data.** Encrypted notes, the withdraw recipient and the swap
+  parameters are hashed into the proof (`extDataHash`). Changing any of them
+  makes the proof fail.
+- **128-bit amounts** in every circuit, so no balance equation can wrap around
+  the BN254 field.
+- **Native coins** are wrapped on deposit (MON → WMON) and can be unwrapped on
+  withdraw.
 
-A **relayer** broadcasts transactions so a user never has to pay gas from the
-address they are trying to keep private. It is paid with an optional second
-note (`C2`) created by the same proof. The relayer can censor, but it cannot
-steal, forge, or deanonymise: it never learns amounts or note contents.
+A **relayer** submits transfers, withdrawals and swaps, so a user never pays
+gas from the address they are trying to keep private. It is paid with the last
+output note of the same proof, in the same token. The relayer can refuse a
+transaction, but it cannot steal, redirect, forge or deanonymise.
+
+### Swaps 🚧
+
+The next piece being built on this branch. One pool holds every token, so the
+pool itself calls the swap; there is no separate pool per token.
+
+```
+1. quote    tokenIn, amountIn → tokenOut, minOut, route (DEX path), deadline
+2. prove    withdraw circuit: tokenIn notes leave the private balance
+                publicToken = tokenIn, publicAmount = amountIn
+            npkOut = Poseidon(3, userCommitment, rOut)      // owner of the output, amount not known yet
+            tokenOut, minOut, npkOut, route, deadline → extDataHash
+3. pool     verify → spend nullifiers → amountIn to the swap adapter → DEX
+            out = balance after − balance before;  require out ≥ minOut
+            commitment = Poseidon(4, tokenOut, out, npkOut) // the pool finishes the note
+4. wallet   decrypts rOut, reads `out` from the event, owns the new note
+```
+
+On-chain, a swap shows the token pair and both amounts, never who swapped or
+where the output goes. If the price moves past `minOut` or the deadline passes,
+the whole transaction reverts and the input notes stay unspent.
 
 ---
 
