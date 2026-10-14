@@ -1,25 +1,26 @@
 {
   "_format": "hh-sol-artifact-1",
-  "contractName": "IPoseidon",
+  "contractName": "IWrappedNative",
   "sourceName": "contracts/libraries/Interfaces.sol",
   "abi": [
     {
+      "inputs": [],
+      "name": "deposit",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
-          "internalType": "uint256[2]",
-          "name": "input",
-          "type": "uint256[2]"
-        }
-      ],
-      "name": "poseidon",
-      "outputs": [
-        {
           "internalType": "uint256",
-          "name": "",
+          "name": "amount",
           "type": "uint256"
         }
       ],
-      "stateMutability": "pure",
+      "name": "withdraw",
+      "outputs": [],
+      "stateMutability": "nonpayable",
       "type": "function"
     }
   ],

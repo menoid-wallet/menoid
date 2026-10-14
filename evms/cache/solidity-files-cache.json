@@ -1,46 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/DepositVerifier.sol": {
-      "lastModificationDate": 1784094018615,
-      "contentHash": "9271647acc282b63fbf3206370c5bffe",
-      "sourceName": "contracts/DepositVerifier.sol",
-      "solcConfig": {
-        "version": "0.8.20",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "viaIR": false,
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        ">=0.7.0 <0.9.0"
-      ],
-      "artifacts": [
-        "DepositVerifier"
-      ]
-    },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/NoidPool.sol": {
-      "lastModificationDate": 1790310421518,
-      "contentHash": "d2cf7c265fb4a707904b28faa0cfc1e6",
+      "lastModificationDate": 1791956578520,
+      "contentHash": "1275a7cca17b88c0642f444387aa746c",
       "sourceName": "contracts/NoidPool.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -68,6 +31,11 @@
         }
       },
       "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/security/ReentrancyGuard.sol",
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "poseidon-solidity/PoseidonT5.sol",
         "./libraries/Interfaces.sol",
         "./libraries/poolLib.sol",
         "./libraries/Types.sol"
@@ -80,8 +48,8 @@
       ]
     },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/libraries/Interfaces.sol": {
-      "lastModificationDate": 1783776866765,
-      "contentHash": "ebd7ff7361cc0c2fdea5235104fa4af5",
+      "lastModificationDate": 1791956498327,
+      "contentHash": "fe2c559b9b5cc1ed1c372dd207c6d657",
       "sourceName": "contracts/libraries/Interfaces.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -113,90 +81,15 @@
         "^0.8.20"
       ],
       "artifacts": [
-        "IDepositVerifier",
-        "IPoseidon",
         "ITransferVerifier",
-        "IWithdrawVerifier"
+        "IWithdrawVerifier",
+        "IWrappedNative"
       ]
     },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/libraries/poolLib.sol": {
-      "lastModificationDate": 1783694522058,
-      "contentHash": "18993625d31e31fa64ff6a2cd4670551",
+      "lastModificationDate": 1791956520462,
+      "contentHash": "0025036377b5e3e0e63f83aa43969ef7",
       "sourceName": "contracts/libraries/poolLib.sol",
-      "solcConfig": {
-        "version": "0.8.20",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "viaIR": false,
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./Interfaces.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "PoolLib"
-      ]
-    },
-    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/libraries/Types.sol": {
-      "lastModificationDate": 1783776870674,
-      "contentHash": "b61af6ce7514ab8c8d047f876e83db24",
-      "sourceName": "contracts/libraries/Types.sol",
-      "solcConfig": {
-        "version": "0.8.20",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "viaIR": false,
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": []
-    },
-    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/PoseidonWrapper.sol": {
-      "lastModificationDate": 1783694522057,
-      "contentHash": "1a97cd795c8164007d3ffa174e320be9",
-      "sourceName": "contracts/PoseidonWrapper.sol",
       "solcConfig": {
         "version": "0.8.20",
         "settings": {
@@ -229,11 +122,237 @@
         "^0.8.20"
       ],
       "artifacts": [
-        "PoseidonHasher"
+        "PoolLib"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/libraries/Types.sol": {
+      "lastModificationDate": 1791956495278,
+      "contentHash": "5d1d7df8b5a8726f83c5cb36595fbdc8",
+      "sourceName": "contracts/libraries/Types.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": []
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/access/Ownable.sol": {
+      "lastModificationDate": 1791955966614,
+      "contentHash": "5a20b2cad87ddb61c7a3a6af21289e28",
+      "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../utils/Context.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "Ownable"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol": {
+      "lastModificationDate": 1791955966591,
+      "contentHash": "df36f7051335cd1e748b1b6463b7fdd3",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "IERC20"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/security/ReentrancyGuard.sol": {
+      "lastModificationDate": 1791955966617,
+      "contentHash": "1535f8c0c68463f8c1b5239f7584e71f",
+      "sourceName": "@openzeppelin/contracts/security/ReentrancyGuard.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "ReentrancyGuard"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/poseidon-solidity/PoseidonT5.sol": {
+      "lastModificationDate": 1791955965687,
+      "contentHash": "57699bea1548ea11303d4b2d8d61aa35",
+      "sourceName": "poseidon-solidity/PoseidonT5.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.7.0"
+      ],
+      "artifacts": [
+        "PoseidonT5"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol": {
+      "lastModificationDate": 1791955966619,
+      "contentHash": "1b5d667d3740d866eca0352758e59827",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../IERC20.sol",
+        "../extensions/IERC20Permit.sol",
+        "../../../utils/Address.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "SafeERC20"
       ]
     },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/poseidon-solidity/PoseidonT3.sol": {
-      "lastModificationDate": 1783742408108,
+      "lastModificationDate": 1791955965670,
       "contentHash": "88a3db6023abdf06f44823c05f81f69e",
       "sourceName": "poseidon-solidity/PoseidonT3.sol",
       "solcConfig": {
@@ -269,9 +388,241 @@
         "PoseidonT3"
       ]
     },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/utils/Context.sol": {
+      "lastModificationDate": 1791955966483,
+      "contentHash": "f07feb4a44b1a4872370da5aa70e8e46",
+      "sourceName": "@openzeppelin/contracts/utils/Context.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "Context"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/utils/Address.sol": {
+      "lastModificationDate": 1791955966470,
+      "contentHash": "211ffd288c1588ba8c10eae668ca3c66",
+      "sourceName": "@openzeppelin/contracts/utils/Address.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.1"
+      ],
+      "artifacts": [
+        "Address"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol": {
+      "lastModificationDate": 1791955966593,
+      "contentHash": "525fcdad8d171312933f47baf01d1ed8",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "IERC20Permit"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol": {
+      "lastModificationDate": 1791955966592,
+      "contentHash": "909ab67fc5c25033fe6cd364f8c056f9",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../IERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "IERC20Metadata"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol": {
+      "lastModificationDate": 1791955966528,
+      "contentHash": "3ae5166c6827a9cf1a7a462d1632b464",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/ERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IERC20.sol",
+        "./extensions/IERC20Metadata.sol",
+        "../../utils/Context.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "ERC20"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/mocks/Mocks.sol": {
+      "lastModificationDate": 1791956585803,
+      "contentHash": "65ed24a975e80e808cc30661b5642eea",
+      "sourceName": "contracts/mocks/Mocks.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/ERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockERC20",
+        "MockFeeOnTransferToken",
+        "MockWrappedNative"
+      ]
+    },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/TransferVerifier.sol": {
-      "lastModificationDate": 1783777059396,
-      "contentHash": "cc048e16375174bb66b33828e0e9ab9a",
+      "lastModificationDate": 1791956277020,
+      "contentHash": "6a391314f6a8f4c336441e3fa4a76ba5",
       "sourceName": "contracts/TransferVerifier.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -307,8 +658,8 @@
       ]
     },
     "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/WithdrawVerifier.sol": {
-      "lastModificationDate": 1783777059397,
-      "contentHash": "7a3d78087d2b50093c1a1dd20fcac41c",
+      "lastModificationDate": 1791956297051,
+      "contentHash": "ea95ea89ebf0a980a4adf85754335695",
       "sourceName": "contracts/WithdrawVerifier.sol",
       "solcConfig": {
         "version": "0.8.20",

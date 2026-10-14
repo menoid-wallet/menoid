@@ -1,173 +1,147 @@
+Transfer Proof (v1-mainnet)
+
+    circuits/transfer_proof.circom   -> Transfer(4 inputs, 3 outputs, depth 20)
+    circuits/spend_core.circom       -> SpendCore, shared with withdraw
+    circuits/note_lib.circom         -> OwnerKeys, NoteCommitment, NoteNullifier
+
+    ~26.9k constraints (compiled with --O2)
+
 Core Logic:
 - The circuit proves that:
-    - the sender owns all consumed input notes
-    - input notes exist in the Merkle tree
-    - nullifiers are correctly generated
-    - output notes are correctly constructed
+    - the sender knows the spending key of the identity every input is locked to
+    - every real input note exists in the Merkle tree
+    - every nullifier is correctly derived
+    - every output note is correctly constructed
+    - all inputs and outputs are the SAME token, and that token stays private
     - total input value equals total output value
-
-Ownership:
-- The circuit verifies ownership using:
-
-    pk = Poseidon(3, sk)
-
-Meaning:
-- Only the owner with the correct secret key can spend notes.
+    - the last output belongs to the relayer
 
 --------------------------------------------------
-Public Inputs:
+Domain Separators:
 --------------------------------------------------
 
-Input Section:
+    1  user commitment     Poseidon(1, address, spendPk.x, spendPk.y)
+    2  nullifier key       Poseidon(2, sk)
+    3  note public key     Poseidon(3, ownerUc, randomness)
+    4  note commitment     Poseidon(4, token, amount, npk)
+    5  nullifier           Poseidon(5, nk, commitment, randomness)
 
-- enabled[max_inputs]
-    - Flags indicating whether an input slot is active.
-    - 1 = real input note
-    - 0 = dummy input slot
+    Each hash starts with its own number, so one can never be mistaken for
+    another. Must match helpers/constants.js and NoidPool.sol (D_CM = 4).
 
-- roots[max_inputs]
-    - Merkle roots used to prove note inclusion.
+--------------------------------------------------
+Public Inputs (10) — order matches NoidPool._transferSignals:
+--------------------------------------------------
 
-- nullifiers[max_inputs]
-    - Unique spend identifiers preventing double spending.
+    0      root               a recent root of the tree the inputs are in
+    1-4    nullifiers[4]      one per input slot (dummies included)
+    5-7    outCommitments[3]  receiver, change, relayer fee
+    8      relayer            the relayer's user commitment
+    9      extDataHash        hash of the encrypted outputs + outgoing record
+                              + chain id + pool address
 
-Output Section:
-
-- output_enabled[3]
-    - Flags indicating whether an output slot is active.
-
-- c_outs[3]
-    - Commitments of newly created output notes.
+    No token, no amount, no flags.
 
 --------------------------------------------------
 Private Inputs:
 --------------------------------------------------
 
 Ownership:
+- sk             spending key (BabyJubJub)
+- ownerAddress   the sender's real wallet address
 
-- sk
-    - Secret spending key of the wallet.
+Token:
+- token          uint160(token address) — one value used by every note
 
-- pk
-    - zk public key derived from the secret key.
+Input notes (x4):
+- inAmounts[i]
+- inRandomness[i]
+- inPathElements[i][20], inPathIndices[i][20]   Merkle path
 
---------------------------------------------------
-Input Notes:
---------------------------------------------------
-
-- c_ins[max_inputs]
-    - Input note commitments being spent.
-
-- a_ins[max_inputs]
-    - Amounts stored inside input notes.
-
-- r_ins[max_inputs]
-    - Randomness used while creating input commitments.
-
-Merkle Proof Data:
-
-- pathElements[max_inputs][depth]
-    - Sibling hashes required for Merkle proof verification.
-
-- pathIndices[max_inputs][depth]
-    - Left/right directions used while traversing the tree.
+Output notes (x3):
+- outAmounts[j]
+- outRandomness[j]
+- outOwners[j]    receiver user commitments
 
 --------------------------------------------------
-Output Notes:
+Ownership:
 --------------------------------------------------
 
-- a_outs[3]
-    - Amounts stored in output notes.
-
-- r_outs[3]
-    - Randomness used while creating output commitments.
-
-- receivers[3]
-    - Receiver zk public keys owning output notes.
-
---------------------------------------------------
-Input Commitment Construction:
---------------------------------------------------
-
-- Each input commitment is reconstructed using:
-
-    c_in = Poseidon(1, amount, randomness, owner_pk)
-    Note: 1 <-- domain_seperator for commitments
-
+    spendPk        = BabyPbk(sk)                                 sk · Base8
+    userCommitment = Poseidon(1, ownerAddress, spendPk.x, spendPk.y)
+    nk             = Poseidon(2, sk)
 
 Meaning:
-- The circuit verifies that the provided note data
-  actually matches the input commitment.
+- Every input below is rebuilt with THIS userCommitment. Knowing someone's
+  address is not enough; you need their sk.
+- nk is computed from sk inside the circuit. A viewer who was given nk can
+  compute nullifiers but cannot produce this proof.
 
 --------------------------------------------------
-Merkle Inclusion Verification:
+Input Notes (per slot i):
 --------------------------------------------------
 
-- Each input note is verified against a Merkle root.
+    RangeCheck(128)(inAmounts[i])                        0 <= amount < 2^128
+
+    npk        = Poseidon(3, userCommitment, inRandomness[i])
+    commitment = Poseidon(4, token, inAmounts[i], npk)
+
+    nullifiers[i] === Poseidon(5, nk, commitment, inRandomness[i])
+
+    isDummy = (inAmounts[i] == 0)
+    (1 - isDummy) * (MerkleRoot(commitment, path) - root) === 0
 
 Meaning:
-- The circuit proves that the note exists inside
-  the shielded pool state tree.
+- A real note (amount > 0) must be in the tree under `root`.
+- A zero-value slot is a dummy: no Merkle check, but its nullifier is still
+  computed and published, and looks like any other. On-chain you cannot tell
+  how many notes were really spent.
+- The token is part of the commitment, so a note can only be spent as the
+  token it was created with.
 
 --------------------------------------------------
-Nullifier Construction:
+Output Notes (per slot j):
 --------------------------------------------------
 
-- Each nullifier is generated using:
+    RangeCheck(128)(outAmounts[j])
+    outCommitments[j] === Poseidon(4, token, outAmounts[j],
+                                   Poseidon(3, outOwners[j], outRandomness[j]))
 
-    nullifier = Poseidon(2, c_in, r_in, sk)
-    Note: 2 <-- domain_seperator for nullifiers
+    outOwners[2] === relayer
 
 Meaning:
-- Every spend produces a unique identifier.
-- Prevents double spending of notes.
-
---------------------------------------------------
-Output Commitment Construction:
---------------------------------------------------
-
-- Each output note is constructed using:
-
-    c_out = Poseidon(1, amount, randomness, receiver_pk)
-    Note: 1 <-- domain_seperator for commitments
-
-
-Meaning:
-- Creates new private notes for receivers.
+- Every output is the same token as the inputs (same `token` signal).
+- Unused outputs are zero-value notes; there are always 3.
+- Slot 2 is always the relayer's fee note (it can be worth 0).
 
 --------------------------------------------------
 Balance Constraint:
 --------------------------------------------------
 
-- The circuit enforces:
-
-    totalInputs = totalOutputs
+    sum(inAmounts) === sum(outAmounts)
 
 Meaning:
-- No value can be created or destroyed.
-- All transferred value is conserved privately.
+- No value created or destroyed.
+- Range checks keep every amount below 2^128, so the sums stay far below the
+  field prime and cannot wrap around to "balance" a forged amount.
 
 --------------------------------------------------
-Enabled Flag Constraint:
+External Data:
 --------------------------------------------------
 
-- Every enabled flag satisfies:
-
-    enabled * (1 - enabled) = 0
+    extDataSquare <== extDataHash * extDataHash
 
 Meaning:
-- Flags can only be:
-    - 0
-    - 1
+- extDataHash is a public input the contract computes itself from the
+  ciphertexts and outgoing record it receives. The square keeps it inside a
+  constraint so the proof is bound to it.
+- Change one ciphertext -> different hash -> the proof does not verify.
 
 --------------------------------------------------
-Dummy Input Support:
+What the contract adds:
 --------------------------------------------------
 
-- Disabled inputs are ignored using:
-
-    enabled[i] * value
-
-Meaning:
-- The circuit supports fixed-size inputs while
-  allowing fewer actual notes to be spent.
+- root must be one of the tree's last 100 roots
+- nullifiers unspent and pairwise different (the circuit does not check
+  distinctness: the same note in two slots would be counted twice)
+- output commitments new and non-zero

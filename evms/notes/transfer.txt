@@ -1,0 +1,106 @@
+Transfer Flow (v1-mainnet)
+
+    Private notes -> private notes. Nothing enters or leaves the pool.
+    The token, the amounts, the sender and the receiver all stay hidden.
+    A relayer sends the transaction, so the user's address never appears.
+
+    Code: helpers/transactions.js buildTransfer     Contract: NoidPool.transfer
+    Circuit: circuits/transfer_proof.circom (see zk_proof_transfer.txt)
+
+
+    Example: Alice holds two private USDC notes (100 and 50) and pays Bob 120.
+
+
+    Off-Chain (Alice's wallet):
+
+        Find the receiver:
+            registrationOf(bob) -> Bob's userCommitment, viewingPublicKey
+            (not registered -> stop; never fall back to a public send)
+
+        Get the relayer's identity and fee (here 0.1 USDC).
+
+        Pick input notes (up to 4, all the same token, all in the same tree):
+            100 + 50 = 150 USDC
+        Fill the empty input slots with zero-value dummy notes.
+
+        Outputs (always 3, same token as the inputs):
+            out[0]  receiver   120   -> Bob
+            out[1]  change      29.9 -> Alice
+            out[2]  fee          0.1 -> relayer
+        Each gets fresh randomness r and a commitment:
+            commitment = Poseidon(4, token, amount, Poseidon(3, ownerUc, r))
+
+        Nullifiers (always 4), one per input slot:
+            nullifier = Poseidon(5, nk, commitment, r)
+
+        Encrypt each output to its owner's viewing key:
+            out[0] -> Bob's key, out[1] -> Alice's key, out[2] -> relayer's key
+
+        Encrypt an outgoing record for Alice herself (outgoing viewing key):
+            "transfer 120 USDC to Bob (address, uc, note randomness), fee 0.1"
+            key = HKDF(ovk, nullifier[0])
+
+        extDataHash = keccak(chainId, pool, "menoid.v1m.transfer",
+                             encrypted outputs, outgoing record) mod p
+        > binds the ciphertexts to the proof
+
+        Make the transfer proof (see zk_proof_transfer.txt).
+
+        Send to the relayer:
+            proof, treeId, root, nullifiers, output commitments, relayer uc, ext data
+
+
+    Relayer (before it pays gas):
+
+        Verifies the proof off-chain.
+        Decrypts its fee note (out[2]) and checks the fee covers the gas.
+        Calls transfer([call]) from its own address.
+
+
+    On-Chain:
+
+        Contract checks:
+            treeId exists, root is one of the tree's last 100 roots
+            no nullifier is already spent
+            the 4 nullifiers are all different
+            (the circuit adds up every slot, so the same note twice would
+             count twice — this check is what stops it)
+
+        Contract rebuilds extDataHash from the ext data it received and
+        verifies the proof with:
+            [root, nullifiers x4, output commitments x3, relayer, extDataHash]
+
+        If a relayer changed a ciphertext or dropped the outgoing record,
+        the hash differs and the proof fails.
+
+        Contract marks the 4 nullifiers spent        (NullifierSpent x4)
+        Contract inserts [out0, out1, out2, 0] as one chunk (NoteCreated x3)
+        Contract emits OutgoingRecord(nullifier[0], record)
+
+        Several transfer calls can go in one transaction, even of different
+        tokens. Each call is checked on its own.
+
+
+    Afterwards:
+
+        Bob's wallet decrypts out[0] -> 120 USDC
+        Alice's wallet decrypts out[1] -> 29.9 USDC, and sees her two old
+        notes' nullifiers on-chain -> spent
+        The relayer's wallet decrypts out[2] -> 0.1 USDC
+
+
+    What is public:   4 random-looking nullifiers, 3 commitments, a root,
+                      the relayer's uc, and that the relayer sent a transaction
+    What is hidden:   the token, every amount, sender, receiver, how many notes
+                      were really spent, and whether there was change
+
+
+    Changed from V1 demo:
+        - the token is inside every note and never public in a transfer
+        - fixed shape: always 4 nullifiers and 3 outputs (V1 published
+          enabled[] flags that revealed the number of inputs and outputs)
+        - ciphertexts are bound to the proof (V1 let a relayer replace them,
+          leaving the receiver with a note they could never open)
+        - nullifiers use nk, not sk (viewing keys become possible)
+        - one root per call (all inputs from the same tree)
+        - the Monad relayer fee is no longer zero

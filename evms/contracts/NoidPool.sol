@@ -1,530 +1,489 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "poseidon-solidity/PoseidonT5.sol";
+
 import "./libraries/Interfaces.sol";
 import "./libraries/poolLib.sol";
 import "./libraries/Types.sol";
-/**
- * NoidPool
- *
- * A ZK-based UTXO-style private ETH/EVM-based-coins pool.
- *
- * - ETH or Evm-based-coins (like monad) is locked in the contract
- * - Ownership is represented by commitments (cmx)
- * - Balances, senders, receivers, and amounts are hidden
- * - Merkle trees track note existence
- * - Nullifiers prevent double-spends
- *
- * All sensitive data is handled off-chain by wallets.
- * On-chain logic only verifies cryptographic correctness.
- */
-contract NoidPool {
-    using PoolLib for PoolLib.Pool;
-    /**
-     * Wallet:
-     *      Get signature from real wallet: sign("menoid_Wallet")
-     *      spendingKeyPair = BabyJubJub keypair derived from the signature
-     *      userCommitment  = Poseidon(walletAddress, spendingPubKey.x, spendingPubKey.y)
-     *
-     *      The user registers userCommitment on-chain (register()).
-     *      Senders look up registered[receiverAddress] and lock notes to it:
-     *          commitment = Poseidon(1, amount, randomness, userCommitment)
-     *          nullifier  = Poseidon(2, commitment, randomness, spendingPrivateKey)
-     */
-    // zero commitment - used in the place of empty commitment (wallet must use same convention)
-    bytes32 public constant ZERO_COMMITMENT = bytes32(0);
 
-    //global state
+/**
+ * NoidPool — Menoid v1-mainnet shielded pool.
+ *
+ * One pool per chain holds every accepted token. Value lives in notes:
+ *
+ *      npk        = Poseidon(D_NPK, ownerUserCommitment, randomness)
+ *      commitment = Poseidon(D_CM, token, amount, npk)
+ *      nullifier  = Poseidon(D_NF, nullifierKey, commitment, randomness)
+ *
+ * Notes of every token share one Merkle tree. The token is a private field
+ * inside the commitment, so a transfer does not reveal which token moved.
+ *
+ *   register   one-time binding: wallet address -> (user commitment, viewing public key)
+ *   deposit    public funds in, one note out. No proof needed: the amount and
+ *              token are public anyway, so the contract builds the commitment.
+ *   transfer   notes -> notes (transfer proof). Token, amounts, sender and
+ *              receiver stay hidden.
+ *   withdraw   notes -> public funds at an address (withdraw proof).
+ *
+ * The owner can only choose which tokens are accepted for deposit and pause
+ * deposits. Transfers and withdrawals can never be paused or blocked.
+ *
+ * Refer: notes/keys_and_registration.txt, deposit.txt, transfer.txt, withdraw.txt
+ */
+contract NoidPool is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+    using PoolLib for PoolLib.Tree;
+
+    // ─── constants ───────────────────────────────────────────────────────────
+
+    // BN254 scalar field: every circuit value lives below it
+    uint256 public constant FIELD_SIZE =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    // the circuits range-check every amount to 128 bits
+    uint256 public constant MAX_AMOUNT = type(uint128).max;
+    // commitment domain separator (circuits/note_lib.circom D_CM)
+    uint256 internal constant D_CM = 4;
+
+    bytes32 public constant TRANSFER_EXT_DOMAIN = keccak256("menoid.v1m.transfer");
+    bytes32 public constant WITHDRAW_EXT_DOMAIN = keccak256("menoid.v1m.withdraw");
+
+    // ─── identity ────────────────────────────────────────────────────────────
+
+    struct Registration {
+        bytes32 userCommitment;   // Poseidon(D_UC, address, spendPk.x, spendPk.y)
+        uint32 keyIndex;          // bumped by rotateKeys (new spending identity)
+        uint32 viewingEpoch;      // bumped by updateViewingKey (new viewing key, same identity)
+        bytes viewingPublicKey;   // 65-byte uncompressed secp256k1 key senders encrypt notes to
+    }
+
+    mapping(address => Registration) private _registrations;
+    // user commitment -> wallet that registered it (a commitment can be claimed once)
+    mapping(bytes32 => address) public userCommitmentOwner;
+
+    // ─── tokens ──────────────────────────────────────────────────────────────
+
+    struct TokenConfig {
+        bool depositsEnabled;
+        uint256 maxDeposit;       // per-deposit cap (guarded launch)
+    }
+
+    mapping(address => TokenConfig) public tokenConfig;
+    bool public depositsPaused;
+
+    // ─── notes ───────────────────────────────────────────────────────────────
+
     mapping(bytes32 => bool) public nullifierSpent;
     mapping(bytes32 => bool) public commitmentExists;
+    PoolLib.Tree[] private _trees;
 
-    // wallet address => user commitment (Poseidon(address, spendPk.x, spendPk.y))
-    mapping(address => bytes32) public registered;
-
-    // wallet address => note-encryption public key (65-byte uncompressed secp256k1)
-    //
-    // Stored on-chain deliberately. A sender needs BOTH the receiver's user
-    // commitment (to lock the note) and this key (to encrypt it), and the key
-    // cannot be recovered from the commitment hash. Keeping it off-chain made
-    // every send depend on a server answering correctly: a miss there is
-    // indistinguishable from "this address never registered", and a wallet that
-    // silently downgrades a private send to a public one on a bad answer is the
-    // one failure a privacy wallet must not have. The chain now answers both.
-    mapping(address => bytes) public encryptionKeys;
-
-    // verifiers
-    IDepositVerifier public immutable depositVerifier;
     ITransferVerifier public immutable transferVerifier;
     IWithdrawVerifier public immutable withdrawVerifier;
+    IWrappedNative public immutable wrappedNative;
 
-    // poseidon
-    IPoseidon public immutable poseidon;
+    // ─── events ──────────────────────────────────────────────────────────────
 
-    // relayer
-    address public immutable relayer;
-    uint256 public immutable relayerCommitment; // relayer's user commitment
+    event Registered(address indexed wallet, bytes32 userCommitment, bytes viewingPublicKey);
+    event ViewingKeyUpdated(address indexed wallet, bytes viewingPublicKey, uint32 viewingEpoch);
+    event KeysRotated(address indexed wallet, bytes32 userCommitment, bytes viewingPublicKey, uint32 keyIndex);
 
-    // events
-    event NewPool(uint256 indexed poolId); //indexed-> searchable/filterable
-    // we dont store the encryptedNotes on chain ( storage gas ) instead we emit them as events
-    event NoteCreated(uint256 poolId, bytes32 commitment, bytes encryptedNote);
-    // nullfier spent
-    event NullifierSpent(bytes32 nullifier);
-    // wallet registration
-    event WalletRegistered(
-        address indexed wallet,
-        bytes32 userCommitment,
-        bytes encryptionPublicKey
-    );
+    // encrypted notes are emitted, not stored: wallets scan these to find their notes
+    event NoteCreated(uint256 indexed treeId, uint256 leafIndex, bytes32 commitment, bytes encryptedNote);
+    event NullifierSpent(bytes32 indexed nullifier);
+    // indexed by the spend's first nullifier: the owner's outgoing viewing key
+    // derives the decryption key from it, so no trial decryption is needed
+    event OutgoingRecord(bytes32 indexed firstNullifier, bytes record);
 
-    constructor(
-        address _depositVerifier,
-        address _transferVerifier,
-        address _withdrawVerifier,
-        address _poseidon,
-        address _relayer,
-        uint256 _relayerCommitment
-    ) {
-        depositVerifier = IDepositVerifier(_depositVerifier);
-        transferVerifier = ITransferVerifier(_transferVerifier);
-        withdrawVerifier = IWithdrawVerifier(_withdrawVerifier);
-        poseidon = IPoseidon(_poseidon);
+    event Deposited(address indexed depositor, address indexed token, uint256 amount, bytes32 commitment);
+    event Withdrawn(address indexed token, address indexed recipient, uint256 amount);
+    event NewTree(uint256 indexed treeId);
 
-        relayer = _relayer;
-        relayerCommitment = _relayerCommitment;
-        PoolLib.createPool(pools, poseidon);
-    }
+    event TokenConfigured(address indexed token, bool depositsEnabled, uint256 maxDeposit);
+    event DepositsPausedSet(bool paused);
 
-    PoolLib.Pool[] public pools;
-
-    // Register
-    //  * One-time binding of a real wallet address to its private identity.
-    //  *
-    //  * Wallet responsibilities (off-chain):
-    //  * - Sign the message "menoid_Wallet" with the real wallet's private key
-    //  * - Derive the BabyJubJub spending keypair from that signature
-    //  * - Derive the secp256k1 encryption keypair from the same signature
-    //  * - Compute userCommitment = Poseidon(walletAddress, spendPk.x, spendPk.y)
-    //  * - Call register(userCommitment, encryptionPublicKey) from the real wallet
-    //  *
-    //  * encryptionPublicKey is the 65-byte UNCOMPRESSED secp256k1 public key
-    //  * (0x04 ‖ X ‖ Y). It is public by design — it only lets others encrypt TO
-    //  * this wallet.
-    function register(
-        bytes32 userCommitment,
-        bytes calldata encryptionPublicKey
-    ) external {
-        require(userCommitment != bytes32(0), "Invalid user commitment");
+    constructor(address transferVerifier_, address withdrawVerifier_, address wrappedNative_) {
         require(
-            encryptionPublicKey.length == 65 && encryptionPublicKey[0] == 0x04,
-            "Invalid encryption public key"
+            transferVerifier_ != address(0) && withdrawVerifier_ != address(0) && wrappedNative_ != address(0),
+            "Zero address"
         );
-        require(registered[msg.sender] == bytes32(0), "Already registered");
-
-        registered[msg.sender] = userCommitment;
-        encryptionKeys[msg.sender] = encryptionPublicKey;
-
-        emit WalletRegistered(msg.sender, userCommitment, encryptionPublicKey);
+        transferVerifier = ITransferVerifier(transferVerifier_);
+        withdrawVerifier = IWithdrawVerifier(withdrawVerifier_);
+        wrappedNative = IWrappedNative(wrappedNative_);
+        _newTree();
     }
 
-    // Everything a sender needs about a receiver, in ONE call.
-    //
-    // One eth_call instead of two means the two halves can never disagree, and
-    // a wallet resolving a pasted address pays a single round trip.
+    // only the wrapped native token sends coins here (when unwrapping a withdrawal)
+    receive() external payable {
+        require(msg.sender == address(wrappedNative), "Direct payments not accepted");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Registration
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * One-time binding of msg.sender to its private identity.
+     *
+     * Off-chain, the wallet signs the key message, derives the spending key,
+     * nullifier key and viewing keys from that signature, and computes
+     *      userCommitment = Poseidon(D_UC, address, spendPk.x, spendPk.y)
+     * Senders resolve both values with registrationOf(address).
+     */
+    function register(bytes32 userCommitment, bytes calldata viewingPublicKey) external {
+        require(_registrations[msg.sender].userCommitment == bytes32(0), "Already registered");
+        _claimUserCommitment(userCommitment);
+        _checkViewingKey(viewingPublicKey);
+
+        Registration storage reg = _registrations[msg.sender];
+        reg.userCommitment = userCommitment;
+        reg.viewingPublicKey = viewingPublicKey;
+
+        emit Registered(msg.sender, userCommitment, viewingPublicKey);
+    }
+
+    /**
+     * New viewing key, same identity (viewing epoch + 1).
+     * Senders encrypt to the new key from now on. Notes received earlier stay
+     * readable with the old epoch's key, which lets a user share a key that
+     * covers one period only.
+     */
+    function updateViewingKey(bytes calldata viewingPublicKey) external {
+        Registration storage reg = _registrations[msg.sender];
+        require(reg.userCommitment != bytes32(0), "Not registered");
+        _checkViewingKey(viewingPublicKey);
+
+        reg.viewingPublicKey = viewingPublicKey;
+        reg.viewingEpoch += 1;
+
+        emit ViewingKeyUpdated(msg.sender, viewingPublicKey, reg.viewingEpoch);
+    }
+
+    /**
+     * New spending identity (key index + 1), for when the key signature leaks.
+     * Notes locked to the old user commitment stay spendable with the old keys
+     * and must be swept to the new identity.
+     */
+    function rotateKeys(bytes32 newUserCommitment, bytes calldata viewingPublicKey) external {
+        Registration storage reg = _registrations[msg.sender];
+        require(reg.userCommitment != bytes32(0), "Not registered");
+        _claimUserCommitment(newUserCommitment);
+        _checkViewingKey(viewingPublicKey);
+
+        reg.userCommitment = newUserCommitment;
+        reg.viewingPublicKey = viewingPublicKey;
+        reg.keyIndex += 1;
+        reg.viewingEpoch = 0;
+
+        emit KeysRotated(msg.sender, newUserCommitment, viewingPublicKey, reg.keyIndex);
+    }
+
+    // Everything a sender needs about a receiver, in one call.
+    // An unregistered address answers (0, "", 0, 0): it never reverts, so
+    // "not registered" stays distinguishable from "the node did not answer".
     function registrationOf(address wallet)
         external
         view
-        returns (bytes32 userCommitment, bytes memory encryptionPublicKey)
+        returns (bytes32 userCommitment, bytes memory viewingPublicKey, uint32 keyIndex, uint32 viewingEpoch)
     {
-        return (registered[wallet], encryptionKeys[wallet]);
+        Registration storage reg = _registrations[wallet];
+        return (reg.userCommitment, reg.viewingPublicKey, reg.keyIndex, reg.viewingEpoch);
     }
 
     function isRegistered(address wallet) external view returns (bool) {
-        return registered[wallet] != bytes32(0);
+        return _registrations[wallet].userCommitment != bytes32(0);
     }
 
-    // Depsoit
-    //  * Public entry into the shielded pool.
-    //  *
-    //  * - ETH is sent with the transaction
-    //  * - One or two commitments are created
-    //  *   (C2 is the optional relayer fee note - may be zero)
-    //  * - Commitments are inserted into the current pool(s)
-    //  * - Each commitment is logged with NoteCreated
-    //  *
-    //  * Wallet responsibilities (off-chain):
-    //  * - Fetch the receiver's registered user commitment
-    //  * - Choose amount + randomness
-    //  * - Compute commitment(s)
-    //  * - Encrypt note(s)
-    //  * - Track emitted poolId + leaf index
-    function deposit(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        bytes32 C1, // First commitment (required)
-        bytes32 C2, // 2nd commitment - relayer fee (optional, may be zero)
-        bytes calldata encryptedNote1, // encrypted (amount, randomness) for C1
-        bytes calldata encryptedNote2 // Encrypted (amount, randomness) for C2
-    ) external payable {
-        require(msg.value != 0, "No ethereum");
-
-        // zero commitments are only for transfer/withdraw calls
-        require(C1 != ZERO_COMMITMENT, "Invalid commitment 1");
-
-        // commitments already exists?
+    function _claimUserCommitment(bytes32 userCommitment) private {
         require(
-            !commitmentExists[C1],
-            "Commitment 1 already existing, change r value"
+            userCommitment != bytes32(0) && uint256(userCommitment) < FIELD_SIZE,
+            "Invalid user commitment"
+        );
+        // a commitment contains its owner's address, so an honest wallet never
+        // collides; this stops someone re-registering a copied commitment
+        require(userCommitmentOwner[userCommitment] == address(0), "User commitment already claimed");
+        userCommitmentOwner[userCommitment] = msg.sender;
+    }
+
+    function _checkViewingKey(bytes calldata viewingPublicKey) private pure {
+        require(
+            viewingPublicKey.length == 65 && viewingPublicKey[0] == 0x04,
+            "Invalid viewing public key"
+        );
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Deposit
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Deposit an accepted ERC-20.
+     *
+     * npk = Poseidon(D_NPK, receiverUserCommitment, randomness) hides who the
+     * note belongs to; encryptedNote carries (token, amount, randomness) to the
+     * receiver. The receiver may be anyone, not only msg.sender.
+     */
+    function deposit(address token, uint256 amount, bytes32 npk, bytes calldata encryptedNote)
+        external
+        nonReentrant
+    {
+        _checkDeposit(token, amount);
+
+        IERC20 erc20 = IERC20(token);
+        uint256 balanceBefore = erc20.balanceOf(address(this));
+        erc20.safeTransferFrom(msg.sender, address(this), amount);
+        // a note must be backed 1:1 (rejects fee-on-transfer tokens)
+        require(erc20.balanceOf(address(this)) - balanceBefore == amount, "Token transfer amount mismatch");
+
+        _depositNote(token, amount, npk, encryptedNote);
+    }
+
+    // Deposit the native coin. It is wrapped, so the note's token is the
+    // wrapped native token: native and wrapped deposits are the same asset.
+    function depositNative(bytes32 npk, bytes calldata encryptedNote) external payable nonReentrant {
+        address token = address(wrappedNative);
+        _checkDeposit(token, msg.value);
+        wrappedNative.deposit{value: msg.value}();
+        _depositNote(token, msg.value, npk, encryptedNote);
+    }
+
+    function _checkDeposit(address token, uint256 amount) private view {
+        require(!depositsPaused, "Deposits paused");
+        TokenConfig storage config = tokenConfig[token];
+        require(config.depositsEnabled, "Token not accepted");
+        require(amount != 0, "Zero amount");
+        require(amount <= config.maxDeposit, "Deposit above cap");
+    }
+
+    function _depositNote(address token, uint256 amount, bytes32 npk, bytes calldata encryptedNote) private {
+        require(npk != bytes32(0) && uint256(npk) < FIELD_SIZE, "Invalid note public key");
+
+        bytes32 commitment = bytes32(
+            PoseidonT5.hash([D_CM, uint256(uint160(token)), amount, uint256(npk)])
         );
 
-        // C2 is the relayer fee note - it is optional
-        uint256 c2Enabled = 0;
-        if (C2 != ZERO_COMMITMENT) {
-            require(
-                !commitmentExists[C2],
-                "Commitment 2 already existing, change r value"
-            );
-            c2Enabled = 1;
-        }
+        bytes32[4] memory chunk;
+        chunk[0] = commitment;
+        (uint256 treeId, uint256 startIndex) = _insertChunk(chunk, 1);
 
-        // public signals
-        // deposit amount
-        // c1
-        // c2
-        // c2 enabled flag
-        // uc2 (relayerCommitment)
-        uint256[5] memory publicSignals;
-        publicSignals[0] = msg.value;
-        publicSignals[1] = uint256(C1);
-        publicSignals[2] = uint256(C2);
-        publicSignals[3] = c2Enabled;
-        publicSignals[4] = relayerCommitment;
-
-        // in deposit we dont need to check merkle path
-        // deposit zk , proves that the amounts that are in the commitments equals deposited amount
-        require(
-            depositVerifier.verifyProof(a, b, c, publicSignals),
-            "Deposit proof verification failed"
-        );
-
-        uint256 count = 1 + c2Enabled;
-        bytes32[] memory commitments = new bytes32[](count);
-        commitments[0] = C1;
-        if (c2Enabled == 1) {
-            commitments[1] = C2;
-        }
-
-        // addition of group of commitments to be added here
-        InsertedNote[] memory notesInserted = _insertBatch(commitments);
-        for (uint8 i = 0; i < count; i++) {
-            InsertedNote memory note = notesInserted[i];
-            if (i == 0) {
-                // emit the note created event
-                emit NoteCreated(note.poolId, note.commitment, encryptedNote1);
-            } else {
-                emit NoteCreated(note.poolId, note.commitment, encryptedNote2);
-            }
-        }
+        emit NoteCreated(treeId, startIndex, commitment, encryptedNote);
+        emit Deposited(msg.sender, token, amount, commitment);
     }
 
-    // inputs validation helper function
-    function _verifyInputs(Inputs memory inputs) view internal {
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            require(
-                inputs.enabled[i] * (1 - inputs.enabled[i]) == 0,
-                "Invalid enable flag"
-            );
-            if (inputs.enabled[i] == 0) {
-                continue;
-            }
-            require(inputs.poolIds[i] < pools.length, "Invalid poolId");
-            PoolLib.Pool storage p = pools[inputs.poolIds[i]];
-            require(p.validRoot[inputs.roots[i]], "Invalid root");
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Transfer
+    // ═════════════════════════════════════════════════════════════════════════
 
-            require(
-                !nullifierSpent[inputs.nullifiers[i]],
-                "Nullifier already spent"
-            );
-            // all nullifiers in a Transfer inputs must be unique
-            for (uint8 j = 0; j < i; j++) {
-                if (inputs.enabled[j] == 0) continue;
-
-                require(
-                    inputs.nullifiers[i] != inputs.nullifiers[j],
-                    "Duplicate nullifier"
-                );
-            }
-        }
-    }
-
-    function transfer(TransferCall[] memory calls) external {
+    // Several independent calls may share one transaction. They are relayed,
+    // so msg.sender is the relayer, never the user.
+    function transfer(TransferCall[] calldata calls) external nonReentrant {
+        require(calls.length != 0, "No calls");
         for (uint256 i = 0; i < calls.length; i++) {
-            _singleTransfer(calls[i]);
+            _transfer(calls[i]);
         }
     }
 
-    function _singleTransfer(TransferCall memory call) internal {
-        // validate the inputs
-        _verifyInputs(call.inputs);
+    function _transfer(TransferCall calldata call) private {
+        _checkInputs(call.treeId, call.root, call.nullifiers);
 
-        // commitments duplicate check
-        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
-            require(call.C1 != call.C2, "Duplicate commitments");
-        }
-
-        if (call.C1 != ZERO_COMMITMENT && call.C3 != ZERO_COMMITMENT) {
-            require(call.C1 != call.C3, "Duplicate commitments");
-        }
-
-        if (call.C2 != ZERO_COMMITMENT && call.C3 != ZERO_COMMITMENT) {
-            require(call.C2 != call.C3, "Duplicate commitments");
-        }
-
-        // zkproof
-
-        //required public signals
-        // relayer (user commitment), - 1
-        // enabled,  - MAX_INPUTS
-        // roots,   - MAX_INPUTS
-        // nullifiers,  - MAX_INPUTS
-        // output_enabled, - 3
-        // c_outs,  - 3
-
-        uint256[19] memory publicSignals;
-        uint8 idx = 0;
-        publicSignals[idx++] = relayerCommitment;
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.enabled[i]);
-        }
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.roots[i]);
-        }
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            publicSignals[idx++] = uint256(call.inputs.nullifiers[i]);
-        }
-
-        uint8 cmxCount = 0;
-        bytes32[] memory tempCmx = new bytes32[](3);
-        // output enabled
-        if (call.C1 != ZERO_COMMITMENT) {
-            require(!commitmentExists[call.C1], "Commitment 1 already exists");
-            publicSignals[idx++] = uint256(1);
-            tempCmx[cmxCount++] = call.C1;
-        } else {
-            publicSignals[idx++] = uint256(0);
-        }
-        if (call.C2 != ZERO_COMMITMENT) {
-            require(!commitmentExists[call.C2], "Commitment 2 already exists");
-            publicSignals[idx++] = uint256(1);
-            tempCmx[cmxCount++] = call.C2;
-        } else {
-            publicSignals[idx++] = uint256(0);
-        }
-        if (call.C3 != ZERO_COMMITMENT) {
-            require(!commitmentExists[call.C3], "Commitment 3 already exists");
-            publicSignals[idx++] = uint256(1);
-            tempCmx[cmxCount++] = call.C3;
-        } else {
-            publicSignals[idx++] = uint256(0);
-        }
-        require(cmxCount != 0, "No commitments present in this Transfer call");
-        //c_outs
-        publicSignals[idx++] = uint256(call.C1);
-        publicSignals[idx++] = uint256(call.C2);
-        publicSignals[idx++] = uint256(call.C3);
-
-        // proof verification
         require(
-            transferVerifier.verifyProof(call.a, call.b, call.c, publicSignals),
-            "Transfer proof verification failed"
+            transferVerifier.verifyProof(call.proof.a, call.proof.b, call.proof.c, _transferSignals(call)),
+            "Invalid transfer proof"
         );
 
-        bytes32[] memory commitments = new bytes32[](cmxCount);
-        for (uint8 i = 0; i < cmxCount; i++) {
-            commitments[i] = tempCmx[i];
+        _spendNullifiers(call.nullifiers);
+
+        bytes32[4] memory chunk;
+        for (uint256 i = 0; i < TRANSFER_OUTS; i++) {
+            chunk[i] = call.outCommitments[i];
+        }
+        (uint256 treeId, uint256 startIndex) = _insertChunk(chunk, TRANSFER_OUTS);
+        for (uint256 i = 0; i < TRANSFER_OUTS; i++) {
+            emit NoteCreated(treeId, startIndex + i, chunk[i], call.ext.encryptedOutputs[i]);
         }
 
-        // add nullifiers to the pool
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.inputs.enabled[i] == 0) continue;
-            require(
-                !nullifierSpent[call.inputs.nullifiers[i]],
-                "Nullifier already exists"
-            );
-            nullifierSpent[call.inputs.nullifiers[i]] = true;
-            emit NullifierSpent(call.inputs.nullifiers[i]);
-        }
-
-        // add commitments to the pool
-        InsertedNote[] memory notesInserted = _insertBatch(commitments);
-        for (uint8 i = 0; i < notesInserted.length; i++) {
-            bytes memory enc;
-
-            if (notesInserted[i].commitment == call.C1)
-                enc = call.encryptedNote1;
-            else if (notesInserted[i].commitment == call.C2)
-                enc = call.encryptedNote2;
-            else if (notesInserted[i].commitment == call.C3)
-                enc = call.encryptedNote3;
-            else revert("Unknown commitment");
-
-            // emit the poolId , cmx , encryptedNote
-            emit NoteCreated(
-                notesInserted[i].poolId,
-                notesInserted[i].commitment,
-                enc
-            );
-        }
+        emit OutgoingRecord(call.nullifiers[0], call.ext.outgoingRecord);
     }
 
-    function withdraw(
-        WithdrawCall[] calldata calls,
-        address payable to
-    ) external {
-        uint256 totalWithdrawAmount = 0;
+    // order must match circuits/transfer_proof.circom
+    function _transferSignals(TransferCall calldata call) private view returns (uint256[10] memory signals) {
+        signals[0] = uint256(call.root);
+        for (uint256 i = 0; i < N_INS; i++) {
+            signals[1 + i] = uint256(call.nullifiers[i]);
+        }
+        for (uint256 i = 0; i < TRANSFER_OUTS; i++) {
+            signals[5 + i] = uint256(call.outCommitments[i]);
+        }
+        signals[8] = uint256(call.relayer);
+        signals[9] = hashTransferExtData(call.ext);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Withdraw
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function withdraw(WithdrawCall[] calldata calls) external nonReentrant {
+        require(calls.length != 0, "No calls");
         for (uint256 i = 0; i < calls.length; i++) {
-            _singleWithdraw(calls[i], to);
-            totalWithdrawAmount += calls[i].withdrawAmount;
+            _withdraw(calls[i]);
         }
-        (bool success, ) = to.call{value: totalWithdrawAmount}("");
-        require(success, "Withdraw failed");
     }
 
-    function _singleWithdraw(WithdrawCall calldata call, address to) internal {
-
-        _verifyInputs(call.inputs);
-
-        //duplicate commitment check
-        if (call.C1 != ZERO_COMMITMENT && call.C2 != ZERO_COMMITMENT) {
-            require(call.C1 != call.C2, "Duplicate commitments");
-        }
-
-        // for zk proof rquired public inputs:
-        /**
-            receiver,
-            relayer (user commitment),
-            enabled,
-            roots,
-            nullifiers,
-            withdrawAmount,
-            out_enabled,
-            c_outs,
-         */
-        uint256[19] memory publicSignals;
-        publicSignals[0] = uint256(uint160(to));
-        publicSignals[1] = relayerCommitment;
-
-        // enabled roots nullifier
-        for (uint8 i = 2; i < MAX_INPUTS + 2; i++) {
-            publicSignals[i] = uint256(call.inputs.enabled[i - 2]);
-            publicSignals[i + 4] = uint256(call.inputs.roots[i - 2]);
-            publicSignals[i + 8] = uint256(call.inputs.nullifiers[i - 2]);
-        }
-        // withdraw amount
-        uint8 idx = 14;
-        publicSignals[idx++] = call.withdrawAmount;
-
-        // outputs enabled
-        bytes32[] memory tempOutCmx = new bytes32[](2);
-        uint8 cmxCount = 0;
-        if (call.C1 != ZERO_COMMITMENT) {
-            publicSignals[idx++] = 1;
-            tempOutCmx[cmxCount++] = call.C1;
-        } else {
-            publicSignals[idx++] = 0;
-        }
-
-        if (call.C2 != ZERO_COMMITMENT) {
-            publicSignals[idx++] = 1;
-            tempOutCmx[cmxCount++] = call.C2;
-        } else {
-            publicSignals[idx++] = 0;
-        }
-
-        // c_outs
-        publicSignals[idx++] = uint256(call.C1);
-        publicSignals[idx++] = uint256(call.C2);
-
-        // verify withdraw proof
+    function _withdraw(WithdrawCall calldata call) private {
+        require(call.amount != 0 && call.amount <= MAX_AMOUNT, "Invalid amount");
+        require(call.token != address(0), "Invalid token");
+        require(call.ext.recipient != address(0), "Invalid recipient");
         require(
-            withdrawVerifier.verifyProof(call.a, call.b, call.c, publicSignals),
-            "Withdraw proof verification failed"
+            !call.ext.unwrapNative || call.token == address(wrappedNative),
+            "Only the wrapped native token can be unwrapped"
+        );
+        _checkInputs(call.treeId, call.root, call.nullifiers);
+
+        require(
+            withdrawVerifier.verifyProof(call.proof.a, call.proof.b, call.proof.c, _withdrawSignals(call)),
+            "Invalid withdraw proof"
         );
 
-        // add nullifiers to the pool
-        for (uint8 i = 0; i < MAX_INPUTS; i++) {
-            if (call.inputs.enabled[i] == 0) continue;
-            require(
-                !nullifierSpent[call.inputs.nullifiers[i]],
-                "Nullifier already exists"
-            );
-            nullifierSpent[call.inputs.nullifiers[i]] = true;
-            emit NullifierSpent(call.inputs.nullifiers[i]);
+        _spendNullifiers(call.nullifiers);
+
+        bytes32[4] memory chunk;
+        for (uint256 i = 0; i < WITHDRAW_OUTS; i++) {
+            chunk[i] = call.outCommitments[i];
+        }
+        (uint256 treeId, uint256 startIndex) = _insertChunk(chunk, WITHDRAW_OUTS);
+        for (uint256 i = 0; i < WITHDRAW_OUTS; i++) {
+            emit NoteCreated(treeId, startIndex + i, chunk[i], call.ext.encryptedOutputs[i]);
         }
 
-        // add commitments to the pool
-        bytes32[] memory commitments = new bytes32[](cmxCount);
-        for (uint8 i = 0; i < cmxCount; i++) {
-            commitments[i] = tempOutCmx[i];
-        }
-        InsertedNote[] memory insertedNotes = _insertBatch(commitments);
-        for (uint8 i = 0; i < insertedNotes.length; i++) {
-            bytes memory enc;
-            if (insertedNotes[i].commitment == call.C1)
-                enc = call.encryptedNote1;
-            else if (insertedNotes[i].commitment == call.C2)
-                enc = call.encryptedNote2;
-            else revert("Unknown commiment");
+        emit OutgoingRecord(call.nullifiers[0], call.ext.outgoingRecord);
 
-            emit NoteCreated(
-                insertedNotes[i].poolId,
-                insertedNotes[i].commitment,
-                enc
-            );
+        // all state is final before any external call
+        _payout(call.token, call.amount, call.ext.recipient, call.ext.unwrapNative);
+        emit Withdrawn(call.token, call.ext.recipient, call.amount);
+    }
+
+    // order must match circuits/withdraw_proof.circom
+    function _withdrawSignals(WithdrawCall calldata call) private view returns (uint256[11] memory signals) {
+        signals[0] = uint256(call.root);
+        for (uint256 i = 0; i < N_INS; i++) {
+            signals[1 + i] = uint256(call.nullifiers[i]);
+        }
+        for (uint256 i = 0; i < WITHDRAW_OUTS; i++) {
+            signals[5 + i] = uint256(call.outCommitments[i]);
+        }
+        signals[7] = uint256(call.relayer);
+        signals[8] = uint256(uint160(call.token));
+        signals[9] = call.amount;
+        signals[10] = hashWithdrawExtData(call.ext);
+    }
+
+    function _payout(address token, uint256 amount, address recipient, bool unwrapNative) private {
+        if (unwrapNative) {
+            wrappedNative.withdraw(amount);
+            (bool ok, ) = payable(recipient).call{value: amount}("");
+            require(ok, "Native transfer failed");
+        } else {
+            IERC20(token).safeTransfer(recipient, amount);
         }
     }
 
-    // it inserts the group of commitments all at once.
-    function _insertBatch(
-        bytes32[] memory commitments
-    ) internal returns (InsertedNote[] memory inserted) {
-        inserted = new InsertedNote[](commitments.length); // inserted notes
-        uint32 idx = 0; // how many currently inserted into pool
-        uint32 outIdx = 0; // how many inserted currently inserted into the array
-        uint256 total = commitments.length; // num of commitments
+    // ═════════════════════════════════════════════════════════════════════════
+    //  External data binding
+    // ═════════════════════════════════════════════════════════════════════════
 
-        while (idx < total) {
-            PoolLib.Pool storage pool = PoolLib.currentPool(pools);
-            uint256 poolId = pools.length - 1;
-            uint32 remaining = PoolLib.MAX_LEAF - pool.nextIdx; // how many can be inserted in this pool
+    // The proof commits to this hash, so the relayer cannot swap ciphertexts,
+    // strip the outgoing record, or replay the proof on another chain or pool.
+    function hashTransferExtData(TransferExtData calldata ext) public view returns (uint256) {
+        return uint256(keccak256(abi.encode(block.chainid, address(this), TRANSFER_EXT_DOMAIN, ext))) % FIELD_SIZE;
+    }
 
-            // if there is no space in pool -> create pool
-            if (remaining == 0) {
-                PoolLib.createPool(pools,poseidon);
-                continue;
+    // Same for withdrawals; the recipient is bound here.
+    function hashWithdrawExtData(WithdrawExtData calldata ext) public view returns (uint256) {
+        return uint256(keccak256(abi.encode(block.chainid, address(this), WITHDRAW_EXT_DOMAIN, ext))) % FIELD_SIZE;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Shared spend checks + tree
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function _checkInputs(uint256 treeId, bytes32 root, bytes32[N_INS] calldata nullifiers) private view {
+        require(treeId < _trees.length, "Unknown tree");
+        require(_trees[treeId].isKnownRoot(root), "Unknown root");
+        for (uint256 i = 0; i < N_INS; i++) {
+            require(!nullifierSpent[nullifiers[i]], "Nullifier already spent");
+            // the circuit sums every input slot, so the same note twice in one
+            // proof would count twice; only distinct nullifiers are accepted
+            for (uint256 j = 0; j < i; j++) {
+                require(nullifiers[i] != nullifiers[j], "Duplicate nullifier");
             }
-
-            uint32 left = uint32(total - idx); // how many left to be inserted
-            uint32 toInsert = remaining < left ? remaining : left;
-
-            // insert leafs without pushing the root here
-            for (uint8 i = 0; i < toInsert; i++) {
-                bytes32 C = commitments[idx++]; // commitment
-                require(!commitmentExists[C], "Commitment already exists");
-                commitmentExists[C] = true; //add commitment to commitment pool
-                // update pool for the commitment
-                PoolLib.updatePool(pool, C, poseidon);
-                inserted[outIdx++] = InsertedNote({
-                    poolId: poolId,
-                    commitment: C
-                });
-            }
-
-            // push root only once for group of commitments
-            PoolLib.pushRoot(pool, pool.root);
         }
     }
 
-    receive() external payable {}
+    function _spendNullifiers(bytes32[N_INS] calldata nullifiers) private {
+        for (uint256 i = 0; i < N_INS; i++) {
+            nullifierSpent[nullifiers[i]] = true;
+            emit NullifierSpent(nullifiers[i]);
+        }
+    }
+
+    // marks the first `count` leaves as existing commitments and inserts the
+    // whole 4-leaf chunk (the rest are zero padding)
+    function _insertChunk(bytes32[4] memory chunk, uint256 count)
+        private
+        returns (uint256 treeId, uint256 startIndex)
+    {
+        for (uint256 i = 0; i < count; i++) {
+            bytes32 commitment = chunk[i];
+            require(commitment != bytes32(0), "Zero commitment");
+            require(!commitmentExists[commitment], "Commitment already exists");
+            commitmentExists[commitment] = true;
+        }
+
+        treeId = _trees.length - 1;
+        if (_trees[treeId].isFull()) {
+            treeId = _newTree();
+        }
+        startIndex = _trees[treeId].insertChunk(chunk);
+    }
+
+    function _newTree() private returns (uint256 treeId) {
+        treeId = _trees.length;
+        _trees.push().init();
+        emit NewTree(treeId);
+    }
+
+    // ─── views ───────────────────────────────────────────────────────────────
+
+    function treeCount() external view returns (uint256) {
+        return _trees.length;
+    }
+
+    function treeInfo(uint256 treeId) external view returns (bytes32 root, uint256 nextIndex) {
+        require(treeId < _trees.length, "Unknown tree");
+        PoolLib.Tree storage tree = _trees[treeId];
+        return (tree.root, tree.nextIndex);
+    }
+
+    function isKnownRoot(uint256 treeId, bytes32 root) external view returns (bool) {
+        return treeId < _trees.length && _trees[treeId].isKnownRoot(root);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Admin — deposit policy only; cannot touch notes or funds
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function configureToken(address token, bool depositsEnabled, uint256 maxDeposit) external onlyOwner {
+        require(token != address(0), "Invalid token");
+        require(maxDeposit <= MAX_AMOUNT, "Cap above 128 bits");
+        tokenConfig[token] = TokenConfig(depositsEnabled, maxDeposit);
+        emit TokenConfigured(token, depositsEnabled, maxDeposit);
+    }
+
+    function setDepositsPaused(bool paused) external onlyOwner {
+        depositsPaused = paused;
+        emit DepositsPausedSet(paused);
+    }
 }

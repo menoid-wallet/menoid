@@ -1,0 +1,125 @@
+Viewing Keys (v1-mainnet)
+
+    Privacy by default, transparency by choice: a user can let someone SEE
+    their private activity without letting them SPEND it.
+
+    Code: helpers/wallets.js (export), helpers/scanner.js (scan)
+
+
+1. Why the V1 demo could not do this
+
+    V1 nullifier = Poseidon(2, commitment, randomness, sk)
+
+    Checking whether a note is spent needed sk, and sk is the spending key.
+    So "see my balance" was the same as "spend my money".
+
+
+2. The fix: a nullifier key
+
+    nk        = Poseidon(2, sk)
+    nullifier = Poseidon(5, nk, commitment, randomness)
+
+    The circuit computes nk from sk itself. Anyone who is GIVEN nk can compute
+    nullifiers, but cannot make a proof: a proof needs sk to rebuild the
+    userCommitment, and Poseidon(2, sk) cannot be turned back into sk.
+
+
+3. How a viewer works out your notes
+
+    A nullifier needs three things:
+
+        commitment   public, in every NoteCreated event
+        randomness   hidden inside the encrypted note -> needs ivk
+        nk           given to the viewer
+
+    The viewer never goes backwards from a nullifier on-chain to a note (the
+    hash is one-way). It goes forwards:
+
+        1. try to decrypt every NoteCreated with ivk          -> your notes (incoming)
+        2. rebuild the commitment from what it decrypted and
+           check it equals the event's commitment            -> rejects fake notes
+        3. nullifier = Poseidon(5, nk, commitment, randomness)
+           is it on-chain (NullifierSpent)?                  -> spent or unspent
+        4. for each spent note: the OutgoingRecord event
+           indexed by that nullifier, opened with ovk         -> where the money went
+
+    randomness is inside the nullifier on purpose: with nk alone you cannot
+    test the pool's other commitments, only notes you could already open.
+
+
+4. Example
+
+    On-chain (everyone sees only hashes):
+
+        block 100  Alice deposits 100 USDC        NoteCreated(cm1, enc1)
+        block 120  Bob deposits for himself        NoteCreated(cm2, enc2)
+        block 150  Carol pays Alice 30 USDC        NullifierSpent(nfC)
+                                                   NoteCreated(cm3, enc3)  (Alice)
+                                                   NoteCreated(cm4, enc4)  (Carol change)
+        block 200  Alice pays Dave 60 USDC         NullifierSpent(nf1)
+                   from her 100 note               OutgoingRecord(nf1, R)
+                                                   NoteCreated(cm6, enc6)  (Dave)
+                                                   NoteCreated(cm7, enc7)  (Alice change 39.9)
+
+    Alice gives her accountant a full viewing key.
+
+    Step 1, ivk:
+        enc1 -> (USDC, 100, r1)      Alice's
+        enc3 -> (USDC, 30, r3)       Alice's
+        enc7 -> (USDC, 39.9, r7)     Alice's
+        everything else fails to decrypt: not hers
+
+        ivk alone says "received 169.9" — not her balance.
+
+    Step 2, nk:
+        Poseidon(5, nk, cm1, r1) = nf1   on-chain   -> SPENT
+        Poseidon(5, nk, cm3, r3)         not found  -> unspent
+        Poseidon(5, nk, cm7, r7)         not found  -> unspent
+
+        balance = 30 + 39.9 = 69.9 USDC
+
+        nfC (Carol's) matches nothing. Other people stay private, even
+        from Alice's accountant.
+
+    Step 3, ovk:
+        key = HKDF(ovk, nf1) opens R -> "sent 60 USDC to 0xDave, fee 0.1"
+
+    And none of this can spend: there is no sk anywhere in it.
+
+
+5. The keys you can share
+
+    full viewing key       userCommitment, incomingSecret, outgoingSecret, nk
+                           incoming + spends + outgoing, every epoch
+
+    incoming viewing key   userCommitment, incomingSecret
+                           incoming only; "received" is an upper bound
+
+    epoch viewing key      userCommitment, ivk_e, ovk_e, nk, e
+                           everything, but only for viewing epoch e
+
+    payment receipt        no key at all: the outgoing record keeps the
+                           receiver's note randomness, so the sender can show
+                           (token, amount, receiver userCommitment, randomness);
+                           anyone rebuilds the commitment and finds it on-chain
+
+    String form:   menoid-vk1:<base64url(payload)>.<checksum>
+    The checksum makes a mistyped key fail instead of scanning nothing.
+
+    None of them contains sk. There is no protocol or "regulator" key: the
+    only keys that exist are the user's.
+
+
+6. Epochs: a key for one period
+
+    updateViewingKey() moves the address to the next epoch. Senders encrypt to
+    the new ivkPub from then on.
+
+        epoch 0   notes received before the switch   ivk_0
+        epoch 1   notes received after               ivk_1
+
+    Sharing (ivk_1, ovk_1, nk) shows only epoch 1. Sharing nk does not leak
+    epoch 0, because a nullifier also needs each note's randomness.
+
+    Epochs only change who can READ. The wallet spends notes from different
+    epochs in the same proof (they belong to the same userCommitment).

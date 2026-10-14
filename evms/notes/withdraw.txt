@@ -1,0 +1,94 @@
+Withdraw Flow (v1-mainnet)
+
+    Private notes -> public funds at any address.
+    The amount, token and destination are public (real funds visibly move).
+    Which notes paid for it — and so which deposit it came from — stays hidden.
+    A relayer sends the transaction.
+
+    Code: helpers/transactions.js buildWithdraw     Contract: NoidPool.withdraw
+    Circuit: circuits/withdraw_proof.circom (see zk_proof_withdraw.txt)
+
+
+    Example: Bob holds private USDC notes of 99.9 and 5, and withdraws 50 USDC
+    to a fresh address.
+
+
+    Off-Chain (Bob's wallet):
+
+        Pick input notes (up to 4, same token, same tree): 99.9 + 5 = 104.9
+        Fill the empty slots with zero-value dummies.
+
+        Outputs (always 2, same token):
+            out[0]  change   54.8 -> Bob
+            out[1]  fee       0.1 -> relayer
+        Public amount leaving the pool: 50
+
+            104.9 = 54.8 + 0.1 + 50
+
+        Nullifiers (always 4):   Poseidon(5, nk, commitment, r)
+
+        Encrypt out[0] to Bob's viewing key, out[1] to the relayer's.
+
+        Outgoing record for Bob (outgoing viewing key):
+            "withdraw 50 USDC to 0xRecipient, fee 0.1"
+
+        Ext data:
+            recipient      0xRecipient
+            unwrapNative   false   (true only for the wrapped native token:
+                                    the recipient then gets MON/ETH/POL)
+            encrypted outputs, outgoing record
+
+        extDataHash = keccak(chainId, pool, "menoid.v1m.withdraw", ext data) mod p
+        > the recipient is inside this hash
+
+        Make the withdraw proof with public token = USDC, public amount = 50.
+
+        Send to the relayer.
+
+
+    Relayer:
+
+        Verifies the proof off-chain, checks its fee note, calls
+        withdraw([call]) from its own address.
+
+
+    On-Chain:
+
+        Contract checks:
+            0 < amount < 2^128, token and recipient not zero
+            unwrapNative only for the wrapped native token
+            root known, nullifiers unspent and all different
+
+        Contract verifies the proof with:
+            [root, nullifiers x4, output commitments x2, relayer,
+             token, amount, extDataHash]
+
+        If the relayer changed the recipient, amount or token, a public input
+        or the hash differs and the proof fails. The relayer can deliver the
+        withdrawal or drop it; it can never redirect it.
+
+        Contract marks the nullifiers spent         (NullifierSpent x4)
+        Contract inserts [out0, out1, 0, 0]          (NoteCreated x2)
+        Contract emits OutgoingRecord
+        Contract sends 50 USDC to the recipient     (Withdrawn)
+            unwrapNative: unwraps WMON and sends MON instead
+
+        All state is final before the funds are sent, and the function is
+        non-reentrant.
+
+
+    What is public:   token, amount, recipient, time, relayer
+    What is hidden:   who withdrew, which notes paid for it, the change, the
+                      sender's remaining balance
+
+    Privacy tip: "deposit 7.31, withdraw 7.31 a minute later" links itself by
+    amount and timing, however good the cryptography is.
+
+
+    Changed from V1 demo:
+        - any whitelisted token; the token is a public input of the proof
+        - recipient bound through extDataHash instead of a receiver signal
+        - fixed shape: always 4 nullifiers, 2 outputs
+        - native coin: notes hold the wrapped token, unwrapNative pays out the
+          coin itself
+        - one payout per call (each call names its own recipient)

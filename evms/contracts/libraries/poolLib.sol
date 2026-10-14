@@ -1,101 +1,119 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./Interfaces.sol";
+import "poseidon-solidity/PoseidonT3.sol";
 
+/**
+ * PoolLib — incremental Poseidon Merkle tree, filled in 4-leaf chunks.
+ *
+ * Every pool operation inserts exactly one aligned chunk of 4 leaves
+ * (deposit [cm,0,0,0], withdraw [change,fee,0,0], transfer [recv,change,fee,0]).
+ * The chunk is hashed into one level-2 node (3 hashes) and only that node
+ * climbs the remaining 18 levels: 21 Poseidon calls per operation instead of
+ * 20 per note. Zero leaves are ordinary leaves, so an off-chain
+ * IncrementalMerkleTree that inserts the same 4 leaves gets the same root.
+ *
+ * filledSubtrees / root history: see notes/filled_subtrees.txt
+ */
 library PoolLib {
-    // constants
-    uint32 public constant TREE_DEPTH = 20;
-    uint32 public constant ROOT_HISTORY_SIZE = 10;
-    uint32 public constant MAX_LEAF = uint32(1) << TREE_DEPTH; // 2**20 value
+    uint256 internal constant TREE_DEPTH = 20;
+    uint256 internal constant CHUNK_LEVELS = 2;                    // 2^2 = 4 leaves per chunk
+    uint256 internal constant CHUNK_SIZE = 1 << CHUNK_LEVELS;
+    uint256 internal constant MAX_LEAVES = 1 << TREE_DEPTH;        // 1,048,576 leaves per tree
+    uint256 internal constant ROOT_HISTORY_SIZE = 100;             // proofs stay valid for 100 inserts
 
-    struct Pool {
-        bytes32[TREE_DEPTH] zeros; // the zeros are used to know the value of Z0, Z1, Z2 (i.e the zero hash value of each level)
-        bytes32[TREE_DEPTH] filledSubtrees; // Stores the latest filled LEFT subtree hash at each tree level
-        // its an optimistic approach to compute the root
-        // explanantion of filled subtrees is provided at notes/filled_subtress.txt
-        bytes32 root; //the current root
-        bytes32[ROOT_HISTORY_SIZE] rootHistory; // stores the recent history of roots , so the system allows mempool delays to improve UX.
-        uint32 rootPtr; // where next root is to be inserted in the circular root history
-        uint32 nextIdx; // where next leaf insertion should happen
-        mapping(bytes32 => bool) validRoot; //fast membership check for acceptable roots
-        // O(1) lookup wether the root is still valid (i.e still in root history) or not
+    struct Tree {
+        bytes32[TREE_DEPTH] filledSubtrees;          // latest LEFT node per level (levels >= 2 used)
+        bytes32[ROOT_HISTORY_SIZE] rootHistory;      // circular buffer of recent roots
+        mapping(bytes32 => bool) knownRoot;          // O(1) membership for rootHistory
+        bytes32 root;
+        uint32 rootIndex;                            // slot of the current root in rootHistory
+        uint32 nextIndex;                            // next free leaf (always a multiple of 4)
     }
 
-
-    function createPool(        
-        Pool[] storage pools,
-        IPoseidon poseidon
-        ) internal returns (uint256 poolId) {
-        Pool storage p = pools.push();
-        bytes32 zero = bytes32(0);
-
-        for (uint8 i = 0; i < TREE_DEPTH; i++) {
-            p.zeros[i] = zero; // the Z0,Z1,Z2 ...
-            p.filledSubtrees[i] = zero; // inital zero tree
-            zero = bytes32(poseidon.poseidon([uint256(zero), uint256(zero)])); // Z1 = hash(Z0,Z0) ... Z20 = hash(Z19,Z19)
-        }
-
-        p.root = zero; // Z20
-        p.rootHistory[0] = zero;
-        p.rootPtr = 0;
-        p.nextIdx = 0;
-        p.validRoot[zero] = true;
-
-        return pools.length - 1;
+    function init(Tree storage tree) internal {
+        bytes32 emptyRoot = zeros(TREE_DEPTH);
+        tree.root = emptyRoot;
+        tree.rootHistory[0] = emptyRoot;
+        tree.knownRoot[emptyRoot] = true;
     }
 
-    // returns current pool
-    function currentPool(
-        Pool[] storage pools
-    ) internal view returns (Pool storage) {
-        return pools[pools.length - 1];
+    function isFull(Tree storage tree) internal view returns (bool) {
+        return tree.nextIndex + CHUNK_SIZE > MAX_LEAVES;
     }
 
-        //update pool for commitment
-    function updatePool(
-        Pool storage p,
-        bytes32 commitment,
-        IPoseidon poseidon
-        ) internal {
-        bytes32 current = commitment;
-        uint256 idx = p.nextIdx;
-        require(p.nextIdx < MAX_LEAF, "Pool full");
-        p.nextIdx++; // update the next index
-        // compute the root
-        for (uint16 i = 0; i < TREE_DEPTH; i++) {
-            // idx & 1 -> extracts lsb and & 1 decides odd or even
-            if ((idx & 1) == 0) {
-                // even -> the current one is left
-                // so add it to the subtree, compute hash with zero[i](i.e Zi -> refere notes/filled_subtrees.txt)
-                p.filledSubtrees[i] = current;
-                current = bytes32(
-                    poseidon.poseidon([uint256(current), uint256(p.zeros[i])])
-                );
+    function isKnownRoot(Tree storage tree, bytes32 root) internal view returns (bool) {
+        return root != bytes32(0) && tree.knownRoot[root];
+    }
+
+    // inserts 4 leaves at nextIndex; returns the index of the first one
+    function insertChunk(Tree storage tree, bytes32[4] memory leaves) internal returns (uint256 startIndex) {
+        startIndex = tree.nextIndex;
+        require(startIndex + CHUNK_SIZE <= MAX_LEAVES, "Tree full");
+
+        bytes32 left = _hash(leaves[0], leaves[1]);
+        bytes32 right = (leaves[2] == bytes32(0) && leaves[3] == bytes32(0))
+            ? zeros(1)
+            : _hash(leaves[2], leaves[3]);
+        bytes32 node = _hash(left, right);
+
+        uint256 index = startIndex >> CHUNK_LEVELS;
+        for (uint256 level = CHUNK_LEVELS; level < TREE_DEPTH; level++) {
+            if (index & 1 == 0) {
+                // left child: remember it, pair it with an empty right subtree for now
+                tree.filledSubtrees[level] = node;
+                node = _hash(node, zeros(level));
             } else {
-                // odd -> the current one is right
-                // so hash it with present value of the subtree
-                current = bytes32(
-                    poseidon.poseidon(
-                        [uint256(p.filledSubtrees[i]), uint256(current)]
-                    )
-                );
+                // right child: its left sibling is the stored subtree
+                node = _hash(tree.filledSubtrees[level], node);
             }
-            idx >>= 1; // shifts 1 bit
-        }
-        p.root = current; //update root
-    }
-
-    function pushRoot(Pool storage p, bytes32 newRoot) internal {
-        // current root
-        bytes32 oldRoot = p.rootHistory[p.rootPtr]; // old root at that position
-        if (oldRoot != bytes32(0)) {
-            p.validRoot[oldRoot] = false; // old root no more a valid root
+            index >>= 1;
         }
 
-        p.rootHistory[p.rootPtr] = newRoot; // store new root in the history
-        p.validRoot[newRoot] = true; // new root in valid roots
-        p.rootPtr = (p.rootPtr + 1) % ROOT_HISTORY_SIZE; // increament root ptr (i.e where next root will be inserted)
+        tree.nextIndex = uint32(startIndex + CHUNK_SIZE);
+        tree.root = node;
+        _pushRoot(tree, node);
     }
-   
+
+    function _pushRoot(Tree storage tree, bytes32 newRoot) private {
+        uint32 slot = uint32((uint256(tree.rootIndex) + 1) % ROOT_HISTORY_SIZE);
+        bytes32 evicted = tree.rootHistory[slot];
+        if (evicted != bytes32(0)) {
+            tree.knownRoot[evicted] = false;
+        }
+        tree.rootHistory[slot] = newRoot;
+        tree.knownRoot[newRoot] = true;
+        tree.rootIndex = slot;
+    }
+
+    function _hash(bytes32 left, bytes32 right) private pure returns (bytes32) {
+        return bytes32(PoseidonT3.hash([uint256(left), uint256(right)]));
+    }
+
+    // Root of an all-zero subtree of the given height.
+    // Generated by scripts/gen_zeros.js: zeros(0) = 0, zeros(i) = Poseidon(zeros(i-1), zeros(i-1))
+    function zeros(uint256 level) internal pure returns (bytes32) {
+        if (level == 0) return 0x0000000000000000000000000000000000000000000000000000000000000000;
+        if (level == 1) return 0x2098f5fb9e239eab3ceac3f27b81e481dc3124d55ffed523a839ee8446b64864;
+        if (level == 2) return 0x1069673dcdb12263df301a6ff584a7ec261a44cb9dc68df067a4774460b1f1e1;
+        if (level == 3) return 0x18f43331537ee2af2e3d758d50f72106467c6eea50371dd528d57eb2b856d238;
+        if (level == 4) return 0x07f9d837cb17b0d36320ffe93ba52345f1b728571a568265caac97559dbc952a;
+        if (level == 5) return 0x2b94cf5e8746b3f5c9631f4c5df32907a699c58c94b2ad4d7b5cec1639183f55;
+        if (level == 6) return 0x2dee93c5a666459646ea7d22cca9e1bcfed71e6951b953611d11dda32ea09d78;
+        if (level == 7) return 0x078295e5a22b84e982cf601eb639597b8b0515a88cb5ac7fa8a4aabe3c87349d;
+        if (level == 8) return 0x2fa5e5f18f6027a6501bec864564472a616b2e274a41211a444cbe3a99f3cc61;
+        if (level == 9) return 0x0e884376d0d8fd21ecb780389e941f66e45e7acce3e228ab3e2156a614fcd747;
+        if (level == 10) return 0x1b7201da72494f1e28717ad1a52eb469f95892f957713533de6175e5da190af2;
+        if (level == 11) return 0x1f8d8822725e36385200c0b201249819a6e6e1e4650808b5bebc6bface7d7636;
+        if (level == 12) return 0x2c5d82f66c914bafb9701589ba8cfcfb6162b0a12acf88a8d0879a0471b5f85a;
+        if (level == 13) return 0x14c54148a0940bb820957f5adf3fa1134ef5c4aaa113f4646458f270e0bfbfd0;
+        if (level == 14) return 0x190d33b12f986f961e10c0ee44d8b9af11be25588cad89d416118e4bf4ebe80c;
+        if (level == 15) return 0x22f98aa9ce704152ac17354914ad73ed1167ae6596af510aa5b3649325e06c92;
+        if (level == 16) return 0x2a7c7c9b6ce5880b9f6f228d72bf6a575a526f29c66ecceef8b753d38bba7323;
+        if (level == 17) return 0x2e8186e558698ec1c67af9c14d463ffc470043c9c2988b954d75dd643f36b992;
+        if (level == 18) return 0x0f57c5571e9a4eab49e2c8cf050dae948aef6ead647392273546249d1c1ff10f;
+        if (level == 19) return 0x1830ee67b5fb554ad5f63d4388800e1cfe78e310697d46e43c9ce36134f72cca;
+        if (level == 20) return 0x2134e76ac5d21aab186c2be1dd8f84ee880a1e46eaf712f9d371b6df22191f3e;
+        revert("Level out of range");
+    }
 }

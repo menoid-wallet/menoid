@@ -1,76 +1,52 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-uint32 constant MAX_INPUTS = 4;
 
-struct Inputs {
-    uint8[MAX_INPUTS] enabled; // decides wether input at index is present or not
-    bytes32[MAX_INPUTS] roots; // tree roots which the respective commiment belongs to.
-    uint256[MAX_INPUTS] poolIds; // poolid of that root
-    bytes32[MAX_INPUTS] nullifiers; // nullifier for each commitment
-}
+// Spend shape — must match circuits/transfer_proof.circom and withdraw_proof.circom.
+uint256 constant N_INS = 4;          // input notes per proof (dummies fill unused slots)
+uint256 constant TRANSFER_OUTS = 3;  // receiver, change, relayer fee
+uint256 constant WITHDRAW_OUTS = 2;  // change, relayer fee
 
-// transfer call
-struct TransferCall {
-    // zk proof
+struct Proof {
     uint256[2] a;
     uint256[2][2] b;
     uint256[2] c;
-    //input details
-    Inputs inputs;
-    // outputs (maximum of 3)
-    bytes32 C1; // receiver commitment (Required)
-    bytes32 C2; // change commitment
-    bytes32 C3; // relayer commitment
-    bytes encryptedNote1; // receiver encrypted note
-    bytes encryptedNote2; // change encrypted note
-    bytes encryptedNote3; // relayer encrypted note
 }
 
-/*
-    * - Each TransferCall consumes between 1 and MAX_INPUTS private input notes
-    * - Multiple TransferCalls can be executed atomically in a single transaction
-    * - Later TransferCalls may spend commitments created by earlier TransferCalls
-    *   within the same transaction
-    * - This enables note aggregation and large fan-in transfers
-    *   while remaining atomic and private
-    */
-
 /**
- * Zk proof for transfer
- * Consumes up to MAX_INPUTS (e.g. 4) private input notes
- * belonging to a single owner and creates up to 3 new
- * private output notes in one proof.
- *
- * For exact understanding Refer: notes/zk_proof_transfer.txt
+ * Everything a transfer proof does not compute itself.
+ * Its hash is a public signal (extDataHash), so none of it can be changed
+ * after the proof is made — not by the relayer, not by a front-runner.
  */
+struct TransferExtData {
+    bytes[TRANSFER_OUTS] encryptedOutputs; // [receiver, change, relayer fee], each encrypted to its owner
+    bytes outgoingRecord;                   // sender's own record of the payment (outgoing viewing key)
+}
 
-    // withdraw
-/**
- * input commiments are surrendered
- * and the value of those inputs is transferred to the "To" account.
- * in withdraw also we need 2 extra commitments because 1. change 2. relayer
- */
+struct TransferCall {
+    Proof proof;
+    uint256 treeId;                          // tree the input notes live in
+    bytes32 root;                            // a recent root of that tree
+    bytes32[N_INS] nullifiers;               // always N_INS: dummy inputs publish random-looking ones
+    bytes32[TRANSFER_OUTS] outCommitments;   // always TRANSFER_OUTS: unused outputs are zero-value notes
+    bytes32 relayer;                         // user commitment that owns the fee note (last output)
+    TransferExtData ext;
+}
+
+struct WithdrawExtData {
+    address recipient;                      // public destination of the released funds
+    bool unwrapNative;                      // wrapped native token only: send the native coin instead
+    bytes[WITHDRAW_OUTS] encryptedOutputs;  // [change, relayer fee]
+    bytes outgoingRecord;
+}
 
 struct WithdrawCall {
-    // zkproof
-    uint256[2] a;
-    uint256[2][2] b;
-    uint256[2] c;
-    // input details
-    Inputs inputs;
-    // output details
-    bytes32 C1; //change commitment
-    bytes32 C2; //relayer commitment
-    bytes encryptedNote1; // change encrypted note
-    bytes encryptedNote2; // relayer encrypted note
-    //withdraw amount for this call
-    uint256 withdrawAmount;
+    Proof proof;
+    uint256 treeId;
+    bytes32 root;
+    bytes32[N_INS] nullifiers;
+    bytes32[WITHDRAW_OUTS] outCommitments;
+    bytes32 relayer;
+    address token;                           // token leaving the pool (public)
+    uint256 amount;                          // amount leaving the pool (public)
+    WithdrawExtData ext;
 }
-
-
-    // helper functions
-struct InsertedNote {
-    uint256 poolId;
-    bytes32 commitment;
-}
-

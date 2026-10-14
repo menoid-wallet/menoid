@@ -1,300 +1,99 @@
-```text
-project/
-│
-├── circuits/
-│   ├── create_noir_account.circom
-│   ├── deposit_proof.circom
-│   ├── execte_call_proof.circom
-│   ├── merkle_path.circom
-│   ├── noir_account_ownership.circom
-│   ├── transfer_proof.circom
-│   └── withdraw_proof.circom
-│
-├── build/
-├── ptau/
-└── contracts/
-```
+Circom -> Verifiers (v1-mainnet)
 
-# STEP 1 — Install circom + snarkjs
-
-```bash
-npm install -g snarkjs
-```
-
-Install circom:
-https://docs.circom.io/getting-started/installation/
-
-Verify:
-
-```bash
-circom --version
-snarkjs --version
-```
-
----
-
-# STEP 2 — Download PTAU (ONLY ONCE)
+    Two circuits:
 
-```bash
-mkdir ptau
-```
+        circuits/transfer_proof.circom   -> contracts/TransferVerifier.sol   (10 public inputs)
+        circuits/withdraw_proof.circom   -> contracts/WithdrawVerifier.sol   (11 public inputs)
 
-Download:
+    Shared code:
 
-```bash
-curl -L \
-https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_17.ptau \
--o ptau/powersOfTau28_hez_final_17.ptau
-```
+        circuits/spend_core.circom       SpendCore — everything both circuits prove
+        circuits/note_lib.circom         OwnerKeys, NoteCommitment, NoteNullifier
+        circuits/merkle_path.circom      Merkle inclusion
+        circuits/range_check.circom      0 <= x < 2^bits
 
----
+    There is no deposit circuit any more (see zk_proof_deposit.txt).
 
-# DEPOSIT CIRCUIT
+    Artifacts go to build/v1m/ so the V1 demo's files in build/ stay untouched.
 
-## STEP 3 — Compile Deposit Circuit
-
-```bash
-circom circuits/deposit_proof.circom \
-    --r1cs \
-    --wasm \
-    --sym \
-    -o build
-```
-
-## STEP 4 — Generate Deposit ZKey
-
-```bash
-snarkjs groth16 setup \
-    build/deposit_proof.r1cs \
-    ptau/powersOfTau28_hez_final_17.ptau \
-    build/deposit_0000.zkey
-```
-
-## STEP 5 — Finalize Deposit ZKey
-
-```bash
-snarkjs zkey contribute \
-    build/deposit_0000.zkey \
-    build/deposit_final.zkey \
-    --name="mahesh"
-```
 
-## STEP 6 — Export Deposit Verifier
+STEP 1 — Tools (once)
 
-```bash
-snarkjs zkey export solidityverifier \
-    build/deposit_final.zkey \
-    contracts/DepositVerifier.sol
-```
+    circom 2.1+          https://docs.circom.io/getting-started/installation/
+    npm install          (snarkjs, circomlib come from package.json)
 
-DONE.
+        circom --version
+        npx snarkjs --version
 
----
 
-# TRANSFER CIRCUIT
+STEP 2 — Powers of Tau (once)
 
-## STEP 7 — Compile Transfer Circuit
+    Phase 1 is the public Hermez ceremony. The circuits are ~27k constraints,
+    so the 2^17 file is more than enough.
 
-```bash
-circom circuits/transfer_proof.circom \
-    --r1cs \
-    --wasm \
-    --sym \
-    -o build
-```
+        mkdir -p ptau
+        curl -L https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_17.ptau \
+             -o ptau/powersOfTau28_hez_final_17.ptau
 
-## STEP 8 — Generate Transfer ZKey
-
-```bash
-snarkjs groth16 setup \
-    build/transfer_proof.r1cs \
-    ptau/powersOfTau28_hez_final_17.ptau \
-    build/transfer_0000.zkey
-```
-
-## STEP 9 — Finalize Transfer ZKey
 
-```bash
-snarkjs zkey contribute \
-    build/transfer_0000.zkey \
-    build/transfer_final.zkey \
-    --name="mahesh"
-```
+STEP 3 — Build everything
 
-## STEP 10 — Export Transfer Verifier
+        bash scripts/build_circuits.sh            both circuits
+        bash scripts/build_circuits.sh transfer   just one
 
-```bash
-snarkjs zkey export solidityverifier \
-    build/transfer_final.zkey \
-    contracts/TransferVerifier.sol
-```
+    For each circuit the script runs:
 
-DONE.
+        circom circuits/<name>_proof.circom --O2 --r1cs --wasm --sym -o build/v1m
+            --O2 removes every linear constraint (~60k -> ~27k): faster proving
 
----
+        snarkjs groth16 setup   build/v1m/<name>_proof.r1cs ptau/... build/v1m/<name>_proof_0000.zkey
+        snarkjs zkey contribute build/v1m/<name>_proof_0000.zkey build/v1m/<name>_proof_final.zkey
+        snarkjs zkey export verificationkey  ... build/v1m/<name>_verification_key.json
+        snarkjs zkey export solidityverifier ... contracts/<Name>Verifier.sol
 
-# WITHDRAW CIRCUIT
+    and renames the generated contract (snarkjs calls it Groth16Verifier).
 
-## STEP 11 — Compile Withdraw Circuit
+    Outputs:
 
-```bash
-circom circuits/withdraw_proof.circom \
-    --r1cs \
-    --wasm \
-    --sym \
-    -o build
-```
+        build/v1m/transfer_proof_js/transfer_proof.wasm     witness generator (wallet)
+        build/v1m/transfer_proof_final.zkey                 proving key (wallet), ~18 MB
+        build/v1m/transfer_verification_key.json            off-chain verify (relayer)
+        contracts/TransferVerifier.sol                      on-chain verify
+        (same for withdraw)
 
-## STEP 12 — Generate Withdraw ZKey
 
-```bash
-snarkjs groth16 setup \
-    build/withdraw_proof.r1cs \
-    ptau/powersOfTau28_hez_final_17.ptau \
-    build/withdraw_0000.zkey
-```
+STEP 4 — Compile and test
 
-## STEP 13 — Finalize Withdraw ZKey
+        npx hardhat compile
+        npx hardhat test                                   in-process network
 
-```bash
-snarkjs zkey contribute \
-    build/withdraw_0000.zkey \
-    build/withdraw_final.zkey \
-    --name="mahesh"
-```
+    or against a local node:
 
-## STEP 14 — Export Withdraw Verifier
+        npx hardhat node                                   (another shell)
+        npx hardhat run scripts/deploy.js --network localhost
+        npx hardhat test --network localhost
 
-```bash
-snarkjs zkey export solidityverifier \
-    build/withdraw_final.zkey \
-    contracts/WithdrawVerifier.sol
-```
 
-DONE.
+!! STEP 3 IS A DEVELOPMENT SETUP ONLY !!
 
----
+    The phase-2 step above is ONE local contribution. Whoever ran it could
+    have kept the randomness ("toxic waste") and could forge proofs, i.e.
+    mint notes and drain the pool.
 
-# CREATE NOID ACCOUNT CIRCUIT
+    Before mainnet, run a multi-party phase-2 ceremony on these two circuits:
 
-## STEP 15 — Compile Create Noid Account Circuit
+        - several independent contributors (team + outside people), each
+          running `snarkjs zkey contribute` on the previous file
+          (or a coordinated tool such as p0tion)
+        - finish with `snarkjs zkey beacon` using a public future block hash
+        - publish the transcript; anyone can check it with `snarkjs zkey verify`
 
-```bash
-circom circuits/create_noir_account.circom \
-    --r1cs \
-    --wasm \
-    --sym \
-    -o build
-```
+    The setup is secure as long as ONE contributor destroyed their randomness.
+    Changing a circuit means a new ceremony and new verifier contracts.
 
-## STEP 16 — Generate Create Noid Account ZKey
 
-```bash
-snarkjs groth16 setup \
-    build/create_noir_account.r1cs \
-    ptau/powersOfTau28_hez_final_17.ptau \
-    build/create_noid_account_0000.zkey
-```
+Circuit changes that need a rebuild + redeploy
 
-## STEP 17 — Finalize Create Noid Account ZKey
-
-```bash
-snarkjs zkey contribute \
-    build/create_noid_account_0000.zkey \
-    build/create_noid_account_final.zkey \
-    --name="mahesh"
-```
-
-## STEP 18 — Export Create Noid Account Verifier
-
-```bash
-snarkjs zkey export solidityverifier \
-    build/create_noid_account_final.zkey \
-    contracts/CreateNoidAccountVerifier.sol
-```
-
-DONE.
-
----
-
-# EXECUTE CALL CIRCUIT
-
-## STEP 19 — Compile Execute Call Circuit
-
-```bash
-circom circuits/execte_call_proof.circom \
-    --r1cs \
-    --wasm \
-    --sym \
-    -o build
-```
-
-## STEP 20 — Generate Execute Call ZKey
-
-```bash
-snarkjs groth16 setup \
-    build/execte_call_proof.r1cs \
-    ptau/powersOfTau28_hez_final_17.ptau \
-    build/execute_call_0000.zkey
-```
-
-## STEP 21 — Finalize Execute Call ZKey
-
-```bash
-snarkjs zkey contribute \
-    build/execute_call_0000.zkey \
-    build/execute_call_final.zkey \
-    --name="mahesh"
-```
-
-## STEP 22 — Export Execute Call Verifier
-
-```bash
-snarkjs zkey export solidityverifier \
-    build/execute_call_final.zkey \
-    contracts/ExecuteFunctionCallVerifier.sol
-```
-
-DONE.
-
----
-
-# NOID ACCOUNT OWNERSHIP CIRCUIT
-
-## STEP 23 — Compile Ownership Circuit
-
-```bash
-circom circuits/noir_account_ownership.circom \
-    --r1cs \
-    --wasm \
-    --sym \
-    -o build
-```
-
-## STEP 24 — Generate Ownership ZKey
-
-```bash
-snarkjs groth16 setup \
-    build/noir_account_ownership.r1cs \
-    ptau/powersOfTau28_hez_final_17.ptau \
-    build/noid_account_ownership_0000.zkey
-```
-
-## STEP 25 — Finalize Ownership ZKey
-
-```bash
-snarkjs zkey contribute \
-    build/noid_account_ownership_0000.zkey \
-    build/noid_account_ownership_final.zkey \
-    --name="mahesh"
-```
-
-## STEP 26 — Export Ownership Verifier
-
-```bash
-snarkjs zkey export solidityverifier \
-    build/noid_account_ownership_final.zkey \
-    contracts/NoidAccountOwnershipVerifier.sol
-```
-
-DONE.
+    Anything in circuits/ — including the domain separators in note_lib.circom,
+    which must also match helpers/constants.js and NoidPool.sol (D_CM).
+    Tree depth changes also need scripts/gen_zeros.js re-run.

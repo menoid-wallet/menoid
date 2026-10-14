@@ -1,53 +1,88 @@
+Deposit — the cryptography (v1-mainnet)
+
 Core Logic:
-- The circuit proves that the publicly deposited ETH amount equals
-  the total value hidden inside the created private notes.
+- v1-mainnet has NO deposit circuit. The contract computes the note
+  commitment itself:
 
-Public Inputs:
-- depositAmount
-    - Total ETH amount deposited into the shielded pool.
+        commitment = Poseidon(4, token, amount, npk)        (PoseidonT5 on-chain)
 
-- c1
-    - Commitment hash of the first private note.
+- This note explains why that is safe, and what replaced the old
+  deposit_proof.circom.
 
-- c2
-    - Commitment hash of the second private note
-      (usually relayer/protocol fee note).
-
-Private Inputs:
-
-First Note:
-- a1
-    - Amount stored in the first private note.
-
-- r1
-    - Randomness used to make the commitment unlinkable.
-
-- pk1
-    - Receiver zk public key that owns the note.
-
-Second Note:
-- a2
-    - Amount stored in the second private note.
-
-- r2
-    - Randomness for the second commitment.
-
-- pk2
-    - Receiver public key for the second note.
-
-Commitment Construction:
-- Each private note is converted into a commitment using Poseidon hashing:
-
-    c1 = Poseidon(1, a1, r1, pk1)
-    c2 = Poseidon(1, a2, r2, pk2)
-    
-    Note: 1 <-- domain_seperator
-
-Balance Constraint:
-- The circuit enforces:
+--------------------------------------------------
+What the V1 deposit proof did:
+--------------------------------------------------
 
     depositAmount = a1 + a2
 
-Meaning:
-- Total deposited ETH must exactly equal the sum of all created private notes.
+    It proved that the public deposit equalled the hidden amounts of two
+    notes (the user's note and a relayer fee note), because the contract
+    could not see inside the commitments.
 
+--------------------------------------------------
+Why no proof is needed now:
+--------------------------------------------------
+
+- On a deposit, token and amount are public anyway: the contract just
+  received them (transferFrom, or msg.value).
+
+- So the contract does not need to be convinced of anything. It builds the
+  commitment from values it already knows to be true:
+
+        token   -> the token it received (the wrapped token for native)
+        amount  -> exactly what it received (balance before/after check)
+        npk     -> supplied by the depositor
+
+- The only thing the contract cannot check is npk. A wrong npk only hurts the
+  depositor (a note nobody can spend). It can never create value.
+
+--------------------------------------------------
+The note public key (npk):
+--------------------------------------------------
+
+        npk = Poseidon(3, ownerUserCommitment, randomness)
+
+- Built off-chain by the depositor's wallet.
+- Hides the owner: fresh randomness makes it unlinkable to the user
+  commitment, even though npk is public in the deposit transaction.
+- The old format Poseidon(1, amount, r, uc) could not be finished on-chain
+  without revealing uc and r. Splitting out npk is what makes on-chain
+  commitments (deposits now, swap outputs later) possible.
+
+--------------------------------------------------
+Commitment Construction:
+--------------------------------------------------
+
+        commitment = Poseidon(4, token, amount, npk)
+
+        4      <-- domain separator for commitments
+        token  <-- uint160(token address)
+        amount <-- below 2^128 (the contract caps every deposit there)
+
+- The same formula is used inside the transfer/withdraw circuits
+  (circuits/note_lib.circom NoteCommitment), so a deposited note is spent
+  exactly like any other note.
+- The contract's PoseidonT5 and the circuit's Poseidon(4) are the same
+  function; the tests check the on-chain commitment against the wallet's.
+
+--------------------------------------------------
+What the later spend proof checks about this note:
+--------------------------------------------------
+
+- When the note is spent, the transfer/withdraw circuit rebuilds:
+
+        npk        = Poseidon(3, uc, randomness)    uc rebuilt from sk
+        commitment = Poseidon(4, token, amount, npk)
+
+  and proves that commitment is in the Merkle tree. Only the owner of uc
+  (who knows sk) can do this. A depositor who used someone else's npk has
+  given that person the note; it is not spendable by the depositor.
+
+--------------------------------------------------
+Checks the contract makes instead of a proof:
+--------------------------------------------------
+
+- deposits not paused, token accepted, 0 < amount <= cap (cap <= 2^128 - 1)
+- npk != 0 and npk < field size
+- the pool's balance rose by exactly amount (rejects fee-on-transfer tokens)
+- commitment not already in the pool ("Commitment already exists")

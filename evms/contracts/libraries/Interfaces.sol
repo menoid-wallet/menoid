@@ -1,34 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IDepositVerifier {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[5] calldata publicSignals
-    ) external view returns (bool);
-}
+// public signals: [root, nullifiers x4, outCommitments x3, relayer, extDataHash]
 interface ITransferVerifier {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        uint256[19] calldata publicSignals
+        uint256[10] calldata publicSignals
     ) external view returns (bool);
 }
 
+// public signals: [root, nullifiers x4, outCommitments x2, relayer, token, amount, extDataHash]
 interface IWithdrawVerifier {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        uint256[19] calldata publicSignals
+        uint256[11] calldata publicSignals
     ) external view returns (bool);
 }
 
-interface IPoseidon {
-    function poseidon(
-        uint256[2] calldata input
-    ) external pure returns (uint256);
+// WMON / WETH / WPOL
+interface IWrappedNative {
+    function deposit() external payable;
+
+    function withdraw(uint256 amount) external;
 }

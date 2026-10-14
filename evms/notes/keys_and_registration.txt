@@ -1,0 +1,133 @@
+Keys and Registration (v1-mainnet)
+
+    The user keeps their real wallet (MetaMask, Rabby, ...). There is no
+    second wallet, no second address and no second seed phrase.
+
+    Code: helpers/wallets.js        Contract: NoidPool.register / registrationOf
+
+
+1. The one signature
+
+    The real wallet signs this message once:
+
+        Menoid v1-mainnet: create my private account keys.
+
+        Only sign this on https://app.menoid.xyz
+        Anyone holding this signature can spend your private balance.
+
+        Key index: 0
+
+    Why a long message instead of "menoid_Wallet":
+        - the user can read what they are signing
+        - it names the only site that should ask for it
+        - "Key index" lets a user move to new keys later (section 5)
+
+    The same wallet always produces the same signature for the same message
+    (RFC 6979), so the keys below can be re-derived on any device.
+    Smart-contract, passkey and some MPC wallets sign differently every time.
+    The wallet asks for the signature twice and refuses if they differ.
+
+    The message has no chain id, so the same identity works on Monad, Base
+    and Polygon. Each chain still needs its own register() call.
+
+
+2. Everything derived from it
+
+    seed            = keccak("menoid/v1m/seed"     ‖ signature)        master secret, never stored, never sent
+
+    sk              = keccak("menoid/v1m/spend"    ‖ seed) mod l        spending key (BabyJubJub)
+    spendPk         = sk · Base8
+    nk              = Poseidon(2, sk)                                   nullifier key
+
+    incomingSecret  = keccak("menoid/v1m/incoming" ‖ seed)
+    outgoingSecret  = keccak("menoid/v1m/outgoing" ‖ seed)
+    ivk_e           = keccak("menoid/v1m/ivk" ‖ incomingSecret ‖ e)     incoming viewing key, epoch e (secp256k1)
+    ivkPub_e        = ivk_e · G                                         registered on-chain
+    ovk_e           = keccak("menoid/v1m/ovk" ‖ outgoingSecret ‖ e)     outgoing viewing key, epoch e (32 bytes)
+
+    userCommitment  = Poseidon(1, walletAddress, spendPk.x, spendPk.y)
+
+    What each one does:
+
+        sk              proves you own your notes inside a proof. This is the
+                        only key that can spend.
+        nk              computes your nullifiers, so it can tell which of your
+                        notes are spent. It cannot spend (you cannot get sk back
+                        from Poseidon(2, sk)).
+        ivk             opens notes sent to you (incoming).
+        ovk             opens the records of payments you made (outgoing).
+        userCommitment  your public identity. Notes are locked to it.
+
+    The numbers 1, 2 in Poseidon(...) are domain separators. Every hash in the
+    protocol starts with its own number so two different hashes can never be
+    confused (see zk_proof_transfer.txt for the full list).
+
+    The V1 demo used "menoid_Wallet" and other tags. Mainnet uses its own
+    "menoid/v1m/..." tags, so the same wallet gets completely different keys
+    on mainnet. A signature collected on a testnet build is worth nothing here.
+
+
+3. Register on-chain (once per chain)
+
+    register(userCommitment, ivkPub_0)
+
+    The contract stores, keyed by msg.sender (the real wallet):
+
+        registered address  ->  userCommitment
+                                viewingPublicKey  (ivkPub, 65 bytes)
+                                keyIndex          (0)
+                                viewingEpoch      (0)
+
+    Checks:
+        - one registration per address            "Already registered"
+        - userCommitment not zero, below the field "Invalid user commitment"
+        - a userCommitment can be claimed once     "User commitment already claimed"
+          (it contains the owner's address, so an honest wallet never
+          collides; this stops someone registering a copy of yours)
+        - viewing key is 65 bytes, starts with 0x04 "Invalid viewing public key"
+
+
+4. How a sender finds you
+
+    registrationOf(yourAddress) -> (userCommitment, viewingPublicKey, keyIndex, viewingEpoch)
+
+    The sender's wallet locks the note to your userCommitment and encrypts it
+    to your viewingPublicKey. One call, straight from the chain, no backend.
+
+    An address that never registered answers (0, empty, 0, 0). It never
+    reverts, so "not registered" cannot be confused with "the node did not
+    answer". The wallet must then refuse to send privately; it never falls
+    back to a public send on its own.
+
+    Only the sender's wallet reads the registry. deposit / transfer / withdraw
+    never look at it: spending is proven by the proof alone.
+
+
+5. Changing keys later
+
+    updateViewingKey(ivkPub_{e+1})        new viewing key, SAME identity
+
+        - viewingEpoch goes up by one
+        - senders encrypt to the new key from now on
+        - notes received before stay readable with the old epoch's key
+        - use it to give someone a key that covers one period only
+          (viewing_keys.txt), or after a viewing key leaked
+
+    rotateKeys(newUserCommitment, ivkPub)  new identity (key index + 1)
+
+        - for when the signature itself leaked: the funds are at risk
+        - the wallet signs the message with "Key index: 1" and derives a
+          brand-new set of keys from that
+        - senders resolve the new identity immediately
+        - notes locked to the old userCommitment can still only be spent with
+          the old keys, so the wallet sweeps them to the new identity at once
+
+    Both must be called from the registered wallet itself (msg.sender), so
+    someone who stole the signature cannot rotate your keys.
+
+
+6. Login check (website)
+
+    On every login the website re-derives userCommitment and compares it with
+    registrationOf(address). If they differ (wrong key index, a wallet that
+    signs differently) it stops. It never creates a new identity silently.

@@ -1,148 +1,83 @@
-WithdrawProof Notes
+Withdraw Proof (v1-mainnet)
+
+    circuits/withdraw_proof.circom   -> Withdraw(4 inputs, 2 outputs, depth 20)
+    circuits/spend_core.circom       -> SpendCore, shared with transfer
+
+    ~26.3k constraints (compiled with --O2)
 
 Purpose
-- Consumes private input notes owned by a user.
-- Withdraws ETH to a public Ethereum address.
-- Optionally creates:
-  - change note
-  - relayer fee note
-- Prevents double spending using nullifiers.
+- Spends up to 4 private notes of ONE token.
+- Releases a public amount of that token out of the pool.
+- Creates 2 private notes of the same token:
+    - change (back to the sender)
+    - relayer fee
+- Prevents double spending with nullifiers.
+
+Ownership, input notes, nullifiers, output notes and the 128-bit range
+checks are exactly the transfer circuit's (same SpendCore template):
+see zk_proof_transfer.txt. Only the differences are listed here.
 
 
-Ownership Check
-- Inputs:
-  - pk
-  - sk
-- Verifies:
-  - pk == Poseidon(3, sk)
-- Ensures prover owns the notes.
+Public Inputs (11) — order matches NoidPool._withdrawSignals
+
+    0      root
+    1-4    nullifiers[4]
+    5-6    outCommitments[2]     change, relayer fee
+    7      relayer               the relayer's user commitment
+    8      publicToken           uint160(token address) — the token leaving
+    9      publicAmount          the amount leaving
+    10     extDataHash           hash of recipient, unwrapNative, encrypted
+                                 outputs, outgoing record, chain id, pool
 
 
-Input Notes Validation
+Token
+- The contract must know what to send, so the token is public here.
+- The circuit uses publicToken AS the token of every input and output:
 
-For each input note:
+        token = publicToken
 
-1. Enabled Flag
-- enabled[i] must be:
-  - 0
-  - or 1
-- Allows unused dummy slots.
-
-2. Input Amount Summation
-- Computes total input amount.
-- Uses:
-  - x[i] = enabled[i] * a_ins[i]
-- Disabled notes contribute 0.
-
-3. Commitment Verification
-Recomputes commitment:
-- Poseidon(1, amount, randomness, pk)
-
-Checks:
-- recomputed commitment == provided commitment.
-
-4. Merkle Inclusion Proof
-- Verifies commitment exists in Merkle tree.
-- Uses:
-  - pathElements
-  - pathIndices
-- Recomputes root using MerklePath.
-
-5. Path Index Boolean Constraint
-Checks:
-- pathIndices[j] is either:
-  - 0
-  - or 1
-
-6. Root Validation
-Checks:
-- computed Merkle root == provided root.
-
-7. Nullifier Verification
-Recomputes nullifier:
-- Poseidon(2, commitment, randomness, sk)
-
-Checks:
-- recomputed nullifier == provided nullifier.
+  so a proof can only release the token its notes actually hold.
 
 
-Output Validation
-
-1. Withdraw Amount
-- Public ETH amount being withdrawn.
-
-2. Output Notes
-Supports up to:
-- 2 output notes
-  - change note
-  - relayer fee note
-
-3. Output Enabled Flags
-- out_enabled[i] must be:
-  - 0
-  - or 1
-
-4. Receiver Binding
-- receivers[0] == receiver
-- receivers[1] == relayer
-
-Ensures:
-- correct withdrawal recipient
-- correct relayer fee owner
-
-5. Output Commitment Verification
-Recomputes output commitments:
-- Poseidon(1, amount, randomness, receiver)
-
-Checks:
-- recomputed commitment == provided commitment.
-
-6. Output Amount Summation
-Computes:
-- total output amount
-
-Disabled outputs contribute:
-- 0
+Amount
+- RangeCheck(128)(publicAmount)
 
 
 Conservation Constraint
-Final constraint:
-- sum(inputs) == withdrawAmount + sum(outputs)
+
+        sum(inAmounts) === sum(outAmounts) + publicAmount
 
 Ensures:
-- no money created
-- no money destroyed
+- the value released plus the change and fee equals the value spent
+- nothing created, nothing destroyed
 
 
-Public Inputs
-- receiver
-- relayer
-- enabled[]
-- roots[]
-- nullifiers[]
-- withdrawAmount
-- out_enabled[]
-- c_outs[]
+Recipient
+- Not a circuit signal. It is part of the withdraw ext data, and the
+  contract recomputes extDataHash from the ext data it receives:
 
-These are visible on-chain.
+        extDataHash = keccak(chainId, pool, "menoid.v1m.withdraw",
+                             recipient, unwrapNative, encryptedOutputs,
+                             outgoingRecord) mod p
 
+- A relayer that changes the recipient changes the hash, and the proof
+  fails. The same holds for unwrapNative and the ciphertexts.
 
-Private Inputs
-- secret key
-- amounts
-- randomness
-- Merkle paths
-- receivers
-- private commitments
+        extDataSquare <== extDataHash * extDataHash
+        (keeps the hash inside a constraint)
 
 
-Domain Separators
+Relayer Binding
+- outOwners[1] === relayer        the fee note belongs to the relayer
 
-Ownership Hash
-- 3
 
-Commitment Hash
-- 1
+What the contract adds
+- 0 < amount <= 2^128 - 1, token and recipient non-zero
+- unwrapNative only for the wrapped native token
+- root among the last 100, nullifiers unspent and pairwise different
+- funds sent only after every state change (non-reentrant)
 
-Nullifier Hash
-- 2
+
+Swaps (next step) will reuse this circuit unchanged: "an amount of a token
+leaves the private balance" is the same statement; only where the value goes
+(an address vs. a swap adapter) differs, and that goes in the ext data.

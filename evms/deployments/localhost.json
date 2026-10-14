@@ -1,18 +1,21 @@
 {
     "network": "localhost",
-    "poseidonT3": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    "poseidonHasher": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-    "depositVerifier": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-    "transferVerifier": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-    "withdrawVerifier": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-    "noidPool": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+    "chainId": 31337,
+    "version": "v1-mainnet",
+    "noidPool": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+    "deployBlock": 7,
+    "transferVerifier": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+    "withdrawVerifier": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+    "poseidonT3": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "poseidonT5": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+    "wrappedNative": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+    "tokens": {
+        "USDC": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+    },
+    "owner": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     "relayer": {
         "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-        "userCommitment": {
-            "decimal": "6958545565294378797100137630236392165487199036818479801324695981481910662456",
-            "bytes32": "0x0f6265b01b358d6809485209b18a2c4dbef4e2f9113779715dddf7da63b8f538"
-        },
-        "encryptionPublicKey": "0x0468a73436e59a1e898fa7daa17c390ed54fa0176defff465e37556b8c21ecf1a06a1c324bd664fbfd095a9011d83e9f360d754d02312e03a8e152a58b06a8b0ec"
-    },
-    "deployBlock": 6
+        "userCommitment": "0x023bef81a7ba578908482ce414f5df4eb9104c7eb88ba14a697a8ca0fb248e5e",
+        "viewingPublicKey": "0x04f81fdbf115591595f71ebb4fbce01719cab0ded72ffe5aa88aade33f52210948394d2763ce88ffa6bd3870d5e7ecb2898da95442674edeb6cb8d200d9ecc3474"
+    }
 }

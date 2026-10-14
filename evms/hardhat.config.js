@@ -16,6 +16,10 @@ module.exports = {
     }
     },
 
+    // every transfer/withdraw test generates a Groth16 proof
+    mocha: {
+        timeout: 600000
+    },
 
     networks: {
         localhost: {
@@ -26,7 +30,7 @@ module.exports = {
             url: "https://testnet-rpc.monad.xyz",
             accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
         },
-        
+
         sepolia: {
             url: process.env.SEPOLIA_RPC_URL,
             accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []

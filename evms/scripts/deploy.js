@@ -1,288 +1,79 @@
+/**
+ * Menoid v1-mainnet deployment.
+ *
+ *   npx hardhat node                                         (another shell)
+ *   npx hardhat run scripts/deploy.js --network localhost
+ *
+ * On a local network this also deploys mock tokens (wrapped native + USDC).
+ * On a live network set WRAPPED_NATIVE (WMON / WETH / WPOL address); accepted
+ * tokens are then configured separately with configureToken.
+ *
+ * signers[0] deploys, owns the pool (move ownership to a multisig on a live
+ * network), and is registered as the relayer identity.
+ *
+ * Writes deployments/<network>.json.
+ */
 const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-const {
-    deriveWallet
-} = require("../helpers/wallets");
+const { deployLocalSystem, deployNoidPool } = require("../helpers/deploy");
+const { deriveWallet, registerWallet } = require("../helpers/wallets");
+
+const LOCAL_NETWORKS = new Set(["hardhat", "localhost"]);
 
 async function main() {
-
-    const signers =
-        await hre.ethers.getSigners();
-
-    // relayer signer
-    const relayerSigner = signers[0];
-
-    console.log(
-        "Deploying with:",
-        relayerSigner.address
-    );
-
-
-
-    // derive relayer noid keys (spending keypair + user commitment)
-    const relayerWallet =
-        await deriveWallet(relayerSigner);
-
-    console.log("\n========== RELAYER ==========");
-    console.log({
-        address: relayerWallet.address,
-        spendPublicKey: relayerWallet.spend.publicKey,
-        userCommitment: relayerWallet.userCommitment
-    });
-
-
-
-
-    // =========================
-    // Poseidon Library
-    // =========================
-
-    const PoseidonT3 =
-        await hre.ethers.getContractFactory(
-            "PoseidonT3"
-        );
-
-    const poseidonLib =
-        await PoseidonT3.deploy();
-
-    await poseidonLib.deployed();
-
-    console.log(
-        "PoseidonT3 Library:",
-        poseidonLib.address
-    );
-
-
-
-
-    // =========================
-    // Poseidon Wrapper
-    // =========================
-
-    const PoseidonHasher =
-        await hre.ethers.getContractFactory(
-            "PoseidonHasher",
-            {
-                libraries: {
-                    PoseidonT3:
-                        poseidonLib.address
-                }
-            }
-        );
-
-    const poseidon =
-        await PoseidonHasher.deploy();
-
-    await poseidon.deployed();
-
-    console.log(
-        "PoseidonHasher:",
-        poseidon.address
-    );
-
-
-
-
-    // =========================
-    // Deposit Verifier
-    // =========================
-
-    const DepositVerifier =
-        await hre.ethers.getContractFactory(
-            "DepositVerifier"
-        );
-
-    const depositVerifier =
-        await DepositVerifier.deploy();
-
-    await depositVerifier.deployed();
-
-    console.log(
-        "DepositVerifier:",
-        depositVerifier.address
-    );
-
-
-
-
-    // =========================
-    // Transfer Verifier
-    // =========================
-
-    const TransferVerifier =
-        await hre.ethers.getContractFactory(
-            "TransferVerifier"
-        );
-
-    const transferVerifier =
-        await TransferVerifier.deploy();
-
-    await transferVerifier.deployed();
-
-    console.log(
-        "TransferVerifier:",
-        transferVerifier.address
-    );
-
-
-
-
-    // =========================
-    // Withdraw Verifier
-    // =========================
-
-    const WithdrawVerifier =
-        await hre.ethers.getContractFactory(
-            "WithdrawVerifier"
-        );
-
-    const withdrawVerifier =
-        await WithdrawVerifier.deploy();
-
-    await withdrawVerifier.deployed();
-
-    console.log(
-        "WithdrawVerifier:",
-        withdrawVerifier.address
-    );
-
-
-
-
-    // =========================
-    // Noid Pool
-    // =========================
-
-    const NoidPool =
-        await hre.ethers.getContractFactory(
-            "NoidPool"
-        );
-
-    const noidPool =
-        await NoidPool.deploy(
-
-            depositVerifier.address,
-
-            transferVerifier.address,
-
-            withdrawVerifier.address,
-
-            poseidon.address,
-
-            // relayer eth address
-            relayerSigner.address,
-
-            // relayer user commitment
-            relayerWallet.userCommitment.decimal
-        );
-
-    await noidPool.deployed();
-
-    // The block the pool landed in. The backend indexer and the wallet's note
-    // scan both start from here — starting at genesis on Sepolia is minutes of
-    // pointless eth_getLogs paging.
-    const deployReceipt =
-        await noidPool
-            .deployTransaction
-            .wait();
-
-    console.log(
-        "NoidPool:",
-        noidPool.address,
-        "(block",
-        deployReceipt.blockNumber + ")"
-    );
-
-
-
-
-    // =========================
-    // Register Relayer
-    // =========================
-
-    const registerTx =
-        await noidPool
-            .connect(relayerSigner)
-            .register(
-                relayerWallet.userCommitment.bytes32,
-                relayerWallet.encryption.publicKey
-            );
-
-    await registerTx.wait();
-
-    console.log(
-        "Relayer registered:",
-        relayerWallet.userCommitment.bytes32
-    );
-
-
-
-
-    // =========================
-    // Save Deployment Addresses
-    // =========================
-
-    const deployments = {
-
-        network: hre.network.name,
-
-        poseidonT3: poseidonLib.address,
-
-        poseidonHasher: poseidon.address,
-
-        depositVerifier: depositVerifier.address,
-
-        transferVerifier: transferVerifier.address,
-
-        withdrawVerifier: withdrawVerifier.address,
-
-        noidPool: noidPool.address,
-
-        relayer: {
-            address: relayerSigner.address,
-            userCommitment: relayerWallet.userCommitment,
-            encryptionPublicKey: relayerWallet.encryption.publicKey
-        },
-
-        // The block the pool was deployed in — the backend indexer and the
-        // wallet's note scan both start here instead of at genesis.
-        deployBlock: deployReceipt.blockNumber
-    };
-
-    const deploymentsDir =
-        path.join(__dirname, "..", "deployments");
-
-    if (!fs.existsSync(deploymentsDir)) {
-        fs.mkdirSync(deploymentsDir);
+    const { ethers, network } = hre;
+    const [deployer] = await ethers.getSigners();
+    const log = (line) => console.log("  " + line);
+
+    console.log(`Deploying Menoid v1-mainnet to ${network.name} with ${deployer.address}\n`);
+
+    let system;
+    if (LOCAL_NETWORKS.has(network.name)) {
+        system = await deployLocalSystem(hre, { log });
+    } else {
+        const wrappedNative = process.env.WRAPPED_NATIVE;
+        if (!wrappedNative) throw new Error("set WRAPPED_NATIVE to the chain's wrapped native token address");
+        system = await deployNoidPool(hre, { wrappedNative, log });
     }
 
-    const deploymentsFile =
-        path.join(
-            deploymentsDir,
-            `${hre.network.name}.json`
-        );
+    // the relayer's identity: fee notes are locked to its user commitment
+    const relayer = await deriveWallet(deployer);
+    await registerWallet(system.pool, relayer);
+    log(`relayer registered (user commitment ${relayer.userCommitmentBytes32})`);
 
-    fs.writeFileSync(
-        deploymentsFile,
-        JSON.stringify(deployments, null, 4)
-    );
+    const record = {
+        network: network.name,
+        chainId: (await ethers.provider.getNetwork()).chainId,
+        version: "v1-mainnet",
+        noidPool: system.pool.address,
+        deployBlock: system.deployBlock,
+        transferVerifier: system.transferVerifier.address,
+        withdrawVerifier: system.withdrawVerifier.address,
+        poseidonT3: system.poseidonT3.address,
+        poseidonT5: system.poseidonT5.address,
+        wrappedNative: system.wrappedNative ? system.wrappedNative.address : process.env.WRAPPED_NATIVE,
+        tokens: system.usdc ? { USDC: system.usdc.address } : {},
+        owner: deployer.address,
+        relayer: {
+            address: relayer.address,
+            userCommitment: relayer.userCommitmentBytes32,
+            viewingPublicKey: relayer.viewing.ivkPub
+        }
+    };
 
-    console.log(
-        "\nDeployment addresses written to:",
-        deploymentsFile
-    );
+    const dir = path.join(__dirname, "..", "deployments");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${network.name}.json`);
+    fs.writeFileSync(file, JSON.stringify(record, null, 4) + "\n");
 
-    console.log("\n========== DEPLOYMENT DONE ==========");
+    console.log(`\nwritten ${path.relative(process.cwd(), file)}`);
 }
-
 
 main()
     .then(() => process.exit(0))
     .catch((error) => {
-
         console.error(error);
-
         process.exit(1);
     });

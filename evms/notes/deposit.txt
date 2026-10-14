@@ -1,56 +1,79 @@
-Deposit Flow
-    Off-Chain:
+Deposit Flow (v1-mainnet)
 
-        User signs a fixed message using their wallet
-        Wallet derives:
-            PrivateKey = H(signature("noirit.wallet"))
-            zkPublicKey = Poseidon(3, PrivateKey)
-            Note: 3 <-- domain seperator
-            encPublicKey = EC_Derive(PrivateKey)
+    Public funds go in, one private note comes out.
+    The user sends this transaction from their own wallet (no relayer):
+    depositing is public anyway, the funds visibly move.
 
-        User selects:
-            Deposit amount "a"
-            Relayer/protocol fee "fee"
+    Code: helpers/transactions.js buildDeposit     Contract: NoidPool.deposit / depositNative
 
-        Wallet creates 2 private notes:
-            User note:
-                (a - fee, r1, zkPublicKey)
-                > r1 is a fresh randomness
-            Relayer fee note:
-                (fee, r2, relayerZkPubKey) 
-                > r2 is a fresh randomness
-        Wallet computes commitments:
-            C1 = H(1,a - fee, r1, zkPublicKey)
-            C2 = H(1,fee, r2, relayerZkPubKey)
 
-        Wallet encrypts note data:
-            ciphertext1 = Encrypt(encPublicKey, (a - fee, r1))
-            ciphertext2 = Encrypt(relayerEncPubKey, (fee, r2))
-        
-        Wallet generates a zk proof proving:
-            (a - fee) + fee = deposited ETH amount
+    Off-Chain (wallet):
 
-        without revealing:
-            note amounts
-            randomness
-            ownership information
+        Pick the token and amount, e.g. 100 USDC.
+
+        Look up who the note is for (usually yourself, can be anyone):
+            registrationOf(address) -> userCommitment (uc), viewingPublicKey
+
+        Pick fresh randomness:
+            r = 31 random bytes
+
+        Hide the owner:
+            npk = Poseidon(3, uc, r)
+            > npk is a "note public key": it belongs to uc, but because r is
+              random nobody can tell whose it is
+
+        Encrypt the note to its owner:
+            encryptedNote = Encrypt(viewingPublicKey, (token, 100 USDC, r))
+
+        Approve the pool for the token (ERC-20 only).
 
 
     On-Chain:
-        Transaction sent to shielded pool contract
-        ETH value a is transferred into the pool
 
-        Contract verifies:
-            zk proof validity
-            commitment correctness
-            deposit amount consistency
+        ERC-20:      deposit(token, amount, npk, encryptedNote)
+        Native coin: depositNative(npk, encryptedNote)  + the coin as msg.value
 
-        Contract inserts:
-            C1
-            C2
-        into the incremental Merkle tree
+        Contract checks:
+            deposits not paused
+            token is accepted (owner's whitelist)
+            amount > 0 and amount <= the token's per-deposit cap
+            npk is not zero and below the field
 
-        Contract emits encrypted note events:
-            encryptedNote1
-            encryptedNote2
-        User and relayer wallets scan emitted events to recover their notes.
+        Contract takes the funds:
+            ERC-20: transferFrom the user, and checks the pool's balance went up
+                    by EXACTLY amount (fee-on-transfer tokens are refused)
+            native: wraps it (MON -> WMON); the note's token is the wrapped
+                    token, so a MON deposit and a WMON deposit are the same asset
+
+        Contract builds the note commitment itself:
+            commitment = Poseidon(4, token, amount, npk)
+
+        No ZK proof is needed: token and amount are what the contract just
+        received, and npk hides the owner. (zk_proof_deposit.txt explains why.)
+
+        Contract inserts the note into the Merkle tree as one 4-leaf chunk:
+            [commitment, 0, 0, 0]
+
+        Contract emits:
+            NoteCreated(treeId, leafIndex, commitment, encryptedNote)
+            Deposited(depositor, token, amount, commitment)
+
+
+    Afterwards (owner's wallet):
+
+        Scans NoteCreated events, decrypts encryptedNote with its ivk,
+        rebuilds Poseidon(4, token, amount, Poseidon(3, uc, r)) and checks it
+        equals the event's commitment. Match -> the note is theirs.
+
+
+    What is public:   the depositor's address, token, amount, commitment, npk
+    What is hidden:   who owns the note (npk is unlinkable to uc), and
+                      everything that happens to it afterwards
+
+
+    Changed from V1 demo:
+        - any whitelisted ERC-20 or the native coin, not only the native coin
+        - the token is inside the commitment
+        - no deposit circuit and no proof (cheaper, faster, one less ceremony)
+        - no relayer fee note on deposit (the user pays their own gas)
+        - one note per deposit
