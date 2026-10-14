@@ -1,0 +1,76 @@
+{
+    "network": "monadTestnet",
+    "chainId": 10143,
+    "version": "v1-mainnet",
+    "noidPool": "0xa63D29F39BF7A0BcB8E761C1897995ecBAFe496A",
+    "noidPoolImplementation": "0xAd4124aa107Aac3d3FF252E7d41B384970c5c855",
+    "noidPoolVersion": "1.0.0",
+    "proxyKind": "uups (ERC-1967)",
+    "deployBlock": 70943938,
+    "transferVerifier": "0x6e8E57Cf41f5051Da3B4C72c2F95b057BFFc2aBd",
+    "withdrawVerifier": "0xDE15E900Ff8b59dD56f907c351689DECe3dECE4e",
+    "poseidonT3": "0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93",
+    "poseidonT5": "0x555333f3f677Ca3930Bf7c56ffc75144c51D9767",
+    "wrappedNative": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+    "tokens": {
+        "WMON": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+        "mUSDC": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+        "mTKN": "0x0D62F4fb9B6636B2509341F0b611883b7Db9Da29"
+    },
+    "uniswapV3": {
+        "factory": "0xdcD3da4C1f3bC88c2aE998FD374f737F1167c7f3",
+        "quoterV2": "0xA964C148713A779701684876507B79CA5b6D07d0",
+        "positionManager": "0x7F9F3189B6be1023391Dd25e27078E48f1921f6E",
+        "pools": {
+            "WMON/mUSDC 0.30%": {
+                "address": "0x655b7D444296C0a5631dae4dbaBB6F9FB6C2A484",
+                "fee": 3000,
+                "token0": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+                "token1": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+                "seeded": {
+                    "WMON": "8000000000000000000",
+                    "mUSDC": "80000000"
+                },
+                "sqrtPriceX96": "25054144837504793118641380156960632",
+                "tick": 253297,
+                "liquidity": "25298221281347"
+            },
+            "WMON/mUSDC 0.05%": {
+                "address": "0xE7D3a8D6B4Cb380cC7Ed3Ac0c1A935A23BCEFb62",
+                "fee": 500,
+                "token0": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+                "token1": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+                "seeded": {
+                    "WMON": "4000000000000000000",
+                    "mUSDC": "40000000"
+                },
+                "sqrtPriceX96": "25054144837504793118641380156960632",
+                "tick": 253297,
+                "liquidity": "12649110640673"
+            },
+            "mUSDC/mTKN 0.05%": {
+                "address": "0xC81baFF68f264EBC547488C0f78d4689B1a9db86",
+                "fee": 500,
+                "token0": "0x0D62F4fb9B6636B2509341F0b611883b7Db9Da29",
+                "token1": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+                "seeded": {
+                    "mUSDC": "1000000000",
+                    "mTKN": "1000000000000000000000"
+                },
+                "sqrtPriceX96": "79228162514264337593543",
+                "tick": -276325,
+                "liquidity": "999999999999999"
+            }
+        },
+        "deployedBy": "scripts/testnet/deploy-uniswap.js",
+        "swapRouter02": "0x40B3d08778313619b2671Dd79788B7616e257Ede",
+        "adapter": "0x817F8a1A6eB70943f4577a0Bcd335Bc2CD582edC"
+    },
+    "owner": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+    "relayer": {
+        "address": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+        "keyNetwork": "testnet",
+        "userCommitment": "0x0fb072defe970a5eb0361cc5ce0a622eeaca8d983e3ee59571dcc3bdbd62899b",
+        "viewingPublicKey": "0x04fb53f574cb7320b10cb682cc28240a8242495d5b1a47fd1b24a3e86494ab1b7260ce5e69d9669cfe90d562a27c91b6b20925403506bddaccb4d4639178a3bc94"
+    }
+}

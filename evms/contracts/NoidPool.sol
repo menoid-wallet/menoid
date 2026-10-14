@@ -192,8 +192,9 @@ contract NoidPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeab
     /**
      * One-time binding of msg.sender to its private identity.
      *
-     * Off-chain, the wallet signs the key message, derives the spending key,
-     * nullifier key and viewing keys from that signature, and computes
+     * Off-chain, the wallet signs the key message for its network (mainnet and
+     * testnet keys are unrelated), derives the spending key, nullifier key and
+     * viewing keys from that signature, and computes
      *      userCommitment = Poseidon(D_UC, address, spendPk.x, spendPk.y)
      * Senders resolve both values with registrationOf(address).
      */

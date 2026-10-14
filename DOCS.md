@@ -161,6 +161,12 @@ Registration is the one-time step that gives an Open Mode wallet a Noid Mode ide
 
 ## How the derivation works
 
+> This is the **V1 demo** scheme (extension and Android app, on testnets). **v1-mainnet**
+> derives its keys differently: a new key message and seed, and separate keys for mainnet
+> and testnet, so neither a `menoid_Wallet` signature nor a v1-mainnet testnet signature is
+> worth anything on mainnet. See the README's *How it works* and
+> `evms/notes/keys_and_registration.txt`.
+
 ```
                      sign("menoid_Wallet")
    Regular Wallet  ─────────────────────────►  signature  (the seed)
@@ -881,6 +887,9 @@ The practical consequence is that the anonymity set is the pool itself. Privacy 
 # Appendix B — Formula Reference
 
 Every formula below is identical across **EVM, Solana, Aptos, and Sui**. This is what makes one identity work on every chain — and it is why any new chain port must reuse these exact definitions and domain separators, or its proofs will not verify.
+
+> These are the **V1 demo** formulas. v1-mainnet's differ, including separate mainnet and
+> testnet keys: see the README's *How it works* and `evms/notes/`.
 
 ```
 signature        = sign("menoid_Wallet")

@@ -14,6 +14,12 @@
  * UNISWAP_V3_ROUTER). Accepted tokens are configured afterwards with
  * configureToken.
  *
+ * Testnet without an official Uniswap (Monad testnet): run
+ * scripts/testnet/deploy-uniswap.js first. Its deployments/<network>-uniswap.json
+ * provides the router, the wrapped native token and the test tokens, which are
+ * accepted right away. A live testnet deployment also writes the relayer's
+ * testnet keys into the RELAYER WALLET comment block of .env.
+ *
  * The pool is deployed behind a UUPS proxy (ERC-1967): `noidPool` in the record
  * is the proxy, the permanent address. Upgrade later with scripts/upgrade.js.
  *
@@ -28,10 +34,20 @@ const fs = require("fs");
 const path = require("path");
 
 const { deployLocalSystem, deployNoidPool, deployUniswapV3Adapter } = require("../helpers/deploy");
-const { deriveWallet, registerWallet } = require("../helpers/wallets");
+const { deriveWallet, registerWallet, keyNetworkForChainId, MAINNET_CHAIN_IDS } = require("../helpers/wallets");
 const { UNISWAP_V3 } = require("../helpers/uniswap");
+const { writeRelayerEnvBlock } = require("../helpers/relayer-env");
 
 const LOCAL_NETWORKS = new Set(["hardhat", "localhost"]);
+
+// the Uniswap V3 that scripts/testnet/deploy-uniswap.js put on a testnet
+function readTestnetVenue(networkName, chainId) {
+    const file = path.join(__dirname, "..", "deployments", `${networkName}-uniswap.json`);
+    if (MAINNET_CHAIN_IDS.has(chainId) || !fs.existsSync(file)) return null;
+    const venue = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (venue.chainId !== chainId) throw new Error(`${path.basename(file)} is for chain ${venue.chainId}, not ${chainId}`);
+    return venue;
+}
 
 async function main() {
     const { ethers, network } = hre;
@@ -43,6 +59,7 @@ async function main() {
 
     let system;
     let swapVenue;
+    const tokens = {};
     if (LOCAL_NETWORKS.has(network.name)) {
         system = await deployLocalSystem(hre, { log, uniswap: true });
         swapVenue = {
@@ -52,30 +69,59 @@ async function main() {
             adapter: system.uniswap.adapter.address,
             pools: system.uniswap.pools
         };
+        if (system.usdc) tokens.USDC = system.usdc.address;
+        if (system.tkn) tokens.TKN = system.tkn.address;
     } else {
         // only trust a known deployment if the chain id really matches it
         const known = Object.values(UNISWAP_V3).find((d) => d.chainId === chainId);
-        const wrappedNative = process.env.WRAPPED_NATIVE || (known && known.wrappedNative);
+        const testnetVenue = known ? null : readTestnetVenue(network.name, chainId);
+        const wrappedNative =
+            process.env.WRAPPED_NATIVE || (known && known.wrappedNative) || (testnetVenue && testnetVenue.wrappedNative);
         if (!wrappedNative) throw new Error("unknown chain: set WRAPPED_NATIVE to its wrapped native token address");
         system = await deployNoidPool(hre, { wrappedNative, log });
 
-        const router = process.env.UNISWAP_V3_ROUTER || (known && known.swapRouter02);
+        const router =
+            process.env.UNISWAP_V3_ROUTER || (known && known.swapRouter02) || (testnetVenue && testnetVenue.swapRouter02);
         if (router) {
             const adapter = await deployUniswapV3Adapter(hre, { pool: system.pool, router, log });
-            swapVenue = { ...(known || {}), swapRouter02: router, adapter: adapter.address };
+            const venue = known || (testnetVenue && {
+                factory: testnetVenue.factory,
+                quoterV2: testnetVenue.quoterV2,
+                positionManager: testnetVenue.positionManager,
+                pools: testnetVenue.pools,
+                deployedBy: "scripts/testnet/deploy-uniswap.js"
+            });
+            swapVenue = { ...(venue || {}), swapRouter02: router, adapter: adapter.address };
         } else {
             log("no Uniswap V3 router for this chain: swaps stay disabled until an adapter is added");
         }
+
+        // a testnet's tokens are accepted right away; on mainnet the owner
+        // (a multisig) configures each token deliberately
+        if (testnetVenue) {
+            const erc20 = ["function decimals() view returns (uint8)"];
+            for (const [symbol, address] of Object.entries(testnetVenue.tokens)) {
+                const decimals = await new ethers.Contract(address, erc20, ethers.provider).decimals();
+                const cap = ethers.utils.parseUnits("1000000", decimals);
+                await (await system.pool.configureToken(address, true, cap)).wait();
+                tokens[symbol] = address;
+                log(`accepted ${symbol.padEnd(6)} ${address}  (max deposit 1,000,000)`);
+            }
+        }
     }
 
-    // the relayer's identity: fee notes are locked to its user commitment
-    const relayer = await deriveWallet(deployer);
+    // the relayer's identity: fee notes are locked to its user commitment.
+    // Mainnet chains get mainnet keys; testnets and local nodes get testnet keys.
+    const keyNetwork = keyNetworkForChainId(chainId);
+    const relayer = await deriveWallet(deployer, { network: keyNetwork });
     await registerWallet(system.pool, relayer);
     log(`relayer registered (user commitment ${relayer.userCommitmentBytes32})`);
 
-    const tokens = {};
-    if (system.usdc) tokens.USDC = system.usdc.address;
-    if (system.tkn) tokens.TKN = system.tkn.address;
+    // live testnets: the relayer's testnet keys go into .env (git-ignored)
+    if (!LOCAL_NETWORKS.has(network.name) && keyNetwork === "testnet") {
+        writeRelayerEnvBlock(path.join(__dirname, "..", ".env"), relayer, { networkLabel: `${network.name} (chain ${chainId})` });
+        log("relayer keys written to the RELAYER WALLET block in .env");
+    }
 
     const record = {
         network: network.name,
@@ -96,6 +142,7 @@ async function main() {
         owner: deployer.address,
         relayer: {
             address: relayer.address,
+            keyNetwork,
             userCommitment: relayer.userCommitmentBytes32,
             viewingPublicKey: relayer.viewing.ivkPub
         }

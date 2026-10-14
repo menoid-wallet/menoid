@@ -17,7 +17,7 @@
 | Modes | Open + Noid | Noid only — user connects an existing wallet (MetaMask, Rabby, WalletConnect…) |
 | Assets | Native coin only | Native + whitelisted ERC-20s in **one** pool |
 | Backend | current relayer (Render + Mongo) | **separate** relayer/indexer service + separate DB |
-| Keys | `sign("menoid_Wallet")` | new message + new domain separators (§3.1) |
+| Keys | `sign("menoid_Wallet")` | new message + new domain separators; separate mainnet and testnet keys (§3.1) |
 
 Isolation rules:
 
@@ -26,6 +26,9 @@ Isolation rules:
 - Mainnet key derivation uses its own domain (`menoid/v1m/...`), so the same wallet derives
   **different** keys on mainnet than on testnet. Testers have signed `menoid_Wallet` on many
   testnet builds; that signature must never be worth anything on mainnet.
+- v1-mainnet's own testnet is kept apart from its mainnet the same way: the key message names
+  the network and the network is mixed into the seed (§3.1), so a v1-mainnet testnet signature
+  or key is worth nothing on mainnet either.
 - Because nothing is migrated, the note format, circuits and contracts below are free to
   break compatibility with the demo.
 
@@ -99,22 +102,41 @@ ECIES over secp256k1 as today, with a compressed ephemeral key. Ciphertext drops
 All keys come from one wallet signature, computed in the browser and never sent anywhere.
 
 ```
-msg  = "Menoid v1-mainnet — create my private account keys.\n"
-       "Only sign this on https://app.menoid.xyz.\n"
+msg  = "Menoid: create my private account keys.\n"
+       "\n"
+       "Only sign this on {origin}\n"            https://app.menoid.xyz | https://testnet.menoid.xyz
        "Anyone holding this signature can spend your private balance.\n"
+       "\n"
+       "Network: {network}\n"                    mainnet | testnet
        "Key index: {k}"
-sig  = personal_sign(msg)                        same message on every chain → one identity everywhere
+sig  = personal_sign(msg)                        no chain id → one identity per network, on every chain
 
-seed = keccak256("menoid/v1m/seed" ‖ sig)        master secret — never stored, never transmitted
-sk   = keccak256("menoid/v1m/spend" ‖ seed) mod l   spending key (BabyJubJub)
-nk   = Poseidon(D_NK, sk)                         nullifier key
-ivk  = keccak256("menoid/v1m/ivk" ‖ seed ‖ e)     incoming viewing key, epoch e (secp256k1 private key)
-ovk  = keccak256("menoid/v1m/ovk" ‖ seed ‖ e)     outgoing viewing key, epoch e (32-byte symmetric key)
-uc   = Poseidon(D_UC, address, sk·B8)            registered on-chain with ivkPub
+seed           = keccak256("menoid/v1m/seed" ‖ network ‖ sig)       master secret — never stored, never transmitted
+sk             = keccak256("menoid/v1m/spend" ‖ seed) mod l          spending key (BabyJubJub)
+nk             = Poseidon(D_NK, sk)                                  nullifier key
+incomingSecret = keccak256("menoid/v1m/incoming" ‖ seed)
+outgoingSecret = keccak256("menoid/v1m/outgoing" ‖ seed)
+ivk_e          = keccak256("menoid/v1m/ivk" ‖ incomingSecret ‖ e)    incoming viewing key, epoch e (secp256k1 private key)
+ovk_e          = keccak256("menoid/v1m/ovk" ‖ outgoingSecret ‖ e)    outgoing viewing key, epoch e (32-byte symmetric key)
+uc             = Poseidon(D_UC, address, sk·B8)                     registered on-chain with ivkPub
 ```
 
 `k` (key index) changes only when a spending key is compromised (§3.5). `e` (viewing epoch)
 changes whenever the user rotates viewing keys (§3.4). Both start at 0.
+
+**Mainnet and testnet keys are separate.** `network` is `mainnet` on Monad, Base, Polygon and
+Arbitrum, and `testnet` on every testnet and local chain (`keyNetworkForChainId` in
+`evms/helpers/wallets.js`). It is used twice:
+
+- in the message, so the user sees which keys they are unlocking, and each site asks only for
+  its own network's message;
+- in the seed, so even a signature fed into the other network's code derives unrelated keys.
+
+So nothing signed, leaked or stored while testing (the relayer's testnet keys, test wallets,
+viewing keys shared during tests) can ever spend or reveal a mainnet note. The same address
+registers a different `uc` on testnet and on mainnet, and every exported viewing key names its
+network. There is no default network: code that does not name one refuses to derive keys,
+before the wallet is asked to sign.
 
 ### 3.2 What each key can do
 

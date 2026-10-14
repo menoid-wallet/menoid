@@ -8,18 +8,20 @@ Keys and Registration (v1-mainnet)
 
 1. The one signature
 
-    The real wallet signs this message once:
+    The real wallet signs this message once (per network, see below):
 
-        Menoid v1-mainnet: create my private account keys.
+        Menoid: create my private account keys.
 
         Only sign this on https://app.menoid.xyz
         Anyone holding this signature can spend your private balance.
 
+        Network: mainnet
         Key index: 0
 
     Why a long message instead of "menoid_Wallet":
         - the user can read what they are signing
         - it names the only site that should ask for it
+        - "Network" keeps mainnet and testnet keys apart (below)
         - "Key index" lets a user move to new keys later (section 5)
 
     The same wallet always produces the same signature for the same message
@@ -27,13 +29,41 @@ Keys and Registration (v1-mainnet)
     Smart-contract, passkey and some MPC wallets sign differently every time.
     The wallet asks for the signature twice and refuses if they differ.
 
-    The message has no chain id, so the same identity works on Monad, Base
+    The message has no chain id, so one mainnet identity works on Monad, Base
     and Polygon. Each chain still needs its own register() call.
+
+    Mainnet and testnet keys are separate
+
+        The testnet message differs in two lines:
+
+            Only sign this on https://testnet.menoid.xyz
+            Network: testnet
+
+        and the network is also mixed into the seed (section 2). So the same
+        wallet has two unrelated sets of keys:
+
+            mainnet keys   Monad 143, Base 8453, Polygon 137, Arbitrum 42161
+            testnet keys   every testnet and local chain (Monad testnet 10143,
+                           Base Sepolia, Hardhat 31337, ...)
+
+        helpers/wallets.js keyNetworkForChainId(chainId) picks one.
+
+        - Nothing signed, leaked or stored on a testnet (the relayer keys in
+          .env, test wallets, viewing keys shared while testing) can ever
+          spend or see a mainnet note.
+        - Even if testnet code is handed a MAINNET signature by mistake, the
+          seed it computes is different, so it still derives no mainnet key.
+        - The same address registers a different userCommitment on testnet
+          and on mainnet.
+        - Every exported viewing key names its network (viewing_keys.txt).
+        - There is no default: code that does not name the network refuses
+          to derive anything, before asking the wallet to sign.
 
 
 2. Everything derived from it
 
-    seed            = keccak("menoid/v1m/seed"     ‖ signature)        master secret, never stored, never sent
+    seed            = keccak("menoid/v1m/seed" ‖ network ‖ signature)  master secret, never stored, never sent
+                      network = "mainnet" or "testnet"
 
     sk              = keccak("menoid/v1m/spend"    ‖ seed) mod l        spending key (BabyJubJub)
     spendPk         = sk · Base8
@@ -62,9 +92,10 @@ Keys and Registration (v1-mainnet)
     protocol starts with its own number so two different hashes can never be
     confused (see zk_proof_transfer.txt for the full list).
 
-    The V1 demo used "menoid_Wallet" and other tags. Mainnet uses its own
-    "menoid/v1m/..." tags, so the same wallet gets completely different keys
-    on mainnet. A signature collected on a testnet build is worth nothing here.
+    The V1 demo used "menoid_Wallet" and other tags. v1-mainnet uses its own
+    message and "menoid/v1m/..." tags, so the same wallet gets completely
+    different keys. A signature collected on a demo build, or on the
+    v1-mainnet testnet, is worth nothing on mainnet.
 
 
 3. Register on-chain (once per chain)
@@ -116,8 +147,8 @@ Keys and Registration (v1-mainnet)
     rotateKeys(newUserCommitment, ivkPub)  new identity (key index + 1)
 
         - for when the signature itself leaked: the funds are at risk
-        - the wallet signs the message with "Key index: 1" and derives a
-          brand-new set of keys from that
+        - the wallet signs the message with "Key index: 1" (same network)
+          and derives a brand-new set of keys from that
         - senders resolve the new identity immediately
         - notes locked to the old userCommitment can still only be spent with
           the old keys, so the wallet sweeps them to the new identity at once
@@ -131,3 +162,7 @@ Keys and Registration (v1-mainnet)
     On every login the website re-derives userCommitment and compares it with
     registrationOf(address). If they differ (wrong key index, a wallet that
     signs differently) it stops. It never creates a new identity silently.
+
+    Each site asks only for its own network's message: app.menoid.xyz for
+    mainnet, testnet.menoid.xyz for testnet. A site connected to a chain of
+    the other network stops instead of signing.

@@ -26,7 +26,8 @@ const DOMAIN = {
     NULLIFIER: 5n
 };
 
-// keccak tags for key derivation (helpers/wallets.js)
+// keccak tags for key derivation (helpers/wallets.js). The seed also mixes in
+// the key network ("mainnet" / "testnet"), so each network has unrelated keys.
 const KEY_TAGS = {
     SEED: "menoid/v1m/seed",
     SPEND: "menoid/v1m/spend",

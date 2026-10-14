@@ -1,0 +1,150 @@
+Monad Testnet (v1-mainnet)
+
+    Menoid v1-mainnet runs on Monad testnet (chain 10143) for testing.
+    Mainnet uses none of it: another network name, other keys, Uniswap's own
+    deployment, a multisig owner and a real trusted-setup ceremony (section 5).
+
+    Records   deployments/monadTestnet.json            Menoid addresses
+              deployments/monadTestnet-uniswap.json    Uniswap V3, test tokens, pools
+              deployments/monadTestnet-e2e.json, .txt  the end-to-end run: every
+                                                       transaction, commitment, leaf,
+                                                       nullifier, route and check
+              .openzeppelin/unknown-10143.json         upgrade manifest (commit it)
+    Secrets   .env                                     PRIVATE_KEY + RELAYER WALLET block
+              testnet-wallets.monadTestnet.local.json  alice, bob, carol, dave
+              (both git-ignored)
+
+
+1. Addresses
+
+    NoidPool (proxy)          0xa63D29F39BF7A0BcB8E761C1897995ecBAFe496A   block 70,943,938
+      implementation 1.0.0    0xAd4124aa107Aac3d3FF252E7d41B384970c5c855
+    TransferVerifier          0x6e8E57Cf41f5051Da3B4C72c2F95b057BFFc2aBd   dev setup, one contributor
+    WithdrawVerifier          0xDE15E900Ff8b59dD56f907c351689DECe3dECE4e
+    PoseidonT3                0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93   canonical
+    PoseidonT5                0x555333f3f677Ca3930Bf7c56ffc75144c51D9767   canonical (CREATE2)
+    UniswapV3Adapter          0x817F8a1A6eB70943f4577a0Bcd335Bc2CD582edC
+    owner and relayer         0x983B81da8b49c5e4EA9DA94613a89C8af4527715   PRIVATE_KEY
+
+    Uniswap V3. Uniswap's own testnet addresses have had no code since the
+    testnet reset, so scripts/testnet/deploy-uniswap.js deployed Uniswap's
+    official bytecode from npm (same pool init code hash as Uniswap's):
+
+    UniswapV3Factory          0xdcD3da4C1f3bC88c2aE998FD374f737F1167c7f3
+    NonfungiblePositionMgr    0x7F9F3189B6be1023391Dd25e27078E48f1921f6E
+    SwapRouter02              0x40B3d08778313619b2671Dd79788B7616e257Ede
+    QuoterV2                  0xA964C148713A779701684876507B79CA5b6D07d0
+    WMON/mUSDC 0.30%          0x655b7D444296C0a5631dae4dbaBB6F9FB6C2A484   8 MON : 80 mUSDC
+    WMON/mUSDC 0.05%          0xE7D3a8D6B4Cb380cC7Ed3Ac0c1A935A23BCEFb62   4 MON : 40 mUSDC
+    mUSDC/mTKN 0.05%          0xC81baFF68f264EBC547488C0f78d4689B1a9db86   1,000 : 1,000
+
+    The liquidity (12 MON) belongs to the deployer's position NFTs and can be
+    withdrawn through the position manager.
+
+    Tokens the pool accepts
+    WMON                      0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541   canonical testnet WMON
+    mUSDC (6 decimals)        0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF   test token, anyone can mint()
+    mTKN (18 decimals)        0x0D62F4fb9B6636B2509341F0b611883b7Db9Da29   test token, anyone can mint()
+
+
+2. Running it again
+
+    npx hardhat run scripts/testnet/deploy-uniswap.js --network monadTestnet
+    npx hardhat run scripts/deploy.js --network monadTestnet
+    npx hardhat run scripts/testnet/e2e.js --network monadTestnet
+
+    deploy-uniswap.js and e2e.js skip what is already done, so a failure
+    halfway is fixed by running them again. deploy.js deploys a NEW pool
+    every time. To repeat the e2e on the same pool, move
+    monadTestnet-e2e.json away first (the wallets file is reused).
+
+    Rehearse on a local fork of Monad testnet first; nothing reaches the chain:
+
+    npx hardhat node --fork https://testnet-rpc.monad.xyz --port 8546
+    WRAPPED_NATIVE=0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541 \
+        npx hardhat run scripts/testnet/deploy-uniswap.js --network monadTestnetFork
+    npx hardhat run scripts/deploy.js --network monadTestnetFork
+    npx hardhat run scripts/testnet/e2e.js --network monadTestnetFork
+
+
+3. What the end-to-end run covered
+
+    alice, bob, carol registered (testnet keys); dave never did.
+
+    deposits      mUSDC and native MON, and bob depositing into carol's balance
+    transfers     single note, two notes in one proof, two transfers in one
+                  relayer transaction, a note bought in a swap
+    withdrawals   mUSDC to dave, native MON (unwrapped WMON) to dave, the mTKN
+                  carol bought
+    swaps         chosen by findBestRoute on the live pools: a small trade went
+                  through the 0.05% pool, bigger ones through the deeper 0.30%
+                  pool, WMON -> mTKN as two hops through mUSDC
+    viewing keys  full / incoming / epoch keys; an epoch key sees one period
+                  only; the full key sees all of alice's payments and none of
+                  bob's notes
+    attacks       12 refused with eth_call (no gas): a withdrawal redirected,
+                  enlarged, or its fee claimed by someone else; an unknown
+                  root; a double spend; a replay; an expired swap; an
+                  unmeetable minimum; a non-owner configuring or upgrading;
+                  an unaccepted token; a transfer to an unregistered address
+    upgrade       the live proxy accepts the current code (validated only)
+    books         every private balance equals the ledger of the steps, and
+                  the pool holds exactly the sum of all unspent notes
+
+    Gas spent by the run: 4.08 MON. Deploying Uniswap and Menoid: about 5 MON.
+
+
+4. Monad facts that matter (measured here)
+
+    a. Gas is charged on the gas LIMIT, at base fee + tip (base fee floor
+       100 gwei). Receipts report gasUsed = gasLimit. Set the limit to
+       eth_estimateGas plus a small margin; the e2e used +10%, and paid it.
+
+    b. A proof costs about twice what Hardhat reports. Monad prices the
+       BN254 precompiles higher (ecPairing 225,000 per pair vs 45,000;
+       ecMul 30,000 vs 6,000) and cold storage / account access too:
+
+                                  Monad    Hardhat (Ethereum prices)
+        register                   184k         165k
+        deposit (ERC-20)           0.71-1.05M   0.68-1.02M
+        deposit (native)           691k         677k
+        transfer                   2.06M        1.04M
+        two transfers, one tx      4.01M        1.95M
+        withdraw                   2.10M        1.04M
+        swap, 1 hop                2.43M        1.24M
+        swap, 2 hops               2.57M        1.33M
+
+       A private transfer costs about 0.21 MON with an exact limit (0.23 with
+       +10%). The earlier mainnet cost estimates used Ethereum prices: double
+       them for proofs.
+
+    c. Reserve balance. Every account keeps a 10 MON reserve. An account
+       below it may send value (msg.value) only in its first transaction in
+       the last 3 blocks; otherwise the transaction reverts and still pays
+       gas. So a native deposit from a small wallet waits 3 blocks after
+       that wallet's previous transaction (e2e.js waitForReserveWindow). The
+       website must do the same. ERC-20 deposits send no value.
+
+    d. eth_getLogs: read 100-block windows (PoolMirror maxBlockRange). At
+       0.3 s per block, 100 blocks are 30 seconds.
+
+    e. The public RPC rate-limits (about 15-25 requests a second):
+       helpers/rpc.js ResilientProvider throttles and retries.
+
+    f. Native MON out works through the proxy: the real WMON pays the proxy
+       under Monad's gas prices.
+
+
+5. Why mainnet is not affected
+
+    - Separate names: monadTestnet / monadTestnetFork here; the V1 demo keeps
+      `monad`; mainnet will get its own.
+    - Separate keys: everything here was derived with "Network: testnet",
+      and the network is mixed into the seed. The .env RELAYER WALLET block
+      only accepts testnet keys.
+    - Separate Uniswap: the testnet Uniswap file is never read on a mainnet
+      chain id, and deploy-uniswap.js and e2e.js refuse to run on one.
+      Mainnet uses Uniswap's own deployment (helpers/uniswap.js).
+    - Before mainnet: a multi-party trusted setup for both circuits, a
+      multisig owner (with a timelock for upgrades), a new relayer key, and
+      gas limits sized for Monad's prices (4b).

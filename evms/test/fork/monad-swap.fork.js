@@ -42,8 +42,8 @@ const USDC = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";   // Circle USDC on M
         usdc = new ethers.Contract(USDC, ["function balanceOf(address) view returns (uint256)"], ethers.provider);
         mirror = new PoolMirror(pool, { fromBlock: deployBlock });
 
-        relayer = await W.deriveWallet(relayerSigner);
-        alice = await W.deriveWallet(aliceSigner);
+        relayer = await W.deriveWallet(relayerSigner, { network: "mainnet" });
+        alice = await W.deriveWallet(aliceSigner, { network: "mainnet" });
         await W.registerWallet(pool, relayer);
         await W.registerWallet(pool, alice);
     });

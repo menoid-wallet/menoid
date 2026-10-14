@@ -1,0 +1,327 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0xa63D29F39BF7A0BcB8E761C1897995ecBAFe496A",
+      "txHash": "0x8ca81fc63847ce16a40e9a79392ca505d13c92ed3dda9d97c7d65c8825d1066a",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "881ab4487c1208eb7adceb1c10dd2e75f37125add98e0dd1b871787d4b212a61": {
+      "address": "0xAd4124aa107Aac3d3FF252E7d41B384970c5c855",
+      "txHash": "0xa74850e0605254ddf0d7303e0af5cddf08665fefa0b491f76bcb5ba136f69a24",
+      "layout": {
+        "solcVersion": "0.8.20",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:40"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "_registrations",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_mapping(t_address,t_struct(Registration)2266_storage)",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:94"
+          },
+          {
+            "label": "userCommitmentOwner",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_mapping(t_bytes32,t_address)",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:100"
+          },
+          {
+            "label": "tokenConfig",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_mapping(t_address,t_struct(TokenConfig)2280_storage)",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:111"
+          },
+          {
+            "label": "depositsPaused",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_bool",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:111"
+          },
+          {
+            "label": "swapAdapters",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:116"
+          },
+          {
+            "label": "swapsPaused",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_bool",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:117"
+          },
+          {
+            "label": "nullifierSpent",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_mapping(t_bytes32,t_bool)",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:123"
+          },
+          {
+            "label": "commitmentExists",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_mapping(t_bytes32,t_bool)",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:123"
+          },
+          {
+            "label": "_trees",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_array(t_struct(Tree)4981_storage)dyn_storage",
+            "contract": "NoidPool",
+            "src": "contracts/NoidPool.sol:124"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_bytes32)100_storage": {
+            "label": "bytes32[100]",
+            "numberOfBytes": "3200"
+          },
+          "t_array(t_bytes32)20_storage": {
+            "label": "bytes32[20]",
+            "numberOfBytes": "640"
+          },
+          "t_array(t_struct(Tree)4981_storage)dyn_storage": {
+            "label": "struct PoolLib.Tree[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_bytes_storage": {
+            "label": "bytes",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(Registration)2266_storage)": {
+            "label": "mapping(address => struct NoidPool.Registration)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(TokenConfig)2280_storage)": {
+            "label": "mapping(address => struct NoidPool.TokenConfig)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_address)": {
+            "label": "mapping(bytes32 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_bool)": {
+            "label": "mapping(bytes32 => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Registration)2266_storage": {
+            "label": "struct NoidPool.Registration",
+            "members": [
+              {
+                "label": "userCommitment",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "keyIndex",
+                "type": "t_uint32",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "viewingEpoch",
+                "type": "t_uint32",
+                "offset": 4,
+                "slot": "1"
+              },
+              {
+                "label": "viewingPublicKey",
+                "type": "t_bytes_storage",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(TokenConfig)2280_storage": {
+            "label": "struct NoidPool.TokenConfig",
+            "members": [
+              {
+                "label": "depositsEnabled",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "maxDeposit",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(Tree)4981_storage": {
+            "label": "struct PoolLib.Tree",
+            "members": [
+              {
+                "label": "filledSubtrees",
+                "type": "t_array(t_bytes32)20_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "rootHistory",
+                "type": "t_array(t_bytes32)100_storage",
+                "offset": 0,
+                "slot": "20"
+              },
+              {
+                "label": "knownRoot",
+                "type": "t_mapping(t_bytes32,t_bool)",
+                "offset": 0,
+                "slot": "120"
+              },
+              {
+                "label": "root",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "121"
+              },
+              {
+                "label": "rootIndex",
+                "type": "t_uint32",
+                "offset": 0,
+                "slot": "122"
+              },
+              {
+                "label": "nextIndex",
+                "type": "t_uint32",
+                "offset": 4,
+                "slot": "122"
+              }
+            ],
+            "numberOfBytes": "3936"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint32": {
+            "label": "uint32",
+            "numberOfBytes": "4"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {}
+      }
+    }
+  }
+}

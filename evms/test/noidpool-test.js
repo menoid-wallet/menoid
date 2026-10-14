@@ -4,6 +4,9 @@ const { expect } = require("chai");
 
 const { deployLocalSystem } = require("../helpers/deploy");
 const W = require("../helpers/wallets");
+
+// local chains are not mainnet: they use testnet keys
+const KEY_NETWORK = "testnet";
 const { PoolMirror } = require("../helpers/merkle");
 const { scan, viewerFromWallet, viewerFromViewingKey } = require("../helpers/scanner");
 const { buildDeposit, buildTransfer, buildWithdraw, prepareInputs, spendInput } = require("../helpers/transactions");
@@ -125,10 +128,10 @@ describe("Menoid v1-mainnet: pool", function () {
         chainId = (await ethers.provider.getNetwork()).chainId;
         mirror = new PoolMirror(pool, { fromBlock: deployBlock });
 
-        relayer = await W.deriveWallet(relayerSigner);
-        alice = await W.deriveWallet(aliceSigner);
-        bob = await W.deriveWallet(bobSigner);
-        carol = await W.deriveWallet(carolSigner);
+        relayer = await W.deriveWallet(relayerSigner, { network: KEY_NETWORK });
+        alice = await W.deriveWallet(aliceSigner, { network: KEY_NETWORK });
+        bob = await W.deriveWallet(bobSigner, { network: KEY_NETWORK });
+        carol = await W.deriveWallet(carolSigner, { network: KEY_NETWORK });
         for (const wallet of [relayer, alice, bob, carol]) {
             await W.registerWallet(pool, wallet);
         }
@@ -650,6 +653,60 @@ describe("Menoid v1-mainnet: pool", function () {
             const [latest, nextIndex] = await pool.treeInfo(0);
             expect(mirror.root(0)).to.equal(BigInt(latest));
             expect(nextIndex.toNumber() % 4).to.equal(0);
+        });
+
+        it("rebuilds the same pool from capped eth_getLogs windows (as on Monad), and from a lagging node", async function () {
+            await sync();
+            const aliceR = await resolve(alice.address);
+            const insert = async () => {
+                const { npk, encryptedNote } = buildDeposit({ token: usdc.address, amount: USDC("0.01"), recipient: aliceR });
+                await (await pool.connect(owner).deposit(usdc.address, USDC("0.01"), npk, encryptedNote)).wait();
+            };
+
+            // a public RPC answers at most a few blocks per eth_getLogs request
+            const ranges = [];
+            const capped = {
+                getBlockNumber: () => pool.provider.getBlockNumber(),
+                getLogs: (filter) => {
+                    ranges.push([filter.fromBlock, filter.toBlock]);
+                    return pool.provider.getLogs(filter);
+                }
+            };
+            const paged = new PoolMirror({ ...pool, provider: capped }, { fromBlock: deployBlock, maxBlockRange: 7 });
+            await paged.sync();
+
+            // every request within the cap, together covering each block once
+            expect(ranges[0][0]).to.equal(deployBlock);
+            for (const [from, to] of ranges) expect(to - from + 1 <= 7).to.equal(true);
+            for (let i = 1; i < ranges.length; i++) expect(ranges[i][0]).to.equal(ranges[i - 1][1] + 1);
+
+            expect(paged.root(0)).to.equal(mirror.root(0));
+            expect(paged.notes).to.deep.equal(mirror.notes);
+            expect([...paged.nullifiers]).to.deep.equal([...mirror.nullifiers]);
+            expect([...paged.outgoing]).to.deep.equal([...mirror.outgoing]);
+
+            // the next sync reads only the blocks added since
+            const readUpTo = ranges[ranges.length - 1][1];
+            ranges.length = 0;
+            await insert();
+            await paged.sync();
+            await sync();
+            expect(ranges[0][0]).to.equal(readUpTo + 1);
+            expect(paged.root(0)).to.equal(mirror.root(0));
+            expect(paged.notes.length).to.equal(mirror.notes.length);
+
+            // a node two blocks behind: its tree is older, but still one the
+            // contract accepts, so proofs built on it stay valid
+            await insert();
+            await insert();
+            const behind = {
+                getBlockNumber: async () => (await pool.provider.getBlockNumber()) - 2,
+                getLogs: (filter) => pool.provider.getLogs(filter)
+            };
+            const lagging = await new PoolMirror({ ...pool, provider: behind }, { fromBlock: deployBlock }).sync();
+            await sync();
+            expect(lagging.root(0)).to.not.equal(mirror.root(0));
+            expect(await pool.isKnownRoot(0, toBytes32(lagging.root(0)))).to.equal(true);
         });
     });
 });

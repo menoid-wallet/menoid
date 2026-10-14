@@ -38,6 +38,21 @@ module.exports = {
             accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
         },
 
+        // v1-mainnet on Monad testnet. `monad` above is the V1 demo's network:
+        // a separate name keeps their deployment records apart.
+        monadTestnet: {
+            url: process.env.MONAD_TESTNET_RPC_URL || "https://testnet-rpc.monad.xyz",
+            chainId: 10143,
+            accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
+        },
+
+        // a rehearsal on a local fork of Monad testnet; nothing reaches the chain:
+        //   npx hardhat node --fork https://testnet-rpc.monad.xyz --port 8546
+        monadTestnetFork: {
+            url: "http://127.0.0.1:8546",
+            accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
+        },
+
         sepolia: {
             url: process.env.SEPOLIA_RPC_URL,
             accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []

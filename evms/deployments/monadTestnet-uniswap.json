@@ -1,0 +1,233 @@
+{
+    "network": "monadTestnet",
+    "chainId": 10143,
+    "purpose": "testnet only: Uniswap V3 has no live deployment on this chain",
+    "source": {
+        "@uniswap/v3-core": "1.0.1",
+        "@uniswap/v3-periphery": "1.4.4",
+        "@uniswap/swap-router-contracts": "1.3.1",
+        "poolInitCodeHash": "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54"
+    },
+    "deployer": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+    "wrappedNative": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+    "tokens": {
+        "WMON": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+        "mUSDC": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+        "mTKN": "0x0D62F4fb9B6636B2509341F0b611883b7Db9Da29"
+    },
+    "pools": {
+        "WMON/mUSDC 0.30%": {
+            "address": "0x655b7D444296C0a5631dae4dbaBB6F9FB6C2A484",
+            "fee": 3000,
+            "token0": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+            "token1": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+            "seeded": {
+                "WMON": "8000000000000000000",
+                "mUSDC": "80000000"
+            },
+            "sqrtPriceX96": "25054144837504793118641380156960632",
+            "tick": 253297,
+            "liquidity": "25298221281347"
+        },
+        "WMON/mUSDC 0.05%": {
+            "address": "0xE7D3a8D6B4Cb380cC7Ed3Ac0c1A935A23BCEFb62",
+            "fee": 500,
+            "token0": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+            "token1": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+            "seeded": {
+                "WMON": "4000000000000000000",
+                "mUSDC": "40000000"
+            },
+            "sqrtPriceX96": "25054144837504793118641380156960632",
+            "tick": 253297,
+            "liquidity": "12649110640673"
+        },
+        "mUSDC/mTKN 0.05%": {
+            "address": "0xC81baFF68f264EBC547488C0f78d4689B1a9db86",
+            "fee": 500,
+            "token0": "0x0D62F4fb9B6636B2509341F0b611883b7Db9Da29",
+            "token1": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+            "seeded": {
+                "mUSDC": "1000000000",
+                "mTKN": "1000000000000000000000"
+            },
+            "sqrtPriceX96": "79228162514264337593543",
+            "tick": -276325,
+            "liquidity": "999999999999999"
+        }
+    },
+    "txs": {
+        "factory": {
+            "hash": "0x600cbd5607fbf126858127b6a53ed1bb792f0a5c7835938e998b857f8637a151",
+            "block": 70943600,
+            "gasLimit": "5505699",
+            "gasUsed": "5505699",
+            "costMON": "0.578098395"
+        },
+        "positionManager": {
+            "hash": "0x3d8683364ab466981b6076b40c8d3cace554b19c4f06102ae1bc4dd1aaaba6c4",
+            "block": 70943611,
+            "gasLimit": "5534276",
+            "gasUsed": "5534276",
+            "costMON": "0.564496152"
+        },
+        "swapRouter02": {
+            "hash": "0x8ba44fd716dc976be8d645f0ce99309c4128922ab027b82633f9d219cdeafce5",
+            "block": 70943625,
+            "gasLimit": "5390941",
+            "gasUsed": "5390941",
+            "costMON": "0.549875982"
+        },
+        "quoterV2": {
+            "hash": "0x91bc161a1762b4567bcb43d982e5380787460ea5b7216b3f28d7bbcd8db017f9",
+            "block": 70943634,
+            "gasLimit": "1851862",
+            "gasUsed": "1851862",
+            "costMON": "0.190741786003703724"
+        },
+        "mUSDC": {
+            "hash": "0x2bba72249016e53bc66f042b37ad88f51c0910ad50b76de242e7f4e433fb33c9",
+            "block": 70943657,
+            "gasLimit": "637416",
+            "gasUsed": "637416",
+            "costMON": "0.066928680000637416"
+        },
+        "mTKN": {
+            "hash": "0xbfb6c411a75324a1297e2921885c15e2bf879691f161e6b2f3e321c67bbef96a",
+            "block": 70943664,
+            "gasLimit": "637428",
+            "gasUsed": "637428",
+            "costMON": "0.065017656"
+        },
+        "WMON/mUSDC 0.30%: wrap MON": {
+            "hash": "0xd45cbe01f837a4f42cca543cff192d0fb10c3e07b2b705045bf1be3320f6f161",
+            "block": 70943672,
+            "gasLimit": "51221",
+            "gasUsed": "51221",
+            "costMON": "0.005275763000051221"
+        },
+        "WMON/mUSDC 0.30%: mint mUSDC": {
+            "hash": "0x9864f794cccbd402746cc4c1514e03b6572915fbbd875eb21cbffba52fcd939c",
+            "block": 70943681,
+            "gasLimit": "80888",
+            "gasUsed": "80888",
+            "costMON": "0.008493240000080888"
+        },
+        "WMON/mUSDC 0.30%: createPool": {
+            "hash": "0x5995f8b362a16929fd9d993fd959aed9023ccf538685e02ce65d91c29b65bd8c",
+            "block": 70943686,
+            "gasLimit": "4767106",
+            "gasUsed": "4767106",
+            "costMON": "0.50054613"
+        },
+        "WMON/mUSDC 0.30%: approve0": {
+            "hash": "0x2b307d53c75b6c0f8ca5d6cb813be7fc49d1ad95e2a6ff75b67efdf8712a6423",
+            "block": 70943694,
+            "gasLimit": "52800",
+            "gasUsed": "52800",
+            "costMON": "0.0053856"
+        },
+        "WMON/mUSDC 0.30%: approve1": {
+            "hash": "0xce3398fb45eaf48dee15b178d6abf8247555cd0e2e18989d15a7007a87e610b2",
+            "block": 70943700,
+            "gasLimit": "52699",
+            "gasUsed": "52699",
+            "costMON": "0.005427997"
+        },
+        "WMON/mUSDC 0.30%: mint": {
+            "hash": "0xd8c6e6ea529c1f88855f36770571391be9f71fd293c22b803623ac611db63c04",
+            "block": 70943707,
+            "gasLimit": "711486",
+            "gasUsed": "711486",
+            "costMON": "0.0738878211"
+        },
+        "WMON/mUSDC 0.05%: wrap MON": {
+            "hash": "0x51f39a78cbe66a63fc877470e0748a8edf34c1e370a441da31b05c6a9d0f6f32",
+            "block": 70943734,
+            "gasLimit": "34187",
+            "gasUsed": "34187",
+            "costMON": "0.0041844888"
+        },
+        "WMON/mUSDC 0.05%: mint mUSDC": {
+            "hash": "0x34ccc9c3f6a649c3457daead626765c383b2b7d0bdad3c3a7a6e750ca47dac4c",
+            "block": 70943742,
+            "gasLimit": "63821",
+            "gasUsed": "63821",
+            "costMON": "0.006509742"
+        },
+        "WMON/mUSDC 0.05%: createPool": {
+            "hash": "0x7de5c39808d554ddc8e2eb503de3fca88ab4468f3d60bb16df16cacd5dde01bd",
+            "block": 70943749,
+            "gasLimit": "4767106",
+            "gasUsed": "4767106",
+            "costMON": "0.491011918004767106"
+        },
+        "WMON/mUSDC 0.05%: approve0": {
+            "hash": "0x5b124f0491d93f08a00b19110d3d7d72d92915363b46f3ef6e04879cc2373e7e",
+            "block": 70943770,
+            "gasLimit": "52800",
+            "gasUsed": "52800",
+            "costMON": "0.0054384"
+        },
+        "WMON/mUSDC 0.05%: approve1": {
+            "hash": "0x0761e3f363b33ba48d978cb5be1ef75a40e62713803c7b5b9a7a0021d8d59c08",
+            "block": 70943779,
+            "gasLimit": "35270",
+            "gasUsed": "35270",
+            "costMON": "0.00359754"
+        },
+        "WMON/mUSDC 0.05%: mint": {
+            "hash": "0x6f556e397915aa7e6a45a805bbd220ab781775874adb38777008b35e88008d01",
+            "block": 70943800,
+            "gasLimit": "677273",
+            "gasUsed": "677273",
+            "costMON": "0.069759119"
+        },
+        "mUSDC/mTKN 0.05%: mint mUSDC": {
+            "hash": "0xb8d2fd12d7ca6cb80800a9ff4a74d45b19691d5bb5c499b6938c26f07883f8dd",
+            "block": 70943811,
+            "gasLimit": "63821",
+            "gasUsed": "63821",
+            "costMON": "0.006509742"
+        },
+        "mUSDC/mTKN 0.05%: mint mTKN": {
+            "hash": "0x4276ffca2a1f5b62802c0cbb3183eb51efe4268689b780cf4b36734090cde387",
+            "block": 70943817,
+            "gasLimit": "80936",
+            "gasUsed": "80936",
+            "costMON": "0.008255472"
+        },
+        "mUSDC/mTKN 0.05%: createPool": {
+            "hash": "0xe084216b9c32ca25a01061ea79add569c5884aa64c23a0dfe77da99e75de9239",
+            "block": 70943823,
+            "gasLimit": "4766992",
+            "gasUsed": "4766992",
+            "costMON": "0.48861668"
+        },
+        "mUSDC/mTKN 0.05%: approve0": {
+            "hash": "0x36ba42ec74d770f44c6ac2c7f13bb2d0cf350f327c02ca426b4f37eed240c8a6",
+            "block": 70943831,
+            "gasLimit": "52848",
+            "gasUsed": "52848",
+            "costMON": "0.005443344000052848"
+        },
+        "mUSDC/mTKN 0.05%: approve1": {
+            "hash": "0xdf61f784014efa857a07286d9f3e1525168b336827ed4221d83ae974ebe8022f",
+            "block": 70943836,
+            "gasLimit": "52800",
+            "gasUsed": "52800",
+            "costMON": "0.0054384"
+        },
+        "mUSDC/mTKN 0.05%: mint": {
+            "hash": "0xe8e01940e5077949ea814fe1a193db922de039acc1885c8942a2c03fda17418b",
+            "block": 70943845,
+            "gasLimit": "678723",
+            "gasUsed": "678723",
+            "costMON": "0.069229746"
+        }
+    },
+    "factory": "0xdcD3da4C1f3bC88c2aE998FD374f737F1167c7f3",
+    "positionManager": "0x7F9F3189B6be1023391Dd25e27078E48f1921f6E",
+    "swapRouter02": "0x40B3d08778313619b2671Dd79788B7616e257Ede",
+    "quoterV2": "0xA964C148713A779701684876507B79CA5b6D07d0"
+}

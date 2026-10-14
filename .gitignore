@@ -43,3 +43,9 @@ evms/cache/hardhat-network-fork/
 evms/.openzeppelin/unknown-31337.json
 evms/.openzeppelin/unknown-1337.json
 evms/cache/validations.json
+
+# Testnet e2e wallets: private keys (evms/scripts/testnet/e2e.js)
+evms/testnet-wallets.*.local.json
+
+# Rehearsals on a local fork of Monad testnet (network monadTestnetFork)
+evms/deployments/monadTestnetFork*

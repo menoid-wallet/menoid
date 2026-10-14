@@ -1,0 +1,2503 @@
+{
+    "network": "monadTestnet",
+    "chainId": 10143,
+    "pool": "0xa63D29F39BF7A0BcB8E761C1897995ecBAFe496A",
+    "implementation": "0xAd4124aa107Aac3d3FF252E7d41B384970c5c855",
+    "adapter": "0x817F8a1A6eB70943f4577a0Bcd335Bc2CD582edC",
+    "uniswapV3": {
+        "deployedBy": "scripts/testnet/deploy-uniswap.js (official Uniswap bytecode)",
+        "factory": "0xdcD3da4C1f3bC88c2aE998FD374f737F1167c7f3",
+        "swapRouter02": "0x40B3d08778313619b2671Dd79788B7616e257Ede",
+        "quoterV2": "0xA964C148713A779701684876507B79CA5b6D07d0",
+        "pools": {
+            "WMON/mUSDC 0.30%": "0x655b7D444296C0a5631dae4dbaBB6F9FB6C2A484",
+            "WMON/mUSDC 0.05%": "0xE7D3a8D6B4Cb380cC7Ed3Ac0c1A935A23BCEFb62",
+            "mUSDC/mTKN 0.05%": "0xC81baFF68f264EBC547488C0f78d4689B1a9db86"
+        }
+    },
+    "tokens": {
+        "WMON": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+        "mUSDC": "0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF",
+        "mTKN": "0x0D62F4fb9B6636B2509341F0b611883b7Db9Da29"
+    },
+    "participants": {
+        "relayer": {
+            "address": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+            "userCommitment": "0x0fb072defe970a5eb0361cc5ce0a622eeaca8d983e3ee59571dcc3bdbd62899b",
+            "registers": true
+        },
+        "alice": {
+            "address": "0x507f1425f82F00d20151E03E84fea42F78D9616a",
+            "userCommitment": "0x15356aeff7e3e582c869d8d6585242c113c171fd56f811c738ba5102f99d0061",
+            "registers": true
+        },
+        "bob": {
+            "address": "0x16D47615C6f8a7d3eA6dbBBa19AcaFaA8C1839e6",
+            "userCommitment": "0x18e59880deed4ea47c7416418869d751420832dce1b8abb795e3e5a7424c8b02",
+            "registers": true
+        },
+        "carol": {
+            "address": "0x8114B84E8f6d7F41799a5E87Dc9816B169D0a672",
+            "userCommitment": "0x2d19f90f55130e104b10fc8cc87d4658209ceb63173fbe748aaccd4b92baf834",
+            "registers": true
+        },
+        "dave": {
+            "address": "0x94eA632382baf86570eAA57bfc5059E67d2Fb126",
+            "userCommitment": null,
+            "registers": false
+        }
+    },
+    "keyNetwork": "testnet",
+    "gasPolicy": "gas limit = eth_estimateGas + 10% for pool calls (Monad charges the limit); exact for the rest",
+    "startedAt": "2026-10-14T10:34:58.771Z",
+    "steps": [
+        {
+            "id": "fund",
+            "title": "fund the test wallets: MON for gas and native deposits, mUSDC to deposit",
+            "kind": "setup",
+            "status": "done",
+            "txs": [
+                {
+                    "what": "alice +2.5 MON",
+                    "hash": "0x917b6755f9ce8a83cef54710b91bffe6f263626c0f4937804bfd43f47228e249",
+                    "from": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+                    "gasEstimate": "21000",
+                    "gasLimit": "21000",
+                    "block": 70944064,
+                    "status": "success",
+                    "gasUsed": "21000",
+                    "gasPriceGwei": "101.5",
+                    "costMON": "0.0021315"
+                },
+                {
+                    "what": "bob +2.0 MON",
+                    "hash": "0x6f028260ec6f37c697c5a71d118c3511fa64f2e094f21c810f45d2784fdf9bc4",
+                    "from": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+                    "gasEstimate": "21000",
+                    "gasLimit": "21000",
+                    "block": 70944068,
+                    "status": "success",
+                    "gasUsed": "21000",
+                    "gasPriceGwei": "101.5",
+                    "costMON": "0.0021315"
+                },
+                {
+                    "what": "carol +1.0 MON",
+                    "hash": "0x9658f6798050e390d7db006af0abe6a0a754d4770b4df79b78d489a82db86e47",
+                    "from": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+                    "gasEstimate": "21000",
+                    "gasLimit": "21000",
+                    "block": 70944073,
+                    "status": "success",
+                    "gasUsed": "21000",
+                    "gasPriceGwei": "101.5",
+                    "costMON": "0.0021315"
+                },
+                {
+                    "what": "alice +500.0 mUSDC (test token mint)",
+                    "hash": "0xed6e76ef7a8aea063d15300000d728cf5efcbb73a3136c059d1533546cfa2b5a",
+                    "from": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+                    "gasEstimate": "63809",
+                    "gasLimit": "63809",
+                    "block": 70944078,
+                    "status": "success",
+                    "gasUsed": "63809",
+                    "gasPriceGwei": "101.5",
+                    "costMON": "0.0064766135"
+                },
+                {
+                    "what": "bob +300.0 mUSDC (test token mint)",
+                    "hash": "0xbdde3a40180d74e998277db5691b516ed7d2c56699ba2307be02663c4c403b0e",
+                    "from": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+                    "gasEstimate": "63821",
+                    "gasLimit": "63821",
+                    "block": 70944084,
+                    "status": "success",
+                    "gasUsed": "63821",
+                    "gasPriceGwei": "101.5",
+                    "costMON": "0.0064778315"
+                }
+            ]
+        },
+        {
+            "id": "register-alice",
+            "title": "alice registers: one signature, one transaction",
+            "kind": "register",
+            "who": "alice",
+            "address": "0x507f1425f82F00d20151E03E84fea42F78D9616a",
+            "userCommitment": "0x15356aeff7e3e582c869d8d6585242c113c171fd56f811c738ba5102f99d0061",
+            "viewingPublicKey": "0x04c97c41abeb2eddb8cdfc14121fbe6bc60061f8165a17c25d7e72b4c7f7e2b6470af88df607f54fba2627c5ad4009083a9ebf749df53a409d48deec91a57c5327",
+            "status": "done",
+            "tx": {
+                "method": "register",
+                "from": "alice",
+                "hash": "0x917a66632f1e170dd4f4811f02c81ce61bc79cd3c9f52f4689e50abd71d5790b",
+                "gasEstimate": "184211",
+                "gasLimit": "202632",
+                "block": 70944088,
+                "status": "success",
+                "gasUsed": "202632",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.020567148"
+            }
+        },
+        {
+            "id": "register-bob",
+            "title": "bob registers: one signature, one transaction",
+            "kind": "register",
+            "who": "bob",
+            "address": "0x16D47615C6f8a7d3eA6dbBBa19AcaFaA8C1839e6",
+            "userCommitment": "0x18e59880deed4ea47c7416418869d751420832dce1b8abb795e3e5a7424c8b02",
+            "viewingPublicKey": "0x04d852b3e414c3162c9ef644d86c89255e7188023187a0af713351b99cd2e03175035a0e61a9c623a0f360b7f49740dca4374213f1c6f22ec3b25a2161f9f6b2ec",
+            "status": "done",
+            "tx": {
+                "method": "register",
+                "from": "bob",
+                "hash": "0x2430f9e66eaeaf3d3d545e382071dfe8dd433f73096edcd8ab7c62c8a60ddfe2",
+                "gasEstimate": "184235",
+                "gasLimit": "202658",
+                "block": 70944093,
+                "status": "success",
+                "gasUsed": "202658",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.020569787"
+            }
+        },
+        {
+            "id": "register-carol",
+            "title": "carol registers: one signature, one transaction",
+            "kind": "register",
+            "who": "carol",
+            "address": "0x8114B84E8f6d7F41799a5E87Dc9816B169D0a672",
+            "userCommitment": "0x2d19f90f55130e104b10fc8cc87d4658209ceb63173fbe748aaccd4b92baf834",
+            "viewingPublicKey": "0x04c4a8b776a1e813168ef6e8f7a7075f10e1fa95f636fa078f714b2100be74711346cb56a874561f798613a3ab12c70517c2f5bba58ee5aa7485a33139e1645adc",
+            "status": "done",
+            "tx": {
+                "method": "register",
+                "from": "carol",
+                "hash": "0xea485f5db7e0c6b2efaa80c9a762b11447412a92f392ff1935c5961039a3ab61",
+                "gasEstimate": "184223",
+                "gasLimit": "202645",
+                "block": 70944097,
+                "status": "success",
+                "gasUsed": "202645",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.0205684675"
+            }
+        },
+        {
+            "id": "registry",
+            "title": "senders resolve recipients from the chain; dave stays unregistered",
+            "kind": "check",
+            "status": "done",
+            "resolved": {
+                "alice": {
+                    "registered": true,
+                    "userCommitment": "0x15356aeff7e3e582c869d8d6585242c113c171fd56f811c738ba5102f99d0061",
+                    "viewingEpoch": 0
+                },
+                "bob": {
+                    "registered": true,
+                    "userCommitment": "0x18e59880deed4ea47c7416418869d751420832dce1b8abb795e3e5a7424c8b02",
+                    "viewingEpoch": 0
+                },
+                "carol": {
+                    "registered": true,
+                    "userCommitment": "0x2d19f90f55130e104b10fc8cc87d4658209ceb63173fbe748aaccd4b92baf834",
+                    "viewingEpoch": 0
+                },
+                "dave": {
+                    "registered": false,
+                    "userCommitment": null,
+                    "viewingEpoch": 0
+                },
+                "relayer": {
+                    "registered": true,
+                    "userCommitment": "0x0fb072defe970a5eb0361cc5ce0a622eeaca8d983e3ee59571dcc3bdbd62899b",
+                    "viewingEpoch": 0
+                }
+            },
+            "loginCheck": "re-derived identities match the chain"
+        },
+        {
+            "id": "deposit-alice-musdc",
+            "title": "alice deposits 300 mUSDC",
+            "kind": "deposit",
+            "from": "alice",
+            "to": "alice",
+            "amount": "300.0 mUSDC",
+            "native": false,
+            "deposit": {
+                "npk": "0x0743c8f9f55df1dc1c698e0153dc36b341b122072b2d341d52843b44a8f4be7a",
+                "ciphertextBytes": 135,
+                "onChainCommitment": "0x164a8e6403a0485a5b583ff6abb295c58306ff0104bded3db5ff5bb9dd252e99",
+                "matchesClient": true
+            },
+            "outputs": [
+                {
+                    "role": "deposit",
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "300000000",
+                    "commitment": "0x164a8e6403a0485a5b583ff6abb295c58306ff0104bded3db5ff5bb9dd252e99",
+                    "treeId": 0,
+                    "leafIndex": 0
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "mUSDC",
+                    "amount": "300000000"
+                }
+            ],
+            "approveTx": {
+                "hash": "0x7ee29a4b4814dad40e25706adadd61dd1850480ca9eb90c8324ec703f9f717fe",
+                "from": "0x507f1425f82F00d20151E03E84fea42F78D9616a",
+                "gasEstimate": "52800",
+                "gasLimit": "52800",
+                "block": 70944107,
+                "status": "success",
+                "gasUsed": "52800",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.0053592"
+            },
+            "status": "done",
+            "tx": {
+                "method": "deposit",
+                "from": "alice",
+                "hash": "0x3e107c5caec3816e74d3dedb24d5f39711161563ae22d538c64f28e32abbd9b5",
+                "gasEstimate": "1051189",
+                "gasLimit": "1156307",
+                "block": 70944111,
+                "status": "success",
+                "gasUsed": "1156307",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.1173651605"
+            }
+        },
+        {
+            "id": "deposit-alice-mon",
+            "title": "alice deposits 1 MON (wrapped to WMON inside the pool)",
+            "kind": "deposit",
+            "from": "alice",
+            "to": "alice",
+            "amount": "1.0 WMON",
+            "native": true,
+            "deposit": {
+                "npk": "0x2622d1496179cee596294e558778f69839bb6ab74e0a4146d98aac7619ecefca",
+                "ciphertextBytes": 135,
+                "onChainCommitment": "0x216fa12dde7e8531dd7618f14f4d228dbd2d47ffa4875389f81cfd87748d0c7c",
+                "matchesClient": true
+            },
+            "outputs": [
+                {
+                    "role": "deposit",
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "1000000000000000000",
+                    "commitment": "0x216fa12dde7e8531dd7618f14f4d228dbd2d47ffa4875389f81cfd87748d0c7c",
+                    "treeId": 0,
+                    "leafIndex": 4
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "WMON",
+                    "amount": "1000000000000000000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "depositNative",
+                "from": "alice",
+                "hash": "0xb946185fa96f14833e1bbb1104989ceaf6834424dee995d3ca7ad00678c3225c",
+                "gasEstimate": "699929",
+                "gasLimit": "769921",
+                "block": 70944118,
+                "status": "success",
+                "gasUsed": "769921",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.0781469815"
+            }
+        },
+        {
+            "id": "deposit-bob-for-carol",
+            "title": "bob deposits 100 mUSDC straight into carol's private balance",
+            "kind": "deposit",
+            "from": "bob",
+            "to": "carol",
+            "amount": "100.0 mUSDC",
+            "native": false,
+            "deposit": {
+                "npk": "0x1660fd9f47220320cba188fb0ee2768c8e765c5c0371fee2a75b5a803fe4d136",
+                "ciphertextBytes": 135,
+                "onChainCommitment": "0x298610b2eb80503d8679f422039af560293f0f3e5dd7671aec4bafb01a145ded",
+                "matchesClient": true
+            },
+            "outputs": [
+                {
+                    "role": "deposit",
+                    "owner": "carol",
+                    "token": "mUSDC",
+                    "amount": "100000000",
+                    "commitment": "0x298610b2eb80503d8679f422039af560293f0f3e5dd7671aec4bafb01a145ded",
+                    "treeId": 0,
+                    "leafIndex": 8
+                }
+            ],
+            "flows": [
+                {
+                    "who": "carol",
+                    "token": "mUSDC",
+                    "amount": "100000000"
+                }
+            ],
+            "approveTx": {
+                "hash": "0x05f7890ac867fc9ef42bfed7c8862fc2d0281d8fabdbc1f825017f2b5c0072f0",
+                "from": "0x16D47615C6f8a7d3eA6dbBBa19AcaFaA8C1839e6",
+                "gasEstimate": "52800",
+                "gasLimit": "52800",
+                "block": 70944123,
+                "status": "success",
+                "gasUsed": "52800",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.0053592"
+            },
+            "status": "done",
+            "tx": {
+                "method": "deposit",
+                "from": "bob",
+                "hash": "0x6cfb0d4fec5df6da97ce8d90edf7d3b82faf32ab321f2c205f7cb211cbb2bfbf",
+                "gasEstimate": "705643",
+                "gasLimit": "776207",
+                "block": 70944127,
+                "status": "success",
+                "gasUsed": "776207",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.0787850105"
+            }
+        },
+        {
+            "id": "deposit-bob-mon",
+            "title": "bob deposits 0.5 MON",
+            "kind": "deposit",
+            "from": "bob",
+            "to": "bob",
+            "amount": "0.5 WMON",
+            "native": true,
+            "deposit": {
+                "npk": "0x1c9de62c6f9677fe4014ed647570c30fa56238ba00bdf5fda749c9ce50390a49",
+                "ciphertextBytes": 135,
+                "onChainCommitment": "0x0fccf90ac706ea0e19d9b9640e3f84cf1f15c639864ceb65c107c34bba2a9862",
+                "matchesClient": true
+            },
+            "outputs": [
+                {
+                    "role": "deposit",
+                    "owner": "bob",
+                    "token": "WMON",
+                    "amount": "500000000000000000",
+                    "commitment": "0x0fccf90ac706ea0e19d9b9640e3f84cf1f15c639864ceb65c107c34bba2a9862",
+                    "treeId": 0,
+                    "leafIndex": 12
+                }
+            ],
+            "flows": [
+                {
+                    "who": "bob",
+                    "token": "WMON",
+                    "amount": "500000000000000000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "depositNative",
+                "from": "bob",
+                "hash": "0x3a1b0bc5cf15ca140e4d62df87f3db6dbb792cabbf0ff186bb7164deee458fac",
+                "gasEstimate": "682485",
+                "gasLimit": "750733",
+                "block": 70944134,
+                "status": "success",
+                "gasUsed": "750733",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.0761993995"
+            }
+        },
+        {
+            "id": "transfer-alice-bob",
+            "title": "alice → bob 120 mUSDC, privately",
+            "kind": "transfer",
+            "from": "alice",
+            "to": "bob",
+            "amount": "120.0 mUSDC",
+            "fee": "0.5 mUSDC",
+            "root": "0x11b42cfd8e534ab263c4bc811905dfc4bc4fb9e3099e6c1a7c500c660199b231",
+            "extDataHash": "0x084fd066b69624983241f67a5e1cd850a9f66e6b5c820adf361dadba1769287d",
+            "inputs": [
+                {
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "300000000",
+                    "commitment": "0x164a8e6403a0485a5b583ff6abb295c58306ff0104bded3db5ff5bb9dd252e99",
+                    "treeId": 0,
+                    "leafIndex": 0,
+                    "nullifier": "0x205227d8cad84e70760574ebbc404aaea614e83e57c8431d17ee842cf834b286"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x0846ec18acb1ed7a2bc84a3edc544dc0fda8edd99bdb211b134b27c94f7dbcf1",
+                "0x0b91796e0e68c339c96ad07bc0ee184346ab7a3dbe78d1044de8e1cd4027e340",
+                "0x126bf6d85509a71186113cb86af03d0c9e7df8746fe710751627b5b560806bf1"
+            ],
+            "outputs": [
+                {
+                    "role": "recipient",
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "120000000",
+                    "commitment": "0x0609733fcafc40fcdfa8760e8b8994914b9931ea9c9c1d3ec46945479c9fa876",
+                    "treeId": 0,
+                    "leafIndex": 16
+                },
+                {
+                    "role": "change",
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "179500000",
+                    "commitment": "0x0c603f06f9b081e095e231b3fadb569602d5a8e1a4d13c42c32fd0eaf0180d68",
+                    "treeId": 0,
+                    "leafIndex": 17
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "mUSDC",
+                    "amount": "500000",
+                    "commitment": "0x0292528e3ea0a2d646d1776d3f3acc37af6594be45600960c157e3f9caf654a8",
+                    "treeId": 0,
+                    "leafIndex": 18
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "mUSDC",
+                    "amount": "-120500000"
+                },
+                {
+                    "who": "bob",
+                    "token": "mUSDC",
+                    "amount": "120000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mUSDC",
+                    "amount": "500000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "transfer",
+                "from": "relayer",
+                "hash": "0x4b40d9d99396d6c753675ed0c34575d5868890e99a7601b2530dfc4373b547df",
+                "gasEstimate": "2060975",
+                "gasLimit": "2267072",
+                "block": 70944150,
+                "status": "success",
+                "gasUsed": "2267072",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.230107808"
+            },
+            "nullifiersOnChain": [
+                "0x205227d8cad84e70760574ebbc404aaea614e83e57c8431d17ee842cf834b286",
+                "0x0846ec18acb1ed7a2bc84a3edc544dc0fda8edd99bdb211b134b27c94f7dbcf1",
+                "0x0b91796e0e68c339c96ad07bc0ee184346ab7a3dbe78d1044de8e1cd4027e340",
+                "0x126bf6d85509a71186113cb86af03d0c9e7df8746fe710751627b5b560806bf1"
+            ]
+        },
+        {
+            "id": "transfer-carol-alice",
+            "title": "carol → alice 50 mUSDC (from the note bob deposited for her)",
+            "kind": "transfer",
+            "from": "carol",
+            "to": "alice",
+            "amount": "50.0 mUSDC",
+            "fee": "0.2 mUSDC",
+            "root": "0x1dfe59ef72b1aff09640c1f6054c20d85ca873c17e7126aefec528009bce48cc",
+            "extDataHash": "0x0d1693b82974954c1a24f723098393c174cef7461563b183f47b41405250383a",
+            "inputs": [
+                {
+                    "owner": "carol",
+                    "token": "mUSDC",
+                    "amount": "100000000",
+                    "commitment": "0x298610b2eb80503d8679f422039af560293f0f3e5dd7671aec4bafb01a145ded",
+                    "treeId": 0,
+                    "leafIndex": 8,
+                    "nullifier": "0x2f128a043695c39bbc5198ed101b9459fa417a553dc74030992a84f0724d7a3d"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x0f55bc1fafccd596147d321d629960f9ae00706c5f1ccb8aa908e821d6362d77",
+                "0x2c259f0aa9a79319407fda0a206af777d5ede86067747eba96ea336beca3fb1c",
+                "0x08781e2a6144bcb4e0ebe84fcb89136c0515a184089c93a8b6d88bf334740b20"
+            ],
+            "outputs": [
+                {
+                    "role": "recipient",
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "50000000",
+                    "commitment": "0x056f9329b6ca876921c831d8c25cc0ef6ff1d0b8f966a79c8120a6e218c165af",
+                    "treeId": 0,
+                    "leafIndex": 20
+                },
+                {
+                    "role": "change",
+                    "owner": "carol",
+                    "token": "mUSDC",
+                    "amount": "49800000",
+                    "commitment": "0x22b4d0c1ce64b9c6946cee0e467c2e2ec57c2d516726518052311d993d0459ab",
+                    "treeId": 0,
+                    "leafIndex": 21
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "mUSDC",
+                    "amount": "200000",
+                    "commitment": "0x2e842a61fc87e99a89bc93a64e7339fe09505401ecb8a77b0cdb0c87f1a6f6dc",
+                    "treeId": 0,
+                    "leafIndex": 22
+                }
+            ],
+            "flows": [
+                {
+                    "who": "carol",
+                    "token": "mUSDC",
+                    "amount": "-50200000"
+                },
+                {
+                    "who": "alice",
+                    "token": "mUSDC",
+                    "amount": "50000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mUSDC",
+                    "amount": "200000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "transfer",
+                "from": "relayer",
+                "hash": "0xfa048ff3f840c879b61731a5a8328b2865f1dc2f5d6c402fad55914a1cdc61b0",
+                "gasEstimate": "2060813",
+                "gasLimit": "2266894",
+                "block": 70944162,
+                "status": "success",
+                "gasUsed": "2266894",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.230089741"
+            },
+            "nullifiersOnChain": [
+                "0x2f128a043695c39bbc5198ed101b9459fa417a553dc74030992a84f0724d7a3d",
+                "0x0f55bc1fafccd596147d321d629960f9ae00706c5f1ccb8aa908e821d6362d77",
+                "0x2c259f0aa9a79319407fda0a206af777d5ede86067747eba96ea336beca3fb1c",
+                "0x08781e2a6144bcb4e0ebe84fcb89136c0515a184089c93a8b6d88bf334740b20"
+            ]
+        },
+        {
+            "id": "transfer-alice-carol-wmon",
+            "title": "alice → carol 0.3 WMON",
+            "kind": "transfer",
+            "from": "alice",
+            "to": "carol",
+            "amount": "0.3 WMON",
+            "fee": "0.01 WMON",
+            "root": "0x267be6070f9b037192d8958244f1225a27fbe64473d86e09cae73141e347c2b8",
+            "extDataHash": "0x1eb7f35aaa2506a00dff46be7ef8127aaf9f9625bb9ac423de68267433e97dd3",
+            "inputs": [
+                {
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "1000000000000000000",
+                    "commitment": "0x216fa12dde7e8531dd7618f14f4d228dbd2d47ffa4875389f81cfd87748d0c7c",
+                    "treeId": 0,
+                    "leafIndex": 4,
+                    "nullifier": "0x2ff2c195c7928594a016341c91854bdb7e196d081376521d3f9a5f5a79f0dd41"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x3023509c749c3ba72aa725f3169757fe905a714d27970fdb48bc46e088f34fc1",
+                "0x098eaf84eaf0bb6b1b4ec37d68044e067a3a3690aebe6a4d9f85ad057d7c4e66",
+                "0x22d3b409ec8755d8fcdf6145ca5bddd520be29a44578d5d88ab136e8921aacae"
+            ],
+            "outputs": [
+                {
+                    "role": "recipient",
+                    "owner": "carol",
+                    "token": "WMON",
+                    "amount": "300000000000000000",
+                    "commitment": "0x2c0f4fe852ffa9ca4be18348ae4104d5b382625b2d55b6b7c0bc62b97ee7e5b5",
+                    "treeId": 0,
+                    "leafIndex": 24
+                },
+                {
+                    "role": "change",
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "690000000000000000",
+                    "commitment": "0x1dbcdff156a43c4309ce981ffcf4496e6ca1f3e71e1c1a77d022d3fc00898194",
+                    "treeId": 0,
+                    "leafIndex": 25
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "WMON",
+                    "amount": "10000000000000000",
+                    "commitment": "0x10aad9f43b7e168ca887df5ac44044a3e1c4bc179a8eeefef13ac87186ba8491",
+                    "treeId": 0,
+                    "leafIndex": 26
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "WMON",
+                    "amount": "-310000000000000000"
+                },
+                {
+                    "who": "carol",
+                    "token": "WMON",
+                    "amount": "300000000000000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "WMON",
+                    "amount": "10000000000000000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "transfer",
+                "from": "relayer",
+                "hash": "0x3d77ac780433d77b0a983e564d1dbf0fac40aa28b02a8d0cfe4ae14d2395b002",
+                "gasEstimate": "2060777",
+                "gasLimit": "2266854",
+                "block": 70944175,
+                "status": "success",
+                "gasUsed": "2266854",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.230085681"
+            },
+            "nullifiersOnChain": [
+                "0x2ff2c195c7928594a016341c91854bdb7e196d081376521d3f9a5f5a79f0dd41",
+                "0x3023509c749c3ba72aa725f3169757fe905a714d27970fdb48bc46e088f34fc1",
+                "0x098eaf84eaf0bb6b1b4ec37d68044e067a3a3690aebe6a4d9f85ad057d7c4e66",
+                "0x22d3b409ec8755d8fcdf6145ca5bddd520be29a44578d5d88ab136e8921aacae"
+            ]
+        },
+        {
+            "id": "transfer-alice-bob-two-notes",
+            "title": "alice → bob 200 mUSDC, spending two notes in one proof",
+            "kind": "transfer",
+            "from": "alice",
+            "to": "bob",
+            "amount": "200.0 mUSDC",
+            "fee": "0.5 mUSDC",
+            "root": "0x2872845ed05aa3d66f52cf9336499452c0103d6ee5d6c2d3e7994479f4d6526e",
+            "extDataHash": "0x07f340666da935598abdedf107300626a25bfbe24141f5bb25ed376ea8eaafe2",
+            "inputs": [
+                {
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "179500000",
+                    "commitment": "0x0c603f06f9b081e095e231b3fadb569602d5a8e1a4d13c42c32fd0eaf0180d68",
+                    "treeId": 0,
+                    "leafIndex": 17,
+                    "nullifier": "0x1562e18da82c9da0867b0802c54df9cfef3690ff7f18eb75dc184887deca5ee5"
+                },
+                {
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "50000000",
+                    "commitment": "0x056f9329b6ca876921c831d8c25cc0ef6ff1d0b8f966a79c8120a6e218c165af",
+                    "treeId": 0,
+                    "leafIndex": 20,
+                    "nullifier": "0x115dadf58ac4436a12ff1072827b28a5134d22b51dd68a4144151eb61a863458"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x2d7ce607d0f8b44af9089e9495c2abe281007aaf3a1701fa30eb6106823c1de3",
+                "0x2f59289df9a9cbdc30a73fa9e8add34b11e9d714baf5480f4029991567244558"
+            ],
+            "outputs": [
+                {
+                    "role": "recipient",
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "200000000",
+                    "commitment": "0x24684b911916c7e77df1b6944be52f14bac0f5145169b481768ea412fe4637e0",
+                    "treeId": 0,
+                    "leafIndex": 28
+                },
+                {
+                    "role": "change",
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "29000000",
+                    "commitment": "0x0da0564701ccd8f780d5b72691c8381b7e825a80d588f383c1c83286b1b5ead7",
+                    "treeId": 0,
+                    "leafIndex": 29
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "mUSDC",
+                    "amount": "500000",
+                    "commitment": "0x23abba22e15bbaa9d8f9ce9675a46cf73f03a1a6075c8ae7bd4b3336fbea3c42",
+                    "treeId": 0,
+                    "leafIndex": 30
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "mUSDC",
+                    "amount": "-200500000"
+                },
+                {
+                    "who": "bob",
+                    "token": "mUSDC",
+                    "amount": "200000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mUSDC",
+                    "amount": "500000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "transfer",
+                "from": "relayer",
+                "hash": "0x35534ece3c39e43e7a9b36e774e5c24d3113b83ea8553f88ecdbab87f191a8f1",
+                "gasEstimate": "2060676",
+                "gasLimit": "2266743",
+                "block": 70944187,
+                "status": "success",
+                "gasUsed": "2266743",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.2300744145"
+            },
+            "nullifiersOnChain": [
+                "0x1562e18da82c9da0867b0802c54df9cfef3690ff7f18eb75dc184887deca5ee5",
+                "0x115dadf58ac4436a12ff1072827b28a5134d22b51dd68a4144151eb61a863458",
+                "0x2d7ce607d0f8b44af9089e9495c2abe281007aaf3a1701fa30eb6106823c1de3",
+                "0x2f59289df9a9cbdc30a73fa9e8add34b11e9d714baf5480f4029991567244558"
+            ]
+        },
+        {
+            "id": "transfer-batch",
+            "title": "one relayer transaction, two private transfers: bob → carol 20 mUSDC, carol → bob 0.1 WMON",
+            "kind": "transfer-batch",
+            "parts": [
+                {
+                    "from": "bob",
+                    "to": "carol",
+                    "amount": "20.0 mUSDC",
+                    "fee": "0.1 mUSDC",
+                    "root": "0x160c1241d415e5cabb2325b3f89a79fa248f940ed3c206071ddc6faaaab00598",
+                    "extDataHash": "0x1363eb7283112095230c0157187049f43631075b86a1f727767fa465cbe32efe",
+                    "inputs": [
+                        {
+                            "owner": "bob",
+                            "token": "mUSDC",
+                            "amount": "200000000",
+                            "commitment": "0x24684b911916c7e77df1b6944be52f14bac0f5145169b481768ea412fe4637e0",
+                            "treeId": 0,
+                            "leafIndex": 28,
+                            "nullifier": "0x214cdd0769e0eec9ebc9ce35c921f80ca822a89b1f5f3a1c1f0204f7f9789ab2"
+                        }
+                    ],
+                    "dummyNullifiers": [
+                        "0x0cfa2629ddd72fb9c5cb780ca1c43907a822e7d1ceecdf1edac05c244acb3aa6",
+                        "0x1b97c53e0536509d782388f6575a5e05d2a08be240bd3e06611b1a4fd2cdc3db",
+                        "0x165f440fc20485e4b3ea01291664143c0dadc33f8db907f6e10e7b68267bbdff"
+                    ],
+                    "outputs": [
+                        {
+                            "role": "recipient",
+                            "owner": "carol",
+                            "token": "mUSDC",
+                            "amount": "20000000",
+                            "commitment": "0x0de534acb1e5ed368d9fbda2a65a31408d7676e7601c374674aff6bfaa9b6f6d",
+                            "treeId": 0,
+                            "leafIndex": 32
+                        },
+                        {
+                            "role": "change",
+                            "owner": "bob",
+                            "token": "mUSDC",
+                            "amount": "179900000",
+                            "commitment": "0x1aa6a0db6e51118861107265f07fc0c4b5bb4471cece2cb97a7e672c135cc264",
+                            "treeId": 0,
+                            "leafIndex": 33
+                        },
+                        {
+                            "role": "fee",
+                            "owner": "relayer",
+                            "token": "mUSDC",
+                            "amount": "100000",
+                            "commitment": "0x007e1da9259c342c6d9908e0322d3209159d4b9efceb4d757aa132524f7d5787",
+                            "treeId": 0,
+                            "leafIndex": 34
+                        }
+                    ]
+                },
+                {
+                    "from": "carol",
+                    "to": "bob",
+                    "amount": "0.1 WMON",
+                    "fee": "0.005 WMON",
+                    "root": "0x160c1241d415e5cabb2325b3f89a79fa248f940ed3c206071ddc6faaaab00598",
+                    "extDataHash": "0x1a27d1f1d5c55da161f9b3dc9caf8dfd3568f0f25ba24e1d478e0e670d8cc4f4",
+                    "inputs": [
+                        {
+                            "owner": "carol",
+                            "token": "WMON",
+                            "amount": "300000000000000000",
+                            "commitment": "0x2c0f4fe852ffa9ca4be18348ae4104d5b382625b2d55b6b7c0bc62b97ee7e5b5",
+                            "treeId": 0,
+                            "leafIndex": 24,
+                            "nullifier": "0x2c3cc89fc85422c1e18aa744c4fc7170510b0a00b1d42a48a256ae94e54f7e1a"
+                        }
+                    ],
+                    "dummyNullifiers": [
+                        "0x0cc07d38fd5d0dc096711ae0b573979b5d7b53886d736b98939f28174fe8f77a",
+                        "0x0a4a95784175c3bde02b8a5a0f4a51aefef6c141d334d39145605285bfd9c0d6",
+                        "0x2d3156314a7e46eb664f399641591c683a1b7d83844ae7024437edca7cf789a2"
+                    ],
+                    "outputs": [
+                        {
+                            "role": "recipient",
+                            "owner": "bob",
+                            "token": "WMON",
+                            "amount": "100000000000000000",
+                            "commitment": "0x0ced66c07f60d7401b8242907432a9e7347ea94587f2d55f6a8d1ad20a380ac4",
+                            "treeId": 0,
+                            "leafIndex": 36
+                        },
+                        {
+                            "role": "change",
+                            "owner": "carol",
+                            "token": "WMON",
+                            "amount": "195000000000000000",
+                            "commitment": "0x2a6c99d2361bfad7c64ce4c14a7fb843560b4fb422839b2243235f96f9f2365f",
+                            "treeId": 0,
+                            "leafIndex": 37
+                        },
+                        {
+                            "role": "fee",
+                            "owner": "relayer",
+                            "token": "WMON",
+                            "amount": "5000000000000000",
+                            "commitment": "0x2b7e5a5811a58a0af6476a8de0057075d0c8f72227bf9cb939cefd73e8cf81b6",
+                            "treeId": 0,
+                            "leafIndex": 38
+                        }
+                    ]
+                }
+            ],
+            "flows": [
+                {
+                    "who": "bob",
+                    "token": "mUSDC",
+                    "amount": "-20100000"
+                },
+                {
+                    "who": "carol",
+                    "token": "mUSDC",
+                    "amount": "20000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mUSDC",
+                    "amount": "100000"
+                },
+                {
+                    "who": "carol",
+                    "token": "WMON",
+                    "amount": "-105000000000000000"
+                },
+                {
+                    "who": "bob",
+                    "token": "WMON",
+                    "amount": "100000000000000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "WMON",
+                    "amount": "5000000000000000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "transfer",
+                "from": "relayer",
+                "hash": "0xbef35179784ea8ab92eeef9ed92da99eddea6e810233275ddce3e35b7cdbc7b4",
+                "gasEstimate": "4008559",
+                "gasLimit": "4409414",
+                "block": 70944210,
+                "status": "success",
+                "gasUsed": "4409414",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.447555521"
+            },
+            "nullifiersOnChain": [
+                "0x214cdd0769e0eec9ebc9ce35c921f80ca822a89b1f5f3a1c1f0204f7f9789ab2",
+                "0x0cfa2629ddd72fb9c5cb780ca1c43907a822e7d1ceecdf1edac05c244acb3aa6",
+                "0x1b97c53e0536509d782388f6575a5e05d2a08be240bd3e06611b1a4fd2cdc3db",
+                "0x165f440fc20485e4b3ea01291664143c0dadc33f8db907f6e10e7b68267bbdff",
+                "0x2c3cc89fc85422c1e18aa744c4fc7170510b0a00b1d42a48a256ae94e54f7e1a",
+                "0x0cc07d38fd5d0dc096711ae0b573979b5d7b53886d736b98939f28174fe8f77a",
+                "0x0a4a95784175c3bde02b8a5a0f4a51aefef6c141d334d39145605285bfd9c0d6",
+                "0x2d3156314a7e46eb664f399641591c683a1b7d83844ae7024437edca7cf789a2"
+            ]
+        },
+        {
+            "id": "withdraw-bob-dave",
+            "title": "bob withdraws 100 mUSDC to dave (unregistered, public)",
+            "kind": "withdraw",
+            "from": "bob",
+            "to": "dave",
+            "amount": "100.0 mUSDC",
+            "fee": "0.5 mUSDC",
+            "unwrapNative": false,
+            "root": "0x0029bd3da238c9bf871f16d80f4e02dc01d39774e3da1bf0da1c4ad1bff410f3",
+            "extDataHash": "0x0b68f0e17b190982be6a67a560c451a0fe1e47c65aad25ac3e27ad1ddbc012f5",
+            "inputs": [
+                {
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "179900000",
+                    "commitment": "0x1aa6a0db6e51118861107265f07fc0c4b5bb4471cece2cb97a7e672c135cc264",
+                    "treeId": 0,
+                    "leafIndex": 33,
+                    "nullifier": "0x19622408ff456c9339c24d625779b12a0f9610d677754a42d3e1c6ff1b0cef3f"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x246347155cffb7c119cd9114e3c821fb1417410fca8492bd25a4e5e4162f661a",
+                "0x276c51775ba604d6e11130526dcb565737aa292f11cd83e22242159aad46ae9d",
+                "0x301991f70cdde9273825829acb08e2081f87b5a9c31a3cea87c17ab82f250401"
+            ],
+            "outputs": [
+                {
+                    "role": "change",
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "79400000",
+                    "commitment": "0x28c83a529a3ce0059edc50dd0111fc8716ede5db7d7671927a80749e86f451e9",
+                    "treeId": 0,
+                    "leafIndex": 40
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "mUSDC",
+                    "amount": "500000",
+                    "commitment": "0x259cf78b5bce0a086776e06602f48810e594f6975739680b6ef87cb7b4989627",
+                    "treeId": 0,
+                    "leafIndex": 41
+                }
+            ],
+            "flows": [
+                {
+                    "who": "bob",
+                    "token": "mUSDC",
+                    "amount": "-100500000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mUSDC",
+                    "amount": "500000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "withdraw",
+                "from": "relayer",
+                "hash": "0x8aaeafae4166eab74c308660f36f2c080e26abd8bb19a7f043244af716fd4f0b",
+                "gasEstimate": "2095364",
+                "gasLimit": "2304900",
+                "block": 70944224,
+                "status": "success",
+                "gasUsed": "2304900",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.23394735"
+            },
+            "nullifiersOnChain": [
+                "0x19622408ff456c9339c24d625779b12a0f9610d677754a42d3e1c6ff1b0cef3f",
+                "0x246347155cffb7c119cd9114e3c821fb1417410fca8492bd25a4e5e4162f661a",
+                "0x276c51775ba604d6e11130526dcb565737aa292f11cd83e22242159aad46ae9d",
+                "0x301991f70cdde9273825829acb08e2081f87b5a9c31a3cea87c17ab82f250401"
+            ],
+            "public": {
+                "recipient": "dave",
+                "asset": "mUSDC",
+                "received": "100000000",
+                "matches": true
+            }
+        },
+        {
+            "id": "withdraw-alice-dave-native",
+            "title": "alice withdraws 0.2 MON to dave as native MON (unwrapped)",
+            "kind": "withdraw",
+            "from": "alice",
+            "to": "dave",
+            "amount": "0.2 WMON",
+            "fee": "0.01 WMON",
+            "unwrapNative": true,
+            "root": "0x097f21dce978c79c898b674cc9512233dd1c9b89238ec853f33655a58171ae65",
+            "extDataHash": "0x2617b75324654665897e98b1ef14aee8190ab3f995e5c84b50dbc5dc540620bb",
+            "inputs": [
+                {
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "690000000000000000",
+                    "commitment": "0x1dbcdff156a43c4309ce981ffcf4496e6ca1f3e71e1c1a77d022d3fc00898194",
+                    "treeId": 0,
+                    "leafIndex": 25,
+                    "nullifier": "0x2578cbf752fe6468bccf298f79fac2ba11ded2fdd636005d0fdf24c64e5d08ed"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x0fdb00f5782a7b8ff77160932003ab1c22e293c5810abe4a65d8562f2bf81eeb",
+                "0x071652cd3e58a94f39923319a2be83767efa7169f85cf9cd3adad342e7388bf2",
+                "0x138c1447399f5ed2a7bfca1d4bfd80ce45aac41afc57e9fbd380d3b2983aa579"
+            ],
+            "outputs": [
+                {
+                    "role": "change",
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "480000000000000000",
+                    "commitment": "0x202505ba018eabd95e4c79d9e183dcea5e6d43661fd177cbb9181f123c68d4b4",
+                    "treeId": 0,
+                    "leafIndex": 44
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "WMON",
+                    "amount": "10000000000000000",
+                    "commitment": "0x0af99c0a7ca38e2c00dc1fc0a971c363b76883948ec23f8f077ac3c1de02b7da",
+                    "treeId": 0,
+                    "leafIndex": 45
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "WMON",
+                    "amount": "-210000000000000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "WMON",
+                    "amount": "10000000000000000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "withdraw",
+                "from": "relayer",
+                "hash": "0xf3536d0051814290b876964b6af0e2e6d9039d4af0c236f882179fb71149bb6a",
+                "gasEstimate": "2115380",
+                "gasLimit": "2326918",
+                "block": 70944239,
+                "status": "success",
+                "gasUsed": "2326918",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.236182177"
+            },
+            "nullifiersOnChain": [
+                "0x2578cbf752fe6468bccf298f79fac2ba11ded2fdd636005d0fdf24c64e5d08ed",
+                "0x0fdb00f5782a7b8ff77160932003ab1c22e293c5810abe4a65d8562f2bf81eeb",
+                "0x071652cd3e58a94f39923319a2be83767efa7169f85cf9cd3adad342e7388bf2",
+                "0x138c1447399f5ed2a7bfca1d4bfd80ce45aac41afc57e9fbd380d3b2983aa579"
+            ],
+            "public": {
+                "recipient": "dave",
+                "asset": "MON (native)",
+                "received": "200000000000000000",
+                "matches": true
+            }
+        },
+        {
+            "id": "swap-bob-small",
+            "title": "bob swaps 0.01 WMON → mUSDC (a small trade: the backend compares both fee tiers)",
+            "kind": "swap",
+            "from": "bob",
+            "swap": {
+                "owner": "bob",
+                "tokenIn": "WMON",
+                "tokenOut": "mUSDC",
+                "amountIn": "0.01 WMON",
+                "fee": "0.0005 WMON",
+                "route": "WMON → mUSDC",
+                "feeTiers": [
+                    "0.05%"
+                ],
+                "path": "0xfb8bf4c1cc7a94c73d209a149ea2abea852bc5410001f4e0df03e4f95adab2dcf5aa06e6eb6c497fee5fff",
+                "quote": "0.0997 mUSDC",
+                "minAmountOut": "0.098703 mUSDC",
+                "slippage": "1%",
+                "amountOut": "99700",
+                "received": "0.0997 mUSDC"
+            },
+            "root": "0x042011db3dde58ead54253ffddc054c741240e0738e9504c9bfcd0f06c3c3882",
+            "extDataHash": "0x16da34e3b6c3d6c6bb66ff309ea007bf2ec1fb2791f271f883f76c805ccc7ee8",
+            "inputs": [
+                {
+                    "owner": "bob",
+                    "token": "WMON",
+                    "amount": "500000000000000000",
+                    "commitment": "0x0fccf90ac706ea0e19d9b9640e3f84cf1f15c639864ceb65c107c34bba2a9862",
+                    "treeId": 0,
+                    "leafIndex": 12,
+                    "nullifier": "0x0ddab4132495307104e4ca179fffb6ebe3844986dbb9204fbda0b3c9f30b5af5"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x08a00a0bcd0739d10cf5346b5170ed596b98694dffa866904fc2c97729357f4b",
+                "0x194d6d9e596cca02ce3054b712489e336b9ccdf518b56ff00ee3d5e08742a014",
+                "0x19bbcf104fae40e0d526c4af1f58d0f79b79eed21e686e9c012822ee56ce420d"
+            ],
+            "outputs": [
+                {
+                    "role": "change",
+                    "owner": "bob",
+                    "token": "WMON",
+                    "amount": "489500000000000000",
+                    "commitment": "0x1069bcec6f74cb276c7bd9d569394ae46344ea259cba05856661e0d36a9ca13e",
+                    "treeId": 0,
+                    "leafIndex": 48
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "WMON",
+                    "amount": "500000000000000",
+                    "commitment": "0x10c2823115e9495d195b4122a8bfc28c7c8cb216a6aab42fdf43ee238d7d5aed",
+                    "treeId": 0,
+                    "leafIndex": 49
+                },
+                {
+                    "role": "bought",
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "99700",
+                    "commitment": "0x1559950283c16c782d869b3305f0b0f32b3c1fe54df095592501b50634d8f59e",
+                    "treeId": 0,
+                    "leafIndex": 50
+                }
+            ],
+            "flows": [
+                {
+                    "who": "bob",
+                    "token": "WMON",
+                    "amount": "-10500000000000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "WMON",
+                    "amount": "500000000000000"
+                },
+                {
+                    "who": "bob",
+                    "token": "mUSDC",
+                    "amount": "99700"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "swap",
+                "from": "relayer",
+                "hash": "0x6a9b438ff76b925a0a59ab2dc6cb1c04a327eaded37977476161fa96194235ed",
+                "gasEstimate": "2425514",
+                "gasLimit": "2668065",
+                "block": 70944256,
+                "status": "success",
+                "gasUsed": "2668065",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.2708085975"
+            },
+            "nullifiersOnChain": [
+                "0x0ddab4132495307104e4ca179fffb6ebe3844986dbb9204fbda0b3c9f30b5af5",
+                "0x08a00a0bcd0739d10cf5346b5170ed596b98694dffa866904fc2c97729357f4b",
+                "0x194d6d9e596cca02ce3054b712489e336b9ccdf518b56ff00ee3d5e08742a014",
+                "0x19bbcf104fae40e0d526c4af1f58d0f79b79eed21e686e9c012822ee56ce420d"
+            ]
+        },
+        {
+            "id": "swap-alice-musdc-wmon",
+            "title": "alice swaps 5 mUSDC → WMON",
+            "kind": "swap",
+            "from": "alice",
+            "swap": {
+                "owner": "alice",
+                "tokenIn": "mUSDC",
+                "tokenOut": "WMON",
+                "amountIn": "5.0 mUSDC",
+                "fee": "0.05 mUSDC",
+                "route": "mUSDC → WMON",
+                "feeTiers": [
+                    "0.3%"
+                ],
+                "path": "0xe0df03e4f95adab2dcf5aa06e6eb6c497fee5fff000bb8fb8bf4c1cc7a94c73d209a149ea2abea852bc541",
+                "quote": "0.469259281049596949 WMON",
+                "minAmountOut": "0.464566688239100979 WMON",
+                "slippage": "1%",
+                "amountOut": "469259281049596949",
+                "received": "0.469259281049596949 WMON"
+            },
+            "root": "0x0809d6be93c0ebd2646bd0af306e62a0b066c3e30ce0c00113b91bc359548ecb",
+            "extDataHash": "0x1672da31b844609415d6c21436f12e38b4a8d5f1f25981c645b7bdc88b7ad38d",
+            "inputs": [
+                {
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "29000000",
+                    "commitment": "0x0da0564701ccd8f780d5b72691c8381b7e825a80d588f383c1c83286b1b5ead7",
+                    "treeId": 0,
+                    "leafIndex": 29,
+                    "nullifier": "0x02f25b880a6de5ebcb50f34dc7bce632934cf3e533b9655bc3c824d59e93f1e6"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x10640d79fc655306ff5da2eea8bcdfa5d00da5e63a7bacdb06edec522ecde795",
+                "0x26912ea3fca3936377673f3c7f342b48fcb41e59d0ce42fef05e78166a194c82",
+                "0x29ce8e95a71211eaba0d25b0d5cfe4dd55fa0cd1d9a8877d539630e2f47678ec"
+            ],
+            "outputs": [
+                {
+                    "role": "change",
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "23950000",
+                    "commitment": "0x07068e784e45912f23343c9f87a392973d4b64bb5c8d38adf7c960de38e634cf",
+                    "treeId": 0,
+                    "leafIndex": 52
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "mUSDC",
+                    "amount": "50000",
+                    "commitment": "0x03eb38ec27bbc5cd27f6137c57ce0f342a798c1c4c0ee1c9c7081f52eac46124",
+                    "treeId": 0,
+                    "leafIndex": 53
+                },
+                {
+                    "role": "bought",
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "469259281049596949",
+                    "commitment": "0x24ae4b128e27c302efd57d0483d3b998d4ea073b926fbd8a8126996300d082b7",
+                    "treeId": 0,
+                    "leafIndex": 54
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "mUSDC",
+                    "amount": "-5050000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mUSDC",
+                    "amount": "50000"
+                },
+                {
+                    "who": "alice",
+                    "token": "WMON",
+                    "amount": "469259281049596949"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "swap",
+                "from": "relayer",
+                "hash": "0xb46b90962af501ef8be796987e7c9009f230a77e468f3af7a8fdff7055c3544a",
+                "gasEstimate": "2427603",
+                "gasLimit": "2670363",
+                "block": 70944274,
+                "status": "success",
+                "gasUsed": "2670363",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.2710418445"
+            },
+            "nullifiersOnChain": [
+                "0x02f25b880a6de5ebcb50f34dc7bce632934cf3e533b9655bc3c824d59e93f1e6",
+                "0x10640d79fc655306ff5da2eea8bcdfa5d00da5e63a7bacdb06edec522ecde795",
+                "0x26912ea3fca3936377673f3c7f342b48fcb41e59d0ce42fef05e78166a194c82",
+                "0x29ce8e95a71211eaba0d25b0d5cfe4dd55fa0cd1d9a8877d539630e2f47678ec"
+            ]
+        },
+        {
+            "id": "swap-bob-wmon-musdc",
+            "title": "bob swaps 0.2 WMON → mUSDC",
+            "kind": "swap",
+            "from": "bob",
+            "swap": {
+                "owner": "bob",
+                "tokenIn": "WMON",
+                "tokenOut": "mUSDC",
+                "amountIn": "0.2 WMON",
+                "fee": "0.005 WMON",
+                "route": "WMON → mUSDC",
+                "feeTiers": [
+                    "0.3%"
+                ],
+                "path": "0xfb8bf4c1cc7a94c73d209a149ea2abea852bc541000bb8e0df03e4f95adab2dcf5aa06e6eb6c497fee5fff",
+                "quote": "2.192199 mUSDC",
+                "minAmountOut": "2.170277 mUSDC",
+                "slippage": "1%",
+                "amountOut": "2192199",
+                "received": "2.192199 mUSDC"
+            },
+            "root": "0x025e947f5475e42cef05635c3c6e98eee369e0b13a6f1433fe7bfea563e53c47",
+            "extDataHash": "0x219abdd4c910c5343892a398557cf9ee3a489b71b2cfcdb2ed7fb9747fdcaa6d",
+            "inputs": [
+                {
+                    "owner": "bob",
+                    "token": "WMON",
+                    "amount": "489500000000000000",
+                    "commitment": "0x1069bcec6f74cb276c7bd9d569394ae46344ea259cba05856661e0d36a9ca13e",
+                    "treeId": 0,
+                    "leafIndex": 48,
+                    "nullifier": "0x1a85a4926dec66bcaa44401ae46766d880b390a337338a9e996c873e27cc73d3"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x2aaae3b927362cea2e814523fdb49fadffc04b1bace94d7641c2028cbc61f3c3",
+                "0x048ee0735e871fc4fee36f59d90b5a3f4a939fd83313650ca2deecbefcf01256",
+                "0x05629bf05348d581120168cd5c02df722e73470c32dda50cd78383fc7ea76ab0"
+            ],
+            "outputs": [
+                {
+                    "role": "change",
+                    "owner": "bob",
+                    "token": "WMON",
+                    "amount": "284500000000000000",
+                    "commitment": "0x0b58f15bd6db002cf1ce5616c6ef5b2d52509722b36ef6e8495b7d3839f38d86",
+                    "treeId": 0,
+                    "leafIndex": 56
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "WMON",
+                    "amount": "5000000000000000",
+                    "commitment": "0x0f6124f83c7b67a2ca4db0491a709d2255f3dbe4bec240312d0fca23c928a81a",
+                    "treeId": 0,
+                    "leafIndex": 57
+                },
+                {
+                    "role": "bought",
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "2192199",
+                    "commitment": "0x002f8a4d1d553b17dfaebd5ee35db47df448f8a139b0a82e0604c49a5c04ad66",
+                    "treeId": 0,
+                    "leafIndex": 58
+                }
+            ],
+            "flows": [
+                {
+                    "who": "bob",
+                    "token": "WMON",
+                    "amount": "-205000000000000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "WMON",
+                    "amount": "5000000000000000"
+                },
+                {
+                    "who": "bob",
+                    "token": "mUSDC",
+                    "amount": "2192199"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "swap",
+                "from": "relayer",
+                "hash": "0xb29857d93b7e6e4ea3baf321e674e85ddcd7c140559f474adcfe63467d15ec00",
+                "gasEstimate": "2425347",
+                "gasLimit": "2667881",
+                "block": 70944289,
+                "status": "success",
+                "gasUsed": "2667881",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.2707899215"
+            },
+            "nullifiersOnChain": [
+                "0x1a85a4926dec66bcaa44401ae46766d880b390a337338a9e996c873e27cc73d3",
+                "0x2aaae3b927362cea2e814523fdb49fadffc04b1bace94d7641c2028cbc61f3c3",
+                "0x048ee0735e871fc4fee36f59d90b5a3f4a939fd83313650ca2deecbefcf01256",
+                "0x05629bf05348d581120168cd5c02df722e73470c32dda50cd78383fc7ea76ab0"
+            ]
+        },
+        {
+            "id": "swap-carol-two-hops",
+            "title": "carol swaps 0.1 WMON → mTKN (no direct pool: WMON → mUSDC → mTKN)",
+            "kind": "swap",
+            "from": "carol",
+            "swap": {
+                "owner": "carol",
+                "tokenIn": "WMON",
+                "tokenOut": "mTKN",
+                "amountIn": "0.1 WMON",
+                "fee": "0.002 WMON",
+                "route": "WMON → mUSDC → mTKN",
+                "feeTiers": [
+                    "0.3%",
+                    "0.05%"
+                ],
+                "path": "0xfb8bf4c1cc7a94c73d209a149ea2abea852bc541000bb8e0df03e4f95adab2dcf5aa06e6eb6c497fee5fff0001f40d62f4fb9b6636b2509341f0b611883b7db9da29",
+                "quote": "1.052590884984491839 mTKN",
+                "minAmountOut": "1.04206497613464692 mTKN",
+                "slippage": "1%",
+                "amountOut": "1052590884984491839",
+                "received": "1.052590884984491839 mTKN"
+            },
+            "root": "0x28e44c5f8b1b898c4873ec97f411bb77fee375cb69ac31d2f7cad8ef0561dd9b",
+            "extDataHash": "0x2b9cb409c95010dda1a7fa7d05fa16a9e34a7269d912aa7ff9bcf3617cbe9467",
+            "inputs": [
+                {
+                    "owner": "carol",
+                    "token": "WMON",
+                    "amount": "195000000000000000",
+                    "commitment": "0x2a6c99d2361bfad7c64ce4c14a7fb843560b4fb422839b2243235f96f9f2365f",
+                    "treeId": 0,
+                    "leafIndex": 37,
+                    "nullifier": "0x2d3802aecd36656dc7dbc0c0e8156d377a0403eceff43793b1a7f2712bdfd337"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x2f49d7fddf9e484f66af2d6ed9eed604bb128e01c91e8dee143c9ae4ac2364b8",
+                "0x16ebf16cac256beb57252f1b0f52c3f71fbae26338b65a16cbdb6808abd99d2b",
+                "0x1150ab0947cfba53b58a31626b16a932ce22af68b3551f8dc2fd0d3a44c7c055"
+            ],
+            "outputs": [
+                {
+                    "role": "change",
+                    "owner": "carol",
+                    "token": "WMON",
+                    "amount": "93000000000000000",
+                    "commitment": "0x19abee58cd9a94167b741ae4ae4e0ed1d3e80bfa2e4c2547e41a007833885e82",
+                    "treeId": 0,
+                    "leafIndex": 60
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "WMON",
+                    "amount": "2000000000000000",
+                    "commitment": "0x2b41fde19c98500701ec2f256c6516264e1e95afb99cc9482a8a65da68aee7f2",
+                    "treeId": 0,
+                    "leafIndex": 61
+                },
+                {
+                    "role": "bought",
+                    "owner": "carol",
+                    "token": "mTKN",
+                    "amount": "1052590884984491839",
+                    "commitment": "0x165a94217af52f6a316120b6bdf3ab6c73454c0f7904485cbf30a11e5169470d",
+                    "treeId": 0,
+                    "leafIndex": 62
+                }
+            ],
+            "flows": [
+                {
+                    "who": "carol",
+                    "token": "WMON",
+                    "amount": "-102000000000000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "WMON",
+                    "amount": "2000000000000000"
+                },
+                {
+                    "who": "carol",
+                    "token": "mTKN",
+                    "amount": "1052590884984491839"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "swap",
+                "from": "relayer",
+                "hash": "0x915ee6e284cf42f938f58ec48a2bc0670180f78b9aa7d1db6169ee04298609f1",
+                "gasEstimate": "2568946",
+                "gasLimit": "2825840",
+                "block": 70944313,
+                "status": "success",
+                "gasUsed": "2825840",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.28682276"
+            },
+            "nullifiersOnChain": [
+                "0x2d3802aecd36656dc7dbc0c0e8156d377a0403eceff43793b1a7f2712bdfd337",
+                "0x2f49d7fddf9e484f66af2d6ed9eed604bb128e01c91e8dee143c9ae4ac2364b8",
+                "0x16ebf16cac256beb57252f1b0f52c3f71fbae26338b65a16cbdb6808abd99d2b",
+                "0x1150ab0947cfba53b58a31626b16a932ce22af68b3551f8dc2fd0d3a44c7c055"
+            ]
+        },
+        {
+            "id": "transfer-alice-bought-wmon",
+            "title": "alice → bob 0.4 WMON out of the WMON she bought",
+            "kind": "transfer",
+            "from": "alice",
+            "to": "bob",
+            "amount": "0.4 WMON",
+            "fee": "0.005 WMON",
+            "root": "0x0a8561aac973afeb291ff37373bb8600fb6c74b97cb39efd8c39654141a499f8",
+            "extDataHash": "0x00716f1028616fb7a260542f24d86f2cb6196cc6454347f385dc88d4ff625b42",
+            "inputs": [
+                {
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "469259281049596949",
+                    "commitment": "0x24ae4b128e27c302efd57d0483d3b998d4ea073b926fbd8a8126996300d082b7",
+                    "treeId": 0,
+                    "leafIndex": 54,
+                    "nullifier": "0x2b52b09da38cfc50c1fe4fd9695c5e2446ed258ae01fadf9e950bd50a0ba1f6d",
+                    "fromSwap": true
+                }
+            ],
+            "dummyNullifiers": [
+                "0x2fa47ee1dc0b1f3a45cdd3b7986efa0bbf7262d9222268a72edb07c9d36d919f",
+                "0x1ca27633a7acd4dc21702c90adf21713fa74790c4fc8368e2a8b8d05e4919aed",
+                "0x194c5fe3fd9c5b9e7833fb7144677df1a1ffb4bd460a332a553e7f7585806b96"
+            ],
+            "outputs": [
+                {
+                    "role": "recipient",
+                    "owner": "bob",
+                    "token": "WMON",
+                    "amount": "400000000000000000",
+                    "commitment": "0x2ab50a882ee830355e7b7139bc7ac72cdbf6838e042868afeb7fec39f0f5b606",
+                    "treeId": 0,
+                    "leafIndex": 64
+                },
+                {
+                    "role": "change",
+                    "owner": "alice",
+                    "token": "WMON",
+                    "amount": "64259281049596949",
+                    "commitment": "0x1b2fcbfe04175f880825783c0592bf86985f69532fdbe5fea2450b78cafc6f53",
+                    "treeId": 0,
+                    "leafIndex": 65
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "WMON",
+                    "amount": "5000000000000000",
+                    "commitment": "0x18cf592a0c5d5ac9427be84add6f97077f79399069c1178195eafbb2f8f93e23",
+                    "treeId": 0,
+                    "leafIndex": 66
+                }
+            ],
+            "flows": [
+                {
+                    "who": "alice",
+                    "token": "WMON",
+                    "amount": "-405000000000000000"
+                },
+                {
+                    "who": "bob",
+                    "token": "WMON",
+                    "amount": "400000000000000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "WMON",
+                    "amount": "5000000000000000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "transfer",
+                "from": "relayer",
+                "hash": "0xa0571c0b5f2dfeadb1576c4f34e86589f092a39b9ce74c47d658eab1c914d88d",
+                "gasEstimate": "2060880",
+                "gasLimit": "2266968",
+                "block": 70944329,
+                "status": "success",
+                "gasUsed": "2266968",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.230097252"
+            },
+            "nullifiersOnChain": [
+                "0x2b52b09da38cfc50c1fe4fd9695c5e2446ed258ae01fadf9e950bd50a0ba1f6d",
+                "0x2fa47ee1dc0b1f3a45cdd3b7986efa0bbf7262d9222268a72edb07c9d36d919f",
+                "0x1ca27633a7acd4dc21702c90adf21713fa74790c4fc8368e2a8b8d05e4919aed",
+                "0x194c5fe3fd9c5b9e7833fb7144677df1a1ffb4bd460a332a553e7f7585806b96"
+            ]
+        },
+        {
+            "id": "withdraw-carol-mtkn",
+            "title": "carol withdraws all the mTKN she bought to dave",
+            "kind": "withdraw",
+            "from": "carol",
+            "to": "dave",
+            "amount": "1.042590884984491839 mTKN",
+            "fee": "0.01 mTKN",
+            "unwrapNative": false,
+            "root": "0x0b00985178b8f9263cf1d692d924c7ba1f0ff25b62d44292ad9dc0f2af1e0e08",
+            "extDataHash": "0x12cb3e297060664017cefd8fb50483fdc1d61a51477e7e1cf4fddb9dbb4b31c2",
+            "inputs": [
+                {
+                    "owner": "carol",
+                    "token": "mTKN",
+                    "amount": "1052590884984491839",
+                    "commitment": "0x165a94217af52f6a316120b6bdf3ab6c73454c0f7904485cbf30a11e5169470d",
+                    "treeId": 0,
+                    "leafIndex": 62,
+                    "nullifier": "0x253097990f8c3f559f9a062210d9c7571c3daf925cec27650eecd51ca2701b4b",
+                    "fromSwap": true
+                }
+            ],
+            "dummyNullifiers": [
+                "0x1bdb5ae344c461e281090295e7e9798663351d2ec8637fe1025f5a1f11a54295",
+                "0x09898773b8c0e059cfca44f8ab7b8cdc77aae313da91b855869cef457260be58",
+                "0x244dde6122d7583da8a79a621f4a52d154029a7306cf70c94fe8737357e030bb"
+            ],
+            "outputs": [
+                {
+                    "role": "change",
+                    "owner": "carol",
+                    "token": "mTKN",
+                    "amount": "0",
+                    "commitment": "0x264e3cd0e19fa84691a6e1522cd6649bc763b190abfad4a3040cce9610b37493",
+                    "treeId": 0,
+                    "leafIndex": 68
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "mTKN",
+                    "amount": "10000000000000000",
+                    "commitment": "0x0caeebc1e20ea2c618f2ff40d9fc08f4ba713f07556506f8893a66eb870be7d6",
+                    "treeId": 0,
+                    "leafIndex": 69
+                }
+            ],
+            "flows": [
+                {
+                    "who": "carol",
+                    "token": "mTKN",
+                    "amount": "-1052590884984491839"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mTKN",
+                    "amount": "10000000000000000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "withdraw",
+                "from": "relayer",
+                "hash": "0x4153978bc69eae4f5f15bec125f6bba297c8d48f8c6857cc38482b6e70e73731",
+                "gasEstimate": "2095437",
+                "gasLimit": "2304980",
+                "block": 70944343,
+                "status": "success",
+                "gasUsed": "2304980",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.23395547"
+            },
+            "nullifiersOnChain": [
+                "0x253097990f8c3f559f9a062210d9c7571c3daf925cec27650eecd51ca2701b4b",
+                "0x1bdb5ae344c461e281090295e7e9798663351d2ec8637fe1025f5a1f11a54295",
+                "0x09898773b8c0e059cfca44f8ab7b8cdc77aae313da91b855869cef457260be58",
+                "0x244dde6122d7583da8a79a621f4a52d154029a7306cf70c94fe8737357e030bb"
+            ],
+            "public": {
+                "recipient": "dave",
+                "asset": "mTKN",
+                "received": "1042590884984491839",
+                "matches": true
+            }
+        },
+        {
+            "id": "viewing-keys",
+            "title": "alice shares a full, an incoming and an epoch viewing key; none can spend",
+            "kind": "viewing-keys",
+            "status": "done",
+            "wallet": {
+                "notes": 10,
+                "received": {
+                    "mUSDC": "582.45 mUSDC",
+                    "WMON": "2.703518562099193898 WMON"
+                },
+                "balances": {
+                    "WMON": "0.544259281049596949 WMON",
+                    "mUSDC": "23.95 mUSDC"
+                },
+                "outgoing": [
+                    {
+                        "action": "TRANSFER",
+                        "token": "mUSDC",
+                        "amount": "120.0 mUSDC",
+                        "fee": "0.5 mUSDC",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0x4b40d9d99396d6c753675ed0c34575d5868890e99a7601b2530dfc4373b547df"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "WMON",
+                        "amount": "0.3 WMON",
+                        "fee": "0.01 WMON",
+                        "to": "carol",
+                        "epoch": 0,
+                        "txHash": "0x3d77ac780433d77b0a983e564d1dbf0fac40aa28b02a8d0cfe4ae14d2395b002"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "mUSDC",
+                        "amount": "200.0 mUSDC",
+                        "fee": "0.5 mUSDC",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0x35534ece3c39e43e7a9b36e774e5c24d3113b83ea8553f88ecdbab87f191a8f1"
+                    },
+                    {
+                        "action": "WITHDRAW",
+                        "token": "WMON",
+                        "amount": "0.2 WMON",
+                        "fee": "0.01 WMON",
+                        "to": "dave",
+                        "epoch": 0,
+                        "txHash": "0xf3536d0051814290b876964b6af0e2e6d9039d4af0c236f882179fb71149bb6a"
+                    },
+                    {
+                        "action": "SWAP",
+                        "token": "mUSDC",
+                        "amount": "5.0 mUSDC",
+                        "fee": "0.05 mUSDC",
+                        "to": "swap into WMON",
+                        "epoch": 0,
+                        "txHash": "0xb46b90962af501ef8be796987e7c9009f230a77e468f3af7a8fdff7055c3544a"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "WMON",
+                        "amount": "0.4 WMON",
+                        "fee": "0.005 WMON",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0xa0571c0b5f2dfeadb1576c4f34e86589f092a39b9ce74c47d658eab1c914d88d"
+                    }
+                ]
+            },
+            "keys": {
+                "full": {
+                    "encodedLength": 642,
+                    "fingerprint": "0x1691f4618564f5c8",
+                    "network": "testnet",
+                    "containsSpendingKey": false,
+                    "sees": {
+                        "notes": 10,
+                        "received": {
+                            "mUSDC": "582.45 mUSDC",
+                            "WMON": "2.703518562099193898 WMON"
+                        },
+                        "balances": {
+                            "WMON": "0.544259281049596949 WMON",
+                            "mUSDC": "23.95 mUSDC"
+                        },
+                        "outgoing": [
+                            {
+                                "action": "TRANSFER",
+                                "token": "mUSDC",
+                                "amount": "120.0 mUSDC",
+                                "fee": "0.5 mUSDC",
+                                "to": "bob",
+                                "epoch": 0,
+                                "txHash": "0x4b40d9d99396d6c753675ed0c34575d5868890e99a7601b2530dfc4373b547df"
+                            },
+                            {
+                                "action": "TRANSFER",
+                                "token": "WMON",
+                                "amount": "0.3 WMON",
+                                "fee": "0.01 WMON",
+                                "to": "carol",
+                                "epoch": 0,
+                                "txHash": "0x3d77ac780433d77b0a983e564d1dbf0fac40aa28b02a8d0cfe4ae14d2395b002"
+                            },
+                            {
+                                "action": "TRANSFER",
+                                "token": "mUSDC",
+                                "amount": "200.0 mUSDC",
+                                "fee": "0.5 mUSDC",
+                                "to": "bob",
+                                "epoch": 0,
+                                "txHash": "0x35534ece3c39e43e7a9b36e774e5c24d3113b83ea8553f88ecdbab87f191a8f1"
+                            },
+                            {
+                                "action": "WITHDRAW",
+                                "token": "WMON",
+                                "amount": "0.2 WMON",
+                                "fee": "0.01 WMON",
+                                "to": "dave",
+                                "epoch": 0,
+                                "txHash": "0xf3536d0051814290b876964b6af0e2e6d9039d4af0c236f882179fb71149bb6a"
+                            },
+                            {
+                                "action": "SWAP",
+                                "token": "mUSDC",
+                                "amount": "5.0 mUSDC",
+                                "fee": "0.05 mUSDC",
+                                "to": "swap into WMON",
+                                "epoch": 0,
+                                "txHash": "0xb46b90962af501ef8be796987e7c9009f230a77e468f3af7a8fdff7055c3544a"
+                            },
+                            {
+                                "action": "TRANSFER",
+                                "token": "WMON",
+                                "amount": "0.4 WMON",
+                                "fee": "0.005 WMON",
+                                "to": "bob",
+                                "epoch": 0,
+                                "txHash": "0xa0571c0b5f2dfeadb1576c4f34e86589f092a39b9ce74c47d658eab1c914d88d"
+                            }
+                        ]
+                    },
+                    "balanceMatchesWallet": true
+                },
+                "incoming": {
+                    "encodedLength": 406,
+                    "fingerprint": "0x9315eace679a7cae",
+                    "network": "testnet",
+                    "containsSpendingKey": false,
+                    "sees": {
+                        "notes": 10,
+                        "received": {
+                            "mUSDC": "582.45 mUSDC",
+                            "WMON": "2.703518562099193898 WMON"
+                        },
+                        "balances": "not visible (no nullifier key)",
+                        "outgoing": []
+                    },
+                    "balanceMatchesWallet": null
+                },
+                "epoch0": {
+                    "encodedLength": 627,
+                    "fingerprint": "0x9bcb3b385b3a2817",
+                    "network": "testnet",
+                    "containsSpendingKey": false,
+                    "sees": {
+                        "notes": 10,
+                        "received": {
+                            "mUSDC": "582.45 mUSDC",
+                            "WMON": "2.703518562099193898 WMON"
+                        },
+                        "balances": {
+                            "WMON": "0.544259281049596949 WMON",
+                            "mUSDC": "23.95 mUSDC"
+                        },
+                        "outgoing": [
+                            {
+                                "action": "TRANSFER",
+                                "token": "mUSDC",
+                                "amount": "120.0 mUSDC",
+                                "fee": "0.5 mUSDC",
+                                "to": "bob",
+                                "epoch": 0,
+                                "txHash": "0x4b40d9d99396d6c753675ed0c34575d5868890e99a7601b2530dfc4373b547df"
+                            },
+                            {
+                                "action": "TRANSFER",
+                                "token": "WMON",
+                                "amount": "0.3 WMON",
+                                "fee": "0.01 WMON",
+                                "to": "carol",
+                                "epoch": 0,
+                                "txHash": "0x3d77ac780433d77b0a983e564d1dbf0fac40aa28b02a8d0cfe4ae14d2395b002"
+                            },
+                            {
+                                "action": "TRANSFER",
+                                "token": "mUSDC",
+                                "amount": "200.0 mUSDC",
+                                "fee": "0.5 mUSDC",
+                                "to": "bob",
+                                "epoch": 0,
+                                "txHash": "0x35534ece3c39e43e7a9b36e774e5c24d3113b83ea8553f88ecdbab87f191a8f1"
+                            },
+                            {
+                                "action": "WITHDRAW",
+                                "token": "WMON",
+                                "amount": "0.2 WMON",
+                                "fee": "0.01 WMON",
+                                "to": "dave",
+                                "epoch": 0,
+                                "txHash": "0xf3536d0051814290b876964b6af0e2e6d9039d4af0c236f882179fb71149bb6a"
+                            },
+                            {
+                                "action": "SWAP",
+                                "token": "mUSDC",
+                                "amount": "5.0 mUSDC",
+                                "fee": "0.05 mUSDC",
+                                "to": "swap into WMON",
+                                "epoch": 0,
+                                "txHash": "0xb46b90962af501ef8be796987e7c9009f230a77e468f3af7a8fdff7055c3544a"
+                            },
+                            {
+                                "action": "TRANSFER",
+                                "token": "WMON",
+                                "amount": "0.4 WMON",
+                                "fee": "0.005 WMON",
+                                "to": "bob",
+                                "epoch": 0,
+                                "txHash": "0xa0571c0b5f2dfeadb1576c4f34e86589f092a39b9ce74c47d658eab1c914d88d"
+                            }
+                        ]
+                    },
+                    "balanceMatchesWallet": true
+                }
+            },
+            "bobSeesAlicesNotes": 0
+        },
+        {
+            "id": "alice-new-viewing-key",
+            "title": "alice moves to viewing epoch 1 (same identity, new viewing key)",
+            "kind": "viewing-epoch",
+            "who": "alice",
+            "epoch": 1,
+            "viewingPublicKey": "0x049cb96b72584b8c4c8854988e7c54e7eaa50e85b690d5f2eb2974027980675abf763e3e609c6b94b448f36f76621fbf74426b1b653a2972a1bcc5fd37f8f6000c",
+            "status": "done",
+            "tx": {
+                "method": "updateViewingKey",
+                "from": "alice",
+                "hash": "0x4a7503361f7441bcb2ceb18a546d54bd72b4834fce9c73ee11c5843d46910fa4",
+                "gasEstimate": "86382",
+                "gasLimit": "95020",
+                "block": 70944364,
+                "status": "success",
+                "gasUsed": "95020",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.00964453"
+            }
+        },
+        {
+            "id": "transfer-bob-alice-epoch1",
+            "title": "bob → alice 10 mUSDC, encrypted to alice's epoch-1 key",
+            "kind": "transfer",
+            "from": "bob",
+            "to": "alice",
+            "amount": "10.0 mUSDC",
+            "fee": "0.1 mUSDC",
+            "root": "0x1ba8f28991f02301378819970d0c00f53dbe568dd6aaf326e28d3e76504b92f5",
+            "extDataHash": "0x0b30c231e1ca64d16eac03c86b8ced8ab79b45f59c799c4c7430a90d4811412e",
+            "inputs": [
+                {
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "120000000",
+                    "commitment": "0x0609733fcafc40fcdfa8760e8b8994914b9931ea9c9c1d3ec46945479c9fa876",
+                    "treeId": 0,
+                    "leafIndex": 16,
+                    "nullifier": "0x24558d764a3cd7283f7510425b304cf515cdaf5c34cbf14330eae570e8d9e6e1"
+                }
+            ],
+            "dummyNullifiers": [
+                "0x280f976454c5bced72eb8d5273f7d884029948cf0d25a5df5b84eb04177cfd34",
+                "0x1b26207f8246ea3dc09985e5aed756ac1a020f9a5f302b189c8634815b54bc03",
+                "0x197e6c9d8b7c7e43ccc714aa495ed24126d2ea524adf4888aca7c76d15aab064"
+            ],
+            "outputs": [
+                {
+                    "role": "recipient",
+                    "owner": "alice",
+                    "token": "mUSDC",
+                    "amount": "10000000",
+                    "commitment": "0x0a21553795dbc5dfefb73c7663cbc8ff8610608bc311a8c5d78cc046efb1af91",
+                    "treeId": 0,
+                    "leafIndex": 72
+                },
+                {
+                    "role": "change",
+                    "owner": "bob",
+                    "token": "mUSDC",
+                    "amount": "109900000",
+                    "commitment": "0x2bcb85af05026eb7add581abc0529c4392018556edeeb20f23554e108d02d06b",
+                    "treeId": 0,
+                    "leafIndex": 73
+                },
+                {
+                    "role": "fee",
+                    "owner": "relayer",
+                    "token": "mUSDC",
+                    "amount": "100000",
+                    "commitment": "0x054309814b0f0e3b32a31b3f85e7bed02917748210b8c7994cf87ad6d9446879",
+                    "treeId": 0,
+                    "leafIndex": 74
+                }
+            ],
+            "flows": [
+                {
+                    "who": "bob",
+                    "token": "mUSDC",
+                    "amount": "-10100000"
+                },
+                {
+                    "who": "alice",
+                    "token": "mUSDC",
+                    "amount": "10000000"
+                },
+                {
+                    "who": "relayer",
+                    "token": "mUSDC",
+                    "amount": "100000"
+                }
+            ],
+            "status": "done",
+            "tx": {
+                "method": "transfer",
+                "from": "relayer",
+                "hash": "0x17f259afbfa761b2ac765c59706137ce254e99beb621cb9f762de7a8544d2b8e",
+                "gasEstimate": "2060767",
+                "gasLimit": "2266843",
+                "block": 70944378,
+                "status": "success",
+                "gasUsed": "2266843",
+                "gasPriceGwei": "101.5",
+                "costMON": "0.2300845645"
+            },
+            "nullifiersOnChain": [
+                "0x24558d764a3cd7283f7510425b304cf515cdaf5c34cbf14330eae570e8d9e6e1",
+                "0x280f976454c5bced72eb8d5273f7d884029948cf0d25a5df5b84eb04177cfd34",
+                "0x1b26207f8246ea3dc09985e5aed756ac1a020f9a5f302b189c8634815b54bc03",
+                "0x197e6c9d8b7c7e43ccc714aa495ed24126d2ea524adf4888aca7c76d15aab064"
+            ]
+        },
+        {
+            "id": "viewing-epochs",
+            "title": "an epoch key shows one period only",
+            "kind": "viewing-epochs",
+            "status": "done",
+            "epoch0": {
+                "notes": 10,
+                "received": {
+                    "mUSDC": "582.45 mUSDC",
+                    "WMON": "2.703518562099193898 WMON"
+                },
+                "balances": {
+                    "WMON": "0.544259281049596949 WMON",
+                    "mUSDC": "23.95 mUSDC"
+                },
+                "outgoing": [
+                    {
+                        "action": "TRANSFER",
+                        "token": "mUSDC",
+                        "amount": "120.0 mUSDC",
+                        "fee": "0.5 mUSDC",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0x4b40d9d99396d6c753675ed0c34575d5868890e99a7601b2530dfc4373b547df"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "WMON",
+                        "amount": "0.3 WMON",
+                        "fee": "0.01 WMON",
+                        "to": "carol",
+                        "epoch": 0,
+                        "txHash": "0x3d77ac780433d77b0a983e564d1dbf0fac40aa28b02a8d0cfe4ae14d2395b002"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "mUSDC",
+                        "amount": "200.0 mUSDC",
+                        "fee": "0.5 mUSDC",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0x35534ece3c39e43e7a9b36e774e5c24d3113b83ea8553f88ecdbab87f191a8f1"
+                    },
+                    {
+                        "action": "WITHDRAW",
+                        "token": "WMON",
+                        "amount": "0.2 WMON",
+                        "fee": "0.01 WMON",
+                        "to": "dave",
+                        "epoch": 0,
+                        "txHash": "0xf3536d0051814290b876964b6af0e2e6d9039d4af0c236f882179fb71149bb6a"
+                    },
+                    {
+                        "action": "SWAP",
+                        "token": "mUSDC",
+                        "amount": "5.0 mUSDC",
+                        "fee": "0.05 mUSDC",
+                        "to": "swap into WMON",
+                        "epoch": 0,
+                        "txHash": "0xb46b90962af501ef8be796987e7c9009f230a77e468f3af7a8fdff7055c3544a"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "WMON",
+                        "amount": "0.4 WMON",
+                        "fee": "0.005 WMON",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0xa0571c0b5f2dfeadb1576c4f34e86589f092a39b9ce74c47d658eab1c914d88d"
+                    }
+                ]
+            },
+            "epoch1": {
+                "notes": 1,
+                "received": {
+                    "mUSDC": "10.0 mUSDC"
+                },
+                "balances": {
+                    "mUSDC": "10.0 mUSDC"
+                },
+                "outgoing": []
+            },
+            "fullKeyAcrossEpochs": {
+                "notes": 11,
+                "received": {
+                    "mUSDC": "592.45 mUSDC",
+                    "WMON": "2.703518562099193898 WMON"
+                },
+                "balances": {
+                    "WMON": "0.544259281049596949 WMON",
+                    "mUSDC": "33.95 mUSDC"
+                },
+                "outgoing": [
+                    {
+                        "action": "TRANSFER",
+                        "token": "mUSDC",
+                        "amount": "120.0 mUSDC",
+                        "fee": "0.5 mUSDC",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0x4b40d9d99396d6c753675ed0c34575d5868890e99a7601b2530dfc4373b547df"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "WMON",
+                        "amount": "0.3 WMON",
+                        "fee": "0.01 WMON",
+                        "to": "carol",
+                        "epoch": 0,
+                        "txHash": "0x3d77ac780433d77b0a983e564d1dbf0fac40aa28b02a8d0cfe4ae14d2395b002"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "mUSDC",
+                        "amount": "200.0 mUSDC",
+                        "fee": "0.5 mUSDC",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0x35534ece3c39e43e7a9b36e774e5c24d3113b83ea8553f88ecdbab87f191a8f1"
+                    },
+                    {
+                        "action": "WITHDRAW",
+                        "token": "WMON",
+                        "amount": "0.2 WMON",
+                        "fee": "0.01 WMON",
+                        "to": "dave",
+                        "epoch": 0,
+                        "txHash": "0xf3536d0051814290b876964b6af0e2e6d9039d4af0c236f882179fb71149bb6a"
+                    },
+                    {
+                        "action": "SWAP",
+                        "token": "mUSDC",
+                        "amount": "5.0 mUSDC",
+                        "fee": "0.05 mUSDC",
+                        "to": "swap into WMON",
+                        "epoch": 0,
+                        "txHash": "0xb46b90962af501ef8be796987e7c9009f230a77e468f3af7a8fdff7055c3544a"
+                    },
+                    {
+                        "action": "TRANSFER",
+                        "token": "WMON",
+                        "amount": "0.4 WMON",
+                        "fee": "0.005 WMON",
+                        "to": "bob",
+                        "epoch": 0,
+                        "txHash": "0xa0571c0b5f2dfeadb1576c4f34e86589f092a39b9ce74c47d658eab1c914d88d"
+                    }
+                ]
+            },
+            "overlapBetweenEpochs": 0
+        },
+        {
+            "id": "attacks",
+            "title": "tampered, replayed, expired and unauthorized calls are refused",
+            "kind": "attacks",
+            "status": "done",
+            "checks": [
+                {
+                    "check": "the untampered withdrawal (control)",
+                    "refused": false,
+                    "reason": null,
+                    "expected": "accepted"
+                },
+                {
+                    "check": "relayer redirects the withdrawal to another address",
+                    "refused": true,
+                    "reason": "Invalid withdraw proof"
+                },
+                {
+                    "check": "relayer raises the withdrawal amount",
+                    "refused": true,
+                    "reason": "Invalid withdraw proof"
+                },
+                {
+                    "check": "someone else claims the relayer fee",
+                    "refused": true,
+                    "reason": "Invalid withdraw proof"
+                },
+                {
+                    "check": "a root the pool never had",
+                    "refused": true,
+                    "reason": "Unknown root"
+                },
+                {
+                    "check": "the same spend twice in one transaction",
+                    "refused": true,
+                    "reason": "Nullifier already spent"
+                },
+                {
+                    "check": "replay of an executed private transfer",
+                    "refused": true,
+                    "reason": "Nullifier already spent"
+                },
+                {
+                    "check": "a swap executed after its deadline",
+                    "refused": true,
+                    "reason": "Swap expired"
+                },
+                {
+                    "check": "a swap whose minimum output the market cannot meet",
+                    "refused": true,
+                    "reason": "Too little received"
+                },
+                {
+                    "check": "a non-owner accepts a new token",
+                    "refused": true,
+                    "reason": "Ownable: caller is not the owner"
+                },
+                {
+                    "check": "a non-owner upgrades the pool",
+                    "refused": true,
+                    "reason": "Ownable: caller is not the owner"
+                },
+                {
+                    "check": "a deposit of a token the pool does not accept",
+                    "refused": true,
+                    "reason": "Token not accepted"
+                },
+                {
+                    "check": "a private transfer to an unregistered address (wallet side)",
+                    "refused": true,
+                    "reason": "0x94eA632382baf86570eAA57bfc5059E67d2Fb126 is not registered for private transfers"
+                }
+            ]
+        },
+        {
+            "id": "upgrade-dry-run",
+            "title": "the live proxy accepts the current code as an upgrade (validated, nothing sent)",
+            "kind": "upgrade",
+            "status": "done",
+            "proxy": "0xa63D29F39BF7A0BcB8E761C1897995ecBAFe496A",
+            "implementation": "0xAd4124aa107Aac3d3FF252E7d41B384970c5c855",
+            "version": "1.0.0",
+            "owner": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+            "result": "upgrade-safe, storage layout compatible"
+        },
+        {
+            "id": "final",
+            "title": "the books balance",
+            "kind": "final",
+            "status": "done",
+            "identities": {
+                "alice": {
+                    "matchesLedger": true,
+                    "unspentNotes": 4,
+                    "balances": {
+                        "WMON": {
+                            "private": "0.544259281049596949 WMON",
+                            "ledger": "0.544259281049596949 WMON",
+                            "match": true
+                        },
+                        "mUSDC": {
+                            "private": "33.95 mUSDC",
+                            "ledger": "33.95 mUSDC",
+                            "match": true
+                        }
+                    }
+                },
+                "bob": {
+                    "matchesLedger": true,
+                    "unspentNotes": 7,
+                    "balances": {
+                        "WMON": {
+                            "private": "0.7845 WMON",
+                            "ledger": "0.7845 WMON",
+                            "match": true
+                        },
+                        "mUSDC": {
+                            "private": "191.591899 mUSDC",
+                            "ledger": "191.591899 mUSDC",
+                            "match": true
+                        }
+                    }
+                },
+                "carol": {
+                    "matchesLedger": true,
+                    "unspentNotes": 3,
+                    "balances": {
+                        "mUSDC": {
+                            "private": "69.8 mUSDC",
+                            "ledger": "69.8 mUSDC",
+                            "match": true
+                        },
+                        "WMON": {
+                            "private": "0.093 WMON",
+                            "ledger": "0.093 WMON",
+                            "match": true
+                        },
+                        "mTKN": {
+                            "private": "0.0 mTKN",
+                            "ledger": "0.0 mTKN",
+                            "match": true
+                        }
+                    }
+                },
+                "relayer": {
+                    "matchesLedger": true,
+                    "unspentNotes": 15,
+                    "balances": {
+                        "mUSDC": {
+                            "private": "1.95 mUSDC",
+                            "ledger": "1.95 mUSDC",
+                            "match": true
+                        },
+                        "WMON": {
+                            "private": "0.0375 WMON",
+                            "ledger": "0.0375 WMON",
+                            "match": true
+                        },
+                        "mTKN": {
+                            "private": "0.01 mTKN",
+                            "ledger": "0.01 mTKN",
+                            "match": true
+                        }
+                    }
+                }
+            },
+            "poolHoldings": {
+                "WMON": {
+                    "pool": "1.459259281049596949 WMON",
+                    "sumOfUnspentNotes": "1.459259281049596949 WMON",
+                    "match": true
+                },
+                "mUSDC": {
+                    "pool": "297.291899 mUSDC",
+                    "sumOfUnspentNotes": "297.291899 mUSDC",
+                    "match": true
+                },
+                "mTKN": {
+                    "pool": "0.01 mTKN",
+                    "sumOfUnspentNotes": "0.01 mTKN",
+                    "match": true
+                }
+            },
+            "dave": {
+                "MON": "0.2",
+                "mUSDC": "100.0 mUSDC",
+                "mTKN": "1.042590884984491839 mTKN",
+                "registered": false
+            },
+            "tree": {
+                "root": "0x1bec3310f00bb28357729b40461f99a21615f0b59f8b120237fe126b298cd026",
+                "nextIndex": 76,
+                "mirrorRoot": "0x1bec3310f00bb28357729b40461f99a21615f0b59f8b120237fe126b298cd026",
+                "nullifiersOnChain": 60,
+                "nullifiersExpected": 60,
+                "notesOnChain": 46
+            },
+            "gas": {
+                "register": {
+                    "count": 3,
+                    "gasAvg": 184223
+                },
+                "deposit (ERC-20)": {
+                    "count": 2,
+                    "gasAvg": 878416
+                },
+                "deposit (native)": {
+                    "count": 2,
+                    "gasAvg": 691207
+                },
+                "transfer": {
+                    "count": 6,
+                    "gasAvg": 2060815
+                },
+                "transfer (2 calls)": {
+                    "count": 1,
+                    "gasAvg": 4008559
+                },
+                "withdraw (ERC-20)": {
+                    "count": 2,
+                    "gasAvg": 2095401
+                },
+                "withdraw (native)": {
+                    "count": 1,
+                    "gasAvg": 2115380
+                },
+                "swap (1 hop)": {
+                    "count": 3,
+                    "gasAvg": 2426155
+                },
+                "swap (2 hops)": {
+                    "count": 1,
+                    "gasAvg": 2568946
+                },
+                "viewing-epoch": {
+                    "count": 1,
+                    "gasAvg": 86382
+                }
+            },
+            "costMON": {
+                "setup": "0.019349",
+                "register": "0.061705",
+                "deposit": "0.361215",
+                "transfer": "1.380539",
+                "transfer-batch": "0.447556",
+                "withdraw": "0.704085",
+                "swap": "1.099463",
+                "viewing-epoch": "0.009645",
+                "total": "4.083557"
+            }
+        }
+    ],
+    "finishedAt": "2026-10-14T10:37:42.262Z"
+}

@@ -4,6 +4,9 @@ const { expect } = require("chai");
 
 const { deployLocalSystem, upgradeNoidPool, PROXY_OPTIONS } = require("../helpers/deploy");
 const W = require("../helpers/wallets");
+
+// local chains are not mainnet: they use testnet keys
+const KEY_NETWORK = "testnet";
 const { PoolMirror } = require("../helpers/merkle");
 const { scan, viewerFromWallet, viewerFromViewingKey } = require("../helpers/scanner");
 const { buildDeposit, buildTransfer, buildWithdraw, buildSwap } = require("../helpers/transactions");
@@ -75,9 +78,9 @@ describe("Menoid v1-mainnet: proxy & upgrades", function () {
         chainId = (await ethers.provider.getNetwork()).chainId;
         mirror = new PoolMirror(pool, { fromBlock: system.deployBlock });
 
-        relayer = await W.deriveWallet(relayerSigner);
-        alice = await W.deriveWallet(aliceSigner);
-        bob = await W.deriveWallet(bobSigner);
+        relayer = await W.deriveWallet(relayerSigner, { network: KEY_NETWORK });
+        alice = await W.deriveWallet(aliceSigner, { network: KEY_NETWORK });
+        bob = await W.deriveWallet(bobSigner, { network: KEY_NETWORK });
         for (const wallet of [relayer, alice, bob]) await W.registerWallet(pool, wallet);
     });
 

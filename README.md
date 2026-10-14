@@ -32,8 +32,8 @@ The real wallet signs one readable message. Every key is derived from that
 signature, so there is nothing extra to store or back up:
 
 ```
-signature      = sign("Menoid v1-mainnet: create my private account keys. … Key index: 0")
-seed           = keccak("menoid/v1m/seed" ‖ signature)        // never stored, never sent
+signature      = sign("Menoid: create my private account keys. … Network: mainnet, Key index: 0")
+seed           = keccak("menoid/v1m/seed" ‖ network ‖ signature)   // never stored, never sent
 
 sk             = keccak("menoid/v1m/spend" ‖ seed) mod l       // spending key (BabyJubJub)
 nk             = Poseidon(2, sk)                               // nullifier key
@@ -45,8 +45,14 @@ register(userCommitment, ivkPub)                               // on-chain, once
 
 A sender resolves a recipient straight from the chain with one call,
 `registrationOf(address)`: the user commitment to lock the note to, and the
-viewing public key to encrypt it to. The message has no chain id, so the same
-identity works on every chain.
+viewing public key to encrypt it to. The message has no chain id, so one
+identity works on every mainnet chain.
+
+**Mainnet and testnet keys are separate.** The message names the network
+(`mainnet` or `testnet`) and the network is also mixed into the seed, so the
+same wallet gets two unrelated sets of keys. Nothing signed, leaked or derived
+on a testnet can spend or reveal mainnet notes, even if testnet code is handed
+a mainnet signature by mistake.
 
 Keys can change later, only from the registered wallet: `updateViewingKey`
 moves to a new viewing key with the same identity, and `rotateKeys` moves to a

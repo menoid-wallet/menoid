@@ -11,10 +11,10 @@ const {
 /**
  * Menoid v1-mainnet key system.
  *
- * The user keeps their real wallet. It signs the key message once per key
- * index; everything else is derived from that signature:
+ * The user keeps their real wallet. It signs the key message once per network
+ * and key index; everything else is derived from that signature:
  *
- *   seed            = keccak("menoid/v1m/seed" ‖ signature)          master secret, never stored
+ *   seed            = keccak("menoid/v1m/seed" ‖ network ‖ signature)  master secret, never stored
  *   sk              = keccak("menoid/v1m/spend" ‖ seed) mod l          spending key (BabyJubJub)
  *   spendPk         = sk · Base8
  *   nullifierKey    = Poseidon(D_NK, sk)                               sees spends, cannot spend
@@ -24,21 +24,47 @@ const {
  *   ovk_e           = keccak("menoid/v1m/ovk" ‖ outgoingSecret ‖ e)    decrypts outgoing records
  *   userCommitment  = Poseidon(D_UC, address, spendPk.x, spendPk.y)
  *
- *   register(userCommitment, ivkPub_0)                                 on-chain, once
+ *   register(userCommitment, ivkPub_0)                                 on-chain, once per chain
+ *
+ * Mainnet and testnet keys are separate. The message names the network
+ * ("Network: mainnet" / "Network: testnet") and the network is also mixed
+ * into the seed, so the same wallet has unrelated keys on each: nothing
+ * signed, leaked or derived on a testnet can ever spend or reveal mainnet
+ * notes. There is no default network — every caller must say which one.
  *
  * Refer: notes/keys_and_registration.txt, notes/viewing_keys.txt
  */
 
-// The origin the key message names. Signing it anywhere else gives the keys away.
-const APP_ORIGIN = "https://app.menoid.xyz";
+// The key message names the network and the only origin that should ask for it.
+const KEY_NETWORKS = {
+    mainnet: { label: "mainnet", origin: "https://app.menoid.xyz" },
+    testnet: { label: "testnet", origin: "https://testnet.menoid.xyz" }
+};
 
-function keyMessage(keyIndex = 0) {
+// Monad, Base, Polygon, Arbitrum, Ethereum, Optimism. Every other chain —
+// testnets, local nodes — uses testnet keys.
+const MAINNET_CHAIN_IDS = new Set([143, 8453, 137, 42161, 1, 10]);
+
+function keyNetworkForChainId(chainId) {
+    return MAINNET_CHAIN_IDS.has(Number(chainId)) ? "mainnet" : "testnet";
+}
+
+function requireKeyNetwork(network) {
+    if (!KEY_NETWORKS[network]) {
+        throw new Error(`key network must be "mainnet" or "testnet" (got ${JSON.stringify(network)})`);
+    }
+    return KEY_NETWORKS[network];
+}
+
+function keyMessage({ network, keyIndex = 0 } = {}) {
+    const { label, origin } = requireKeyNetwork(network);
     return [
-        "Menoid v1-mainnet: create my private account keys.",
+        "Menoid: create my private account keys.",
         "",
-        `Only sign this on ${APP_ORIGIN}`,
+        `Only sign this on ${origin}`,
         "Anyone holding this signature can spend your private balance.",
         "",
+        `Network: ${label}`,
         `Key index: ${keyIndex}`
     ].join("\n");
 }
@@ -51,8 +77,8 @@ const toHex32 = (value) => "0x" + BigInt(value).toString(16).padStart(64, "0");
  * same signature every time (RFC 6979). Smart-contract, passkey and some MPC
  * wallets do not, so the signature is requested twice and compared.
  */
-async function signKeyMessage(signer, keyIndex = 0, { checkDeterministic = true } = {}) {
-    const message = keyMessage(keyIndex);
+async function signKeyMessage(signer, { network, keyIndex = 0, checkDeterministic = true } = {}) {
+    const message = keyMessage({ network, keyIndex });
     const signature = await signer.signMessage(message);
 
     if (checkDeterministic) {
@@ -98,10 +124,13 @@ function userCommitmentOf(address, spendPublicKey) {
     ]);
 }
 
-async function deriveKeysFromSignature(address, signature, { keyIndex = 0, viewingEpoch = 0 } = {}) {
+async function deriveKeysFromSignature(address, signature, { network, keyIndex = 0, viewingEpoch = 0 } = {}) {
+    requireKeyNetwork(network);
     await initCrypto();
 
-    const seed = keccak(["string", "bytes"], [KEY_TAGS.SEED, signature]);
+    // the network is mixed in as well as signed: even a mainnet signature fed
+    // into testnet code (or the reverse) yields unrelated keys
+    const seed = keccak(["string", "string", "bytes"], [KEY_TAGS.SEED, network, signature]);
 
     const sk = BigInt(keccak(["string", "bytes32"], [KEY_TAGS.SPEND, seed])) % BABYJUB_SUBGROUP_ORDER;
     const spendPublicKey = babyJubPublicKey(sk);
@@ -114,6 +143,7 @@ async function deriveKeysFromSignature(address, signature, { keyIndex = 0, viewi
 
     return {
         address: ethers.utils.getAddress(address),
+        network,
         keyIndex,
         viewingEpoch,
         spend: { sk, publicKey: spendPublicKey },
@@ -126,11 +156,13 @@ async function deriveKeysFromSignature(address, signature, { keyIndex = 0, viewi
     };
 }
 
-// sign + derive; the returned wallet keeps the signer for sending transactions
-async function deriveWallet(signer, { keyIndex = 0, viewingEpoch = 0, checkDeterministic = true } = {}) {
-    const signature = await signKeyMessage(signer, keyIndex, { checkDeterministic });
+// sign + derive; the returned wallet keeps the signer for sending transactions.
+// network is required: "mainnet" or "testnet" (see keyNetworkForChainId)
+async function deriveWallet(signer, { network, keyIndex = 0, viewingEpoch = 0, checkDeterministic = true } = {}) {
+    requireKeyNetwork(network);
+    const signature = await signKeyMessage(signer, { network, keyIndex, checkDeterministic });
     const address = await signer.getAddress();
-    const keys = await deriveKeysFromSignature(address, signature, { keyIndex, viewingEpoch });
+    const keys = await deriveKeysFromSignature(address, signature, { network, keyIndex, viewingEpoch });
     return { ...keys, signer };
 }
 
@@ -160,9 +192,15 @@ async function updateViewingKey(pool, wallet) {
     return next;
 }
 
-// key index + 1: a new spending identity (old notes need the old wallet to spend)
+// key index + 1: a new spending identity on the same network
+// (old notes need the old wallet to spend)
 async function rotateKeys(pool, wallet, options = {}) {
-    const next = await deriveWallet(wallet.signer, { ...options, keyIndex: wallet.keyIndex + 1, viewingEpoch: 0 });
+    const next = await deriveWallet(wallet.signer, {
+        ...options,
+        network: wallet.network,
+        keyIndex: wallet.keyIndex + 1,
+        viewingEpoch: 0
+    });
     const tx = await pool
         .connect(wallet.signer)
         .rotateKeys(next.userCommitmentBytes32, next.viewing.ivkPub);
@@ -199,12 +237,15 @@ async function assertRegisteredIdentity(pool, wallet) {
 }
 
 // ─── viewing keys you can hand to someone else ──────────────────────────────
+//
+// Each carries its network: a testnet key only ever opens testnet notes.
 
 // incoming + spends + outgoing, all epochs. Cannot spend.
 function fullViewingKey(wallet) {
     return {
         kind: "full",
         address: wallet.address,
+        network: wallet.network,
         keyIndex: wallet.keyIndex,
         userCommitment: wallet.userCommitment,
         incomingSecret: wallet.incomingSecret,
@@ -218,6 +259,7 @@ function incomingViewingKey(wallet) {
     return {
         kind: "incoming",
         address: wallet.address,
+        network: wallet.network,
         keyIndex: wallet.keyIndex,
         userCommitment: wallet.userCommitment,
         incomingSecret: wallet.incomingSecret
@@ -230,6 +272,7 @@ function epochViewingKey(wallet, epoch) {
     return {
         kind: "epoch",
         address: wallet.address,
+        network: wallet.network,
         keyIndex: wallet.keyIndex,
         userCommitment: wallet.userCommitment,
         epoch,
@@ -262,11 +305,14 @@ function decodeViewingKey(encoded) {
     key.userCommitment = BigInt(key.userCommitment);
     if (key.nullifierKey !== undefined) key.nullifierKey = BigInt(key.nullifierKey);
     if (!["full", "incoming", "epoch"].includes(key.kind)) throw new Error(`Unknown viewing key kind: ${key.kind}`);
+    requireKeyNetwork(key.network);
     return key;
 }
 
 module.exports = {
-    APP_ORIGIN,
+    KEY_NETWORKS,
+    MAINNET_CHAIN_IDS,
+    keyNetworkForChainId,
     keyMessage,
     signKeyMessage,
     deriveKeysFromSignature,

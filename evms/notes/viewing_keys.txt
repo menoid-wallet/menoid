@@ -103,8 +103,15 @@ Viewing Keys (v1-mainnet)
                            (token, amount, receiver userCommitment, randomness);
                            anyone rebuilds the commitment and finds it on-chain
 
+    Each one also carries kind, address, keyIndex and network.
+
     String form:   menoid-vk1:<base64url(payload)>.<checksum>
     The checksum makes a mistyped key fail instead of scanning nothing.
+
+    Viewing keys are per network. Mainnet and testnet keys come from
+    different seeds (keys_and_registration.txt, section 1), so a viewing key
+    exported on testnet opens testnet notes only and can never see a mainnet
+    note. A key without a known network ("mainnet" / "testnet") is refused.
 
     None of them contains sk. There is no protocol or "regulator" key: the
     only keys that exist are the user's.

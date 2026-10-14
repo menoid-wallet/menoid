@@ -1,0 +1,290 @@
+Menoid v1-mainnet: end-to-end run on monadTestnet (chain 10143)
+started 2026-10-14T10:34:58.771Z, finished 2026-10-14T10:37:42.262Z
+
+pool (proxy)      0xa63D29F39BF7A0BcB8E761C1897995ecBAFe496A
+implementation    0xAd4124aa107Aac3d3FF252E7d41B384970c5c855
+swap adapter      0x817F8a1A6eB70943f4577a0Bcd335Bc2CD582edC
+Uniswap V3        factory 0xdcD3da4C1f3bC88c2aE998FD374f737F1167c7f3, SwapRouter02 0x40B3d08778313619b2671Dd79788B7616e257Ede, QuoterV2 0xA964C148713A779701684876507B79CA5b6D07d0
+                  WMON/mUSDC 0.30%   0x655b7D444296C0a5631dae4dbaBB6F9FB6C2A484
+                  WMON/mUSDC 0.05%   0xE7D3a8D6B4Cb380cC7Ed3Ac0c1A935A23BCEFb62
+                  mUSDC/mTKN 0.05%   0xC81baFF68f264EBC547488C0f78d4689B1a9db86
+tokens            WMON 0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541, mUSDC 0xE0DF03E4F95adaB2DcF5aa06e6eb6C497feE5FfF, mTKN 0x0D62F4fb9B6636B2509341F0b611883b7Db9Da29
+
+participants (testnet keys)
+  relayer  0x983B81da8b49c5e4EA9DA94613a89C8af4527715  user commitment 0x0fb072defe970a5eb0361cc5ce0a622eeaca8d983e3ee59571dcc3bdbd62899b
+  alice    0x507f1425f82F00d20151E03E84fea42F78D9616a  user commitment 0x15356aeff7e3e582c869d8d6585242c113c171fd56f811c738ba5102f99d0061
+  bob      0x16D47615C6f8a7d3eA6dbBBa19AcaFaA8C1839e6  user commitment 0x18e59880deed4ea47c7416418869d751420832dce1b8abb795e3e5a7424c8b02
+  carol    0x8114B84E8f6d7F41799a5E87Dc9816B169D0a672  user commitment 0x2d19f90f55130e104b10fc8cc87d4658209ceb63173fbe748aaccd4b92baf834
+  dave     0x94eA632382baf86570eAA57bfc5059E67d2Fb126  never registers (public address only)
+
+ 1. fund the test wallets: MON for gas and native deposits, mUSDC to deposit  [done]
+    alice +2.5 MON: 0x917b6755f9ce8a83cef54710b91bffe6f263626c0f4937804bfd43f47228e249
+    bob +2.0 MON: 0x6f028260ec6f37c697c5a71d118c3511fa64f2e094f21c810f45d2784fdf9bc4
+    carol +1.0 MON: 0x9658f6798050e390d7db006af0abe6a0a754d4770b4df79b78d489a82db86e47
+    alice +500.0 mUSDC (test token mint): 0xed6e76ef7a8aea063d15300000d728cf5efcbb73a3136c059d1533546cfa2b5a
+    bob +300.0 mUSDC (test token mint): 0xbdde3a40180d74e998277db5691b516ed7d2c56699ba2307be02663c4c403b0e
+
+ 2. alice registers: one signature, one transaction  [done]
+    tx 0x917a66632f1e170dd4f4811f02c81ce61bc79cd3c9f52f4689e50abd71d5790b  block 70944088  gas 184211 (limit 202632 charged: 0.020567148 MON)
+    user commitment 0x15356aeff7e3e582c869d8d6585242c113c171fd56f811c738ba5102f99d0061
+
+ 3. bob registers: one signature, one transaction  [done]
+    tx 0x2430f9e66eaeaf3d3d545e382071dfe8dd433f73096edcd8ab7c62c8a60ddfe2  block 70944093  gas 184235 (limit 202658 charged: 0.020569787 MON)
+    user commitment 0x18e59880deed4ea47c7416418869d751420832dce1b8abb795e3e5a7424c8b02
+
+ 4. carol registers: one signature, one transaction  [done]
+    tx 0xea485f5db7e0c6b2efaa80c9a762b11447412a92f392ff1935c5961039a3ab61  block 70944097  gas 184223 (limit 202645 charged: 0.0205684675 MON)
+    user commitment 0x2d19f90f55130e104b10fc8cc87d4658209ceb63173fbe748aaccd4b92baf834
+
+ 5. senders resolve recipients from the chain; dave stays unregistered  [done]
+    alice    registered true
+    bob      registered true
+    carol    registered true
+    dave     registered false
+    relayer  registered true
+
+ 6. alice deposits 300 mUSDC  [done]
+    tx 0x3e107c5caec3816e74d3dedb24d5f39711161563ae22d538c64f28e32abbd9b5  block 70944111  gas 1051189 (limit 1156307 charged: 0.1173651605 MON)
+    approve 0x7ee29a4b4814dad40e25706adadd61dd1850480ca9eb90c8324ec703f9f717fe  gas 52800
+    npk 0x0743c8f9f55df1dc1c698e0153dc36b341b122072b2d341d52843b44a8f4be7a  ciphertext 135 bytes
+    commitment computed on-chain 0x164a8e6403a0485a5b583ff6abb295c58306ff0104bded3db5ff5bb9dd252e99 (matches the wallet's: true)
+    created  leaf   0  0x164a8e6403a0485a5b583ff6abb295c58306ff0104bded3db5ff5bb9dd252e99  alice 300.0 mUSDC  (deposit)
+
+ 7. alice deposits 1 MON (wrapped to WMON inside the pool)  [done]
+    tx 0xb946185fa96f14833e1bbb1104989ceaf6834424dee995d3ca7ad00678c3225c  block 70944118  gas 699929 (limit 769921 charged: 0.0781469815 MON)
+    npk 0x2622d1496179cee596294e558778f69839bb6ab74e0a4146d98aac7619ecefca  ciphertext 135 bytes
+    commitment computed on-chain 0x216fa12dde7e8531dd7618f14f4d228dbd2d47ffa4875389f81cfd87748d0c7c (matches the wallet's: true)
+    created  leaf   4  0x216fa12dde7e8531dd7618f14f4d228dbd2d47ffa4875389f81cfd87748d0c7c  alice 1.0 WMON  (deposit)
+
+ 8. bob deposits 100 mUSDC straight into carol's private balance  [done]
+    tx 0x6cfb0d4fec5df6da97ce8d90edf7d3b82faf32ab321f2c205f7cb211cbb2bfbf  block 70944127  gas 705643 (limit 776207 charged: 0.0787850105 MON)
+    approve 0x05f7890ac867fc9ef42bfed7c8862fc2d0281d8fabdbc1f825017f2b5c0072f0  gas 52800
+    npk 0x1660fd9f47220320cba188fb0ee2768c8e765c5c0371fee2a75b5a803fe4d136  ciphertext 135 bytes
+    commitment computed on-chain 0x298610b2eb80503d8679f422039af560293f0f3e5dd7671aec4bafb01a145ded (matches the wallet's: true)
+    created  leaf   8  0x298610b2eb80503d8679f422039af560293f0f3e5dd7671aec4bafb01a145ded  carol 100.0 mUSDC  (deposit)
+
+ 9. bob deposits 0.5 MON  [done]
+    tx 0x3a1b0bc5cf15ca140e4d62df87f3db6dbb792cabbf0ff186bb7164deee458fac  block 70944134  gas 682485 (limit 750733 charged: 0.0761993995 MON)
+    npk 0x1c9de62c6f9677fe4014ed647570c30fa56238ba00bdf5fda749c9ce50390a49  ciphertext 135 bytes
+    commitment computed on-chain 0x0fccf90ac706ea0e19d9b9640e3f84cf1f15c639864ceb65c107c34bba2a9862 (matches the wallet's: true)
+    created  leaf  12  0x0fccf90ac706ea0e19d9b9640e3f84cf1f15c639864ceb65c107c34bba2a9862  bob 0.5 WMON  (deposit)
+
+10. alice → bob 120 mUSDC, privately  [done]
+    tx 0x4b40d9d99396d6c753675ed0c34575d5868890e99a7601b2530dfc4373b547df  block 70944150  gas 2060975 (limit 2267072 charged: 0.230107808 MON)
+    root 0x11b42cfd8e534ab263c4bc811905dfc4bc4fb9e3099e6c1a7c500c660199b231
+    spent    leaf   0  0x164a8e64…252e99  alice   300.0 mUSDC
+             nullifier 0x205227d8cad84e70760574ebbc404aaea614e83e57c8431d17ee842cf834b286
+    dummy nullifiers 0x0846ec18…7dbcf1, 0x0b91796e…27e340, 0x126bf6d8…806bf1
+    created  leaf  16  0x0609733f…9fa876  bob     120.0 mUSDC  (recipient)
+    created  leaf  17  0x0c603f06…180d68  alice   179.5 mUSDC  (change)
+    created  leaf  18  0x0292528e…f654a8  relayer 0.5 mUSDC  (fee)
+
+11. carol → alice 50 mUSDC (from the note bob deposited for her)  [done]
+    tx 0xfa048ff3f840c879b61731a5a8328b2865f1dc2f5d6c402fad55914a1cdc61b0  block 70944162  gas 2060813 (limit 2266894 charged: 0.230089741 MON)
+    root 0x1dfe59ef72b1aff09640c1f6054c20d85ca873c17e7126aefec528009bce48cc
+    spent    leaf   8  0x298610b2…145ded  carol   100.0 mUSDC
+             nullifier 0x2f128a043695c39bbc5198ed101b9459fa417a553dc74030992a84f0724d7a3d
+    dummy nullifiers 0x0f55bc1f…362d77, 0x2c259f0a…a3fb1c, 0x08781e2a…740b20
+    created  leaf  20  0x056f9329…c165af  alice   50.0 mUSDC  (recipient)
+    created  leaf  21  0x22b4d0c1…0459ab  carol   49.8 mUSDC  (change)
+    created  leaf  22  0x2e842a61…a6f6dc  relayer 0.2 mUSDC  (fee)
+
+12. alice → carol 0.3 WMON  [done]
+    tx 0x3d77ac780433d77b0a983e564d1dbf0fac40aa28b02a8d0cfe4ae14d2395b002  block 70944175  gas 2060777 (limit 2266854 charged: 0.230085681 MON)
+    root 0x267be6070f9b037192d8958244f1225a27fbe64473d86e09cae73141e347c2b8
+    spent    leaf   4  0x216fa12d…8d0c7c  alice   1.0 WMON
+             nullifier 0x2ff2c195c7928594a016341c91854bdb7e196d081376521d3f9a5f5a79f0dd41
+    dummy nullifiers 0x3023509c…f34fc1, 0x098eaf84…7c4e66, 0x22d3b409…1aacae
+    created  leaf  24  0x2c0f4fe8…e7e5b5  carol   0.3 WMON  (recipient)
+    created  leaf  25  0x1dbcdff1…898194  alice   0.69 WMON  (change)
+    created  leaf  26  0x10aad9f4…ba8491  relayer 0.01 WMON  (fee)
+
+13. alice → bob 200 mUSDC, spending two notes in one proof  [done]
+    tx 0x35534ece3c39e43e7a9b36e774e5c24d3113b83ea8553f88ecdbab87f191a8f1  block 70944187  gas 2060676 (limit 2266743 charged: 0.2300744145 MON)
+    root 0x2872845ed05aa3d66f52cf9336499452c0103d6ee5d6c2d3e7994479f4d6526e
+    spent    leaf  17  0x0c603f06…180d68  alice   179.5 mUSDC
+             nullifier 0x1562e18da82c9da0867b0802c54df9cfef3690ff7f18eb75dc184887deca5ee5
+    spent    leaf  20  0x056f9329…c165af  alice   50.0 mUSDC
+             nullifier 0x115dadf58ac4436a12ff1072827b28a5134d22b51dd68a4144151eb61a863458
+    dummy nullifiers 0x2d7ce607…3c1de3, 0x2f59289d…244558
+    created  leaf  28  0x24684b91…4637e0  bob     200.0 mUSDC  (recipient)
+    created  leaf  29  0x0da05647…b5ead7  alice   29.0 mUSDC  (change)
+    created  leaf  30  0x23abba22…ea3c42  relayer 0.5 mUSDC  (fee)
+
+14. one relayer transaction, two private transfers: bob → carol 20 mUSDC, carol → bob 0.1 WMON  [done]
+    tx 0xbef35179784ea8ab92eeef9ed92da99eddea6e810233275ddce3e35b7cdbc7b4  block 70944210  gas 4008559 (limit 4409414 charged: 0.447555521 MON)
+    bob → carol 20.0 mUSDC (fee 0.1 mUSDC)
+    root 0x160c1241d415e5cabb2325b3f89a79fa248f940ed3c206071ddc6faaaab00598
+    spent    leaf  28  0x24684b91…4637e0  bob     200.0 mUSDC
+             nullifier 0x214cdd0769e0eec9ebc9ce35c921f80ca822a89b1f5f3a1c1f0204f7f9789ab2
+    dummy nullifiers 0x0cfa2629…cb3aa6, 0x1b97c53e…cdc3db, 0x165f440f…7bbdff
+    created  leaf  32  0x0de534ac…9b6f6d  carol   20.0 mUSDC  (recipient)
+    created  leaf  33  0x1aa6a0db…5cc264  bob     179.9 mUSDC  (change)
+    created  leaf  34  0x007e1da9…7d5787  relayer 0.1 mUSDC  (fee)
+    carol → bob 0.1 WMON (fee 0.005 WMON)
+    root 0x160c1241d415e5cabb2325b3f89a79fa248f940ed3c206071ddc6faaaab00598
+    spent    leaf  24  0x2c0f4fe8…e7e5b5  carol   0.3 WMON
+             nullifier 0x2c3cc89fc85422c1e18aa744c4fc7170510b0a00b1d42a48a256ae94e54f7e1a
+    dummy nullifiers 0x0cc07d38…e8f77a, 0x0a4a9578…d9c0d6, 0x2d315631…f789a2
+    created  leaf  36  0x0ced66c0…380ac4  bob     0.1 WMON  (recipient)
+    created  leaf  37  0x2a6c99d2…f2365f  carol   0.195 WMON  (change)
+    created  leaf  38  0x2b7e5a58…cf81b6  relayer 0.005 WMON  (fee)
+
+15. bob withdraws 100 mUSDC to dave (unregistered, public)  [done]
+    tx 0x8aaeafae4166eab74c308660f36f2c080e26abd8bb19a7f043244af716fd4f0b  block 70944224  gas 2095364 (limit 2304900 charged: 0.23394735 MON)
+    root 0x0029bd3da238c9bf871f16d80f4e02dc01d39774e3da1bf0da1c4ad1bff410f3
+    spent    leaf  33  0x1aa6a0db…5cc264  bob     179.9 mUSDC
+             nullifier 0x19622408ff456c9339c24d625779b12a0f9610d677754a42d3e1c6ff1b0cef3f
+    dummy nullifiers 0x24634715…2f661a, 0x276c5177…46ae9d, 0x301991f7…250401
+    created  leaf  40  0x28c83a52…f451e9  bob     79.4 mUSDC  (change)
+    created  leaf  41  0x259cf78b…989627  relayer 0.5 mUSDC  (fee)
+    dave received 100.0 mUSDC publicly
+
+16. alice withdraws 0.2 MON to dave as native MON (unwrapped)  [done]
+    tx 0xf3536d0051814290b876964b6af0e2e6d9039d4af0c236f882179fb71149bb6a  block 70944239  gas 2115380 (limit 2326918 charged: 0.236182177 MON)
+    root 0x097f21dce978c79c898b674cc9512233dd1c9b89238ec853f33655a58171ae65
+    spent    leaf  25  0x1dbcdff1…898194  alice   0.69 WMON
+             nullifier 0x2578cbf752fe6468bccf298f79fac2ba11ded2fdd636005d0fdf24c64e5d08ed
+    dummy nullifiers 0x0fdb00f5…f81eeb, 0x071652cd…388bf2, 0x138c1447…3aa579
+    created  leaf  44  0x202505ba…68d4b4  alice   0.48 WMON  (change)
+    created  leaf  45  0x0af99c0a…02b7da  relayer 0.01 WMON  (fee)
+    dave received 0.2 MON publicly
+
+17. bob swaps 0.01 WMON → mUSDC (a small trade: the backend compares both fee tiers)  [done]
+    tx 0x6a9b438ff76b925a0a59ab2dc6cb1c04a327eaded37977476161fa96194235ed  block 70944256  gas 2425514 (limit 2668065 charged: 0.2708085975 MON)
+    route WMON → mUSDC  (0.05%)  quote 0.0997 mUSDC, minimum 0.098703 mUSDC
+    received 0.0997 mUSDC
+    root 0x042011db3dde58ead54253ffddc054c741240e0738e9504c9bfcd0f06c3c3882
+    spent    leaf  12  0x0fccf90a…2a9862  bob     0.5 WMON
+             nullifier 0x0ddab4132495307104e4ca179fffb6ebe3844986dbb9204fbda0b3c9f30b5af5
+    dummy nullifiers 0x08a00a0b…357f4b, 0x194d6d9e…42a014, 0x19bbcf10…ce420d
+    created  leaf  48  0x1069bcec…9ca13e  bob     0.4895 WMON  (change)
+    created  leaf  49  0x10c28231…7d5aed  relayer 0.0005 WMON  (fee)
+    created  leaf  50  0x15599502…d8f59e  bob     0.0997 mUSDC  (bought)
+
+18. alice swaps 5 mUSDC → WMON  [done]
+    tx 0xb46b90962af501ef8be796987e7c9009f230a77e468f3af7a8fdff7055c3544a  block 70944274  gas 2427603 (limit 2670363 charged: 0.2710418445 MON)
+    route mUSDC → WMON  (0.3%)  quote 0.469259281049596949 WMON, minimum 0.464566688239100979 WMON
+    received 0.469259281049596949 WMON
+    root 0x0809d6be93c0ebd2646bd0af306e62a0b066c3e30ce0c00113b91bc359548ecb
+    spent    leaf  29  0x0da05647…b5ead7  alice   29.0 mUSDC
+             nullifier 0x02f25b880a6de5ebcb50f34dc7bce632934cf3e533b9655bc3c824d59e93f1e6
+    dummy nullifiers 0x10640d79…cde795, 0x26912ea3…194c82, 0x29ce8e95…7678ec
+    created  leaf  52  0x07068e78…e634cf  alice   23.95 mUSDC  (change)
+    created  leaf  53  0x03eb38ec…c46124  relayer 0.05 mUSDC  (fee)
+    created  leaf  54  0x24ae4b12…d082b7  alice   0.469259281049596949 WMON  (bought)
+
+19. bob swaps 0.2 WMON → mUSDC  [done]
+    tx 0xb29857d93b7e6e4ea3baf321e674e85ddcd7c140559f474adcfe63467d15ec00  block 70944289  gas 2425347 (limit 2667881 charged: 0.2707899215 MON)
+    route WMON → mUSDC  (0.3%)  quote 2.192199 mUSDC, minimum 2.170277 mUSDC
+    received 2.192199 mUSDC
+    root 0x025e947f5475e42cef05635c3c6e98eee369e0b13a6f1433fe7bfea563e53c47
+    spent    leaf  48  0x1069bcec…9ca13e  bob     0.4895 WMON
+             nullifier 0x1a85a4926dec66bcaa44401ae46766d880b390a337338a9e996c873e27cc73d3
+    dummy nullifiers 0x2aaae3b9…61f3c3, 0x048ee073…f01256, 0x05629bf0…a76ab0
+    created  leaf  56  0x0b58f15b…f38d86  bob     0.2845 WMON  (change)
+    created  leaf  57  0x0f6124f8…28a81a  relayer 0.005 WMON  (fee)
+    created  leaf  58  0x002f8a4d…04ad66  bob     2.192199 mUSDC  (bought)
+
+20. carol swaps 0.1 WMON → mTKN (no direct pool: WMON → mUSDC → mTKN)  [done]
+    tx 0x915ee6e284cf42f938f58ec48a2bc0670180f78b9aa7d1db6169ee04298609f1  block 70944313  gas 2568946 (limit 2825840 charged: 0.28682276 MON)
+    route WMON → mUSDC → mTKN  (0.3%, 0.05%)  quote 1.052590884984491839 mTKN, minimum 1.04206497613464692 mTKN
+    received 1.052590884984491839 mTKN
+    root 0x28e44c5f8b1b898c4873ec97f411bb77fee375cb69ac31d2f7cad8ef0561dd9b
+    spent    leaf  37  0x2a6c99d2…f2365f  carol   0.195 WMON
+             nullifier 0x2d3802aecd36656dc7dbc0c0e8156d377a0403eceff43793b1a7f2712bdfd337
+    dummy nullifiers 0x2f49d7fd…2364b8, 0x16ebf16c…d99d2b, 0x1150ab09…c7c055
+    created  leaf  60  0x19abee58…885e82  carol   0.093 WMON  (change)
+    created  leaf  61  0x2b41fde1…aee7f2  relayer 0.002 WMON  (fee)
+    created  leaf  62  0x165a9421…69470d  carol   1.052590884984491839 mTKN  (bought)
+
+21. alice → bob 0.4 WMON out of the WMON she bought  [done]
+    tx 0xa0571c0b5f2dfeadb1576c4f34e86589f092a39b9ce74c47d658eab1c914d88d  block 70944329  gas 2060880 (limit 2266968 charged: 0.230097252 MON)
+    root 0x0a8561aac973afeb291ff37373bb8600fb6c74b97cb39efd8c39654141a499f8
+    spent    leaf  54  0x24ae4b12…d082b7  alice   0.469259281049596949 WMON (bought in a swap)
+             nullifier 0x2b52b09da38cfc50c1fe4fd9695c5e2446ed258ae01fadf9e950bd50a0ba1f6d
+    dummy nullifiers 0x2fa47ee1…6d919f, 0x1ca27633…919aed, 0x194c5fe3…806b96
+    created  leaf  64  0x2ab50a88…f5b606  bob     0.4 WMON  (recipient)
+    created  leaf  65  0x1b2fcbfe…fc6f53  alice   0.064259281049596949 WMON  (change)
+    created  leaf  66  0x18cf592a…f93e23  relayer 0.005 WMON  (fee)
+
+22. carol withdraws all the mTKN she bought to dave  [done]
+    tx 0x4153978bc69eae4f5f15bec125f6bba297c8d48f8c6857cc38482b6e70e73731  block 70944343  gas 2095437 (limit 2304980 charged: 0.23395547 MON)
+    root 0x0b00985178b8f9263cf1d692d924c7ba1f0ff25b62d44292ad9dc0f2af1e0e08
+    spent    leaf  62  0x165a9421…69470d  carol   1.052590884984491839 mTKN (bought in a swap)
+             nullifier 0x253097990f8c3f559f9a062210d9c7571c3daf925cec27650eecd51ca2701b4b
+    dummy nullifiers 0x1bdb5ae3…a54295, 0x09898773…60be58, 0x244dde61…e030bb
+    created  leaf  68  0x264e3cd0…b37493  carol   0.0 mTKN  (change)
+    created  leaf  69  0x0caeebc1…0be7d6  relayer 0.01 mTKN  (fee)
+    dave received 1.042590884984491839 mTKN publicly
+
+23. alice shares a full, an incoming and an epoch viewing key; none can spend  [done]
+    alice's own view: {"WMON":"0.544259281049596949 WMON","mUSDC":"23.95 mUSDC"}
+    full      key (642 chars, testnet): 10 notes, balances {"WMON":"0.544259281049596949 WMON","mUSDC":"23.95 mUSDC"}, 6 outgoing records, contains sk: false
+    incoming  key (406 chars, testnet): 10 notes, balances "not visible (no nullifier key)", 0 outgoing records, contains sk: false
+    epoch0    key (627 chars, testnet): 10 notes, balances {"WMON":"0.544259281049596949 WMON","mUSDC":"23.95 mUSDC"}, 6 outgoing records, contains sk: false
+      outgoing: TRANSFER 120.0 mUSDC → bob (fee 0.5 mUSDC)
+      outgoing: TRANSFER 0.3 WMON → carol (fee 0.01 WMON)
+      outgoing: TRANSFER 200.0 mUSDC → bob (fee 0.5 mUSDC)
+      outgoing: WITHDRAW 0.2 WMON → dave (fee 0.01 WMON)
+      outgoing: SWAP 5.0 mUSDC → swap into WMON (fee 0.05 mUSDC)
+      outgoing: TRANSFER 0.4 WMON → bob (fee 0.005 WMON)
+    bob's keys see 0 of alice's notes
+
+24. alice moves to viewing epoch 1 (same identity, new viewing key)  [done]
+    tx 0x4a7503361f7441bcb2ceb18a546d54bd72b4834fce9c73ee11c5843d46910fa4  block 70944364  gas 86382 (limit 95020 charged: 0.00964453 MON)
+
+25. bob → alice 10 mUSDC, encrypted to alice's epoch-1 key  [done]
+    tx 0x17f259afbfa761b2ac765c59706137ce254e99beb621cb9f762de7a8544d2b8e  block 70944378  gas 2060767 (limit 2266843 charged: 0.2300845645 MON)
+    root 0x1ba8f28991f02301378819970d0c00f53dbe568dd6aaf326e28d3e76504b92f5
+    spent    leaf  16  0x0609733f…9fa876  bob     120.0 mUSDC
+             nullifier 0x24558d764a3cd7283f7510425b304cf515cdaf5c34cbf14330eae570e8d9e6e1
+    dummy nullifiers 0x280f9764…7cfd34, 0x1b26207f…54bc03, 0x197e6c9d…aab064
+    created  leaf  72  0x0a215537…b1af91  alice   10.0 mUSDC  (recipient)
+    created  leaf  73  0x2bcb85af…02d06b  bob     109.9 mUSDC  (change)
+    created  leaf  74  0x05430981…446879  relayer 0.1 mUSDC  (fee)
+
+26. an epoch key shows one period only  [done]
+    epoch 0 key: 10 notes, balances {"WMON":"0.544259281049596949 WMON","mUSDC":"23.95 mUSDC"}
+    epoch 1 key: 1 notes, balances {"mUSDC":"10.0 mUSDC"}
+    full key, both epochs: balances {"WMON":"0.544259281049596949 WMON","mUSDC":"33.95 mUSDC"}; notes seen by both epoch keys: 0
+
+27. tampered, replayed, expired and unauthorized calls are refused  [done]
+    accepted  the untampered withdrawal (control)
+    refused   relayer redirects the withdrawal to another address: Invalid withdraw proof
+    refused   relayer raises the withdrawal amount: Invalid withdraw proof
+    refused   someone else claims the relayer fee: Invalid withdraw proof
+    refused   a root the pool never had: Unknown root
+    refused   the same spend twice in one transaction: Nullifier already spent
+    refused   replay of an executed private transfer: Nullifier already spent
+    refused   a swap executed after its deadline: Swap expired
+    refused   a swap whose minimum output the market cannot meet: Too little received
+    refused   a non-owner accepts a new token: Ownable: caller is not the owner
+    refused   a non-owner upgrades the pool: Ownable: caller is not the owner
+    refused   a deposit of a token the pool does not accept: Token not accepted
+    refused   a private transfer to an unregistered address (wallet side): 0x94eA632382baf86570eAA57bfc5059E67d2Fb126 is not registered for private transfers
+
+28. the live proxy accepts the current code as an upgrade (validated, nothing sent)  [done]
+    upgrade-safe, storage layout compatible (proxy 0xa63D29F39BF7A0BcB8E761C1897995ecBAFe496A, implementation 0xAd4124aa107Aac3d3FF252E7d41B384970c5c855, v1.0.0)
+
+29. the books balance  [done]
+    alice    = ledger  0.544259281049596949 WMON, 33.95 mUSDC
+    bob      = ledger  0.7845 WMON, 191.591899 mUSDC
+    carol    = ledger  69.8 mUSDC, 0.093 WMON, 0.0 mTKN
+    relayer  = ledger  1.95 mUSDC, 0.0375 WMON, 0.01 mTKN
+    pool WMON   1.459259281049596949 WMON  = sum of unspent notes 1.459259281049596949 WMON: true
+    pool mUSDC  297.291899 mUSDC  = sum of unspent notes 297.291899 mUSDC: true
+    pool mTKN   0.01 mTKN  = sum of unspent notes 0.01 mTKN: true
+    dave (public): 0.2 MON, 100.0 mUSDC, 1.042590884984491839 mTKN; registered false
+    tree: 46 notes, next index 76, nullifiers 60 (expected 60)
+    gas register             184223 (average of 3)
+    gas deposit (ERC-20)     878416 (average of 2)
+    gas deposit (native)     691207 (average of 2)
+    gas transfer             2060815 (average of 6)
+    gas transfer (2 calls)   4008559
+    gas withdraw (ERC-20)    2095401 (average of 2)
+    gas withdraw (native)    2115380
+    gas swap (1 hop)         2426155 (average of 3)
+    gas swap (2 hops)        2568946
+    gas viewing-epoch        86382
+    cost: {"setup":"0.019349","register":"0.061705","deposit":"0.361215","transfer":"1.380539","transfer-batch":"0.447556","withdraw":"0.704085","swap":"1.099463","viewing-epoch":"0.009645","total":"4.083557"}
