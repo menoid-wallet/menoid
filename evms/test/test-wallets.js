@@ -33,6 +33,7 @@ describe("Menoid v1-mainnet: keys & registration", function () {
     let signers;
 
     before(async function () {
+        hre.upgrades.silenceWarnings();   // the linked-Poseidon-libraries notice is expected
         signers = await ethers.getSigners();
         ({ pool } = await deployLocalSystem(hre));
     });

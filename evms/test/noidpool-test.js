@@ -116,6 +116,7 @@ describe("Menoid v1-mainnet: pool", function () {
     }
 
     before(async function () {
+        hre.upgrades.silenceWarnings();   // the linked-Poseidon-libraries notice is expected
         [owner, relayerSigner, aliceSigner, bobSigner, carolSigner] = await ethers.getSigners();
 
         const system = await deployLocalSystem(hre);

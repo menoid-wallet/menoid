@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "poseidon-solidity/PoseidonT5.sol";
@@ -37,9 +39,17 @@ import "./libraries/Types.sol";
  * used, and pause deposits or swaps. Transfers and withdrawals can never be
  * paused or blocked.
  *
- * Refer: notes/keys_and_registration.txt, deposit.txt, transfer.txt, withdraw.txt, swap.txt
+ * Upgradeable (UUPS, ERC-1967): everyone talks to one permanent proxy address
+ * that holds all state and funds and delegates every call to this
+ * implementation. The owner can point the proxy at a new implementation;
+ * storage is append-only between versions. Verifiers and the wrapped native
+ * token are immutables of each implementation, so changing circuits is an
+ * upgrade too.
+ *
+ * Refer: notes/keys_and_registration.txt, deposit.txt, transfer.txt, withdraw.txt,
+ *        swap.txt, proxy_upgrades.txt
  */
-contract NoidPool is Ownable, ReentrancyGuard {
+contract NoidPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
     using PoolLib for PoolLib.Tree;
 
@@ -56,6 +66,13 @@ contract NoidPool is Ownable, ReentrancyGuard {
     bytes32 public constant TRANSFER_EXT_DOMAIN = keccak256("menoid.v1m.transfer");
     bytes32 public constant WITHDRAW_EXT_DOMAIN = keccak256("menoid.v1m.withdraw");
     bytes32 public constant SWAP_EXT_DOMAIN = keccak256("menoid.v1m.swap");
+
+    // ─── storage ─────────────────────────────────────────────────────────────
+    //
+    // Lives in the proxy. APPEND-ONLY across upgrades: never reorder, remove or
+    // retype a variable below, never change the Registration / TokenConfig /
+    // PoolLib.Tree structs (Tree sits in a dynamic array), and add new
+    // variables only after the last one. See notes/proxy_upgrades.txt.
 
     // ─── identity ────────────────────────────────────────────────────────────
 
@@ -91,8 +108,13 @@ contract NoidPool is Ownable, ReentrancyGuard {
     mapping(bytes32 => bool) public commitmentExists;
     PoolLib.Tree[] private _trees;
 
+    // ─── per-implementation constants (in the implementation's code, not storage)
+
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     ITransferVerifier public immutable transferVerifier;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     IWithdrawVerifier public immutable withdrawVerifier;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     IWrappedNative public immutable wrappedNative;
 
     // ─── events ──────────────────────────────────────────────────────────────
@@ -126,6 +148,9 @@ contract NoidPool is Ownable, ReentrancyGuard {
     event SwapAdapterSet(address indexed adapter, bool allowed);
     event SwapsPausedSet(bool paused);
 
+    // Runs once per implementation. Fixes its verifiers and wrapped native
+    // token, and locks the implementation itself so nobody can initialize it.
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address transferVerifier_, address withdrawVerifier_, address wrappedNative_) {
         require(
             transferVerifier_ != address(0) && withdrawVerifier_ != address(0) && wrappedNative_ != address(0),
@@ -134,7 +159,25 @@ contract NoidPool is Ownable, ReentrancyGuard {
         transferVerifier = ITransferVerifier(transferVerifier_);
         withdrawVerifier = IWithdrawVerifier(withdrawVerifier_);
         wrappedNative = IWrappedNative(wrappedNative_);
+        _disableInitializers();
+    }
+
+    // Runs once, through the proxy, when it is deployed.
+    function initialize(address owner_) external initializer {
+        require(owner_ != address(0), "Zero address");
+        __Ownable_init();
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+        _transferOwnership(owner_);
         _newTree();
+    }
+
+    // Only the owner can move the proxy to a new implementation.
+    // Renouncing ownership freezes the code for good.
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    function version() external pure virtual returns (string memory) {
+        return "1.0.0";
     }
 
     // only the wrapped native token sends coins here (when unwrapping a withdrawal)

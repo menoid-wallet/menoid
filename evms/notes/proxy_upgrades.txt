@@ -1,0 +1,98 @@
+Proxy and Upgrades (v1-mainnet)
+
+    NoidPool runs behind a UUPS proxy (ERC-1967, OpenZeppelin).
+
+    Code:    contracts/NoidPool.sol (initialize, _authorizeUpgrade, version)
+             helpers/deploy.js (deployNoidPool, upgradeNoidPool)
+             scripts/deploy.js, scripts/upgrade.js
+    Tests:   test/upgrade-test.js (and every other test runs through the proxy)
+
+
+1. How it works
+
+        users / relayer / adapters / indexers
+                       │
+                       ▼
+            ┌──────────────────────┐      delegatecall      ┌─────────────────────────┐
+            │  proxy (permanent)   │ ─────────────────────► │  NoidPool implementation │
+            │  address users know  │                        │  (code only, v1.0.0)     │
+            │  ALL storage + funds │ ◄───────────────────── │                          │
+            └──────────────────────┘                        └─────────────────────────┘
+
+    - The proxy address never changes. It holds every note root, nullifier,
+      registration, token config, adapter list, and every token balance.
+    - Each call runs the implementation's code against the proxy's storage,
+      so address(this) is the proxy: extDataHash, events, balances and the
+      swap adapter's `pool` all refer to the proxy.
+    - An upgrade points the proxy at new code. The data stays where it is.
+
+    UUPS means the upgrade function lives in the implementation and is
+    guarded by `_authorizeUpgrade` (onlyOwner). The proxy itself is a minimal
+    forwarder (~5k extra gas per call).
+
+
+2. What lives where
+
+    proxy storage        everything stateful (append-only, see 4)
+    implementation code  logic, constants, and three immutables:
+                             transferVerifier, withdrawVerifier, wrappedNative
+
+    Changing circuits = new verifiers = deploy a new implementation with the
+    new verifier addresses (TRANSFER_VERIFIER / WITHDRAW_VERIFIER in
+    scripts/upgrade.js). Old notes must stay spendable under new circuits:
+    keep the note formulas, or migrate deliberately.
+
+
+3. Lifecycle
+
+    deploy     scripts/deploy.js
+               implementation (constructor: verifiers, wrappedNative;
+               then locks itself: _disableInitializers)
+               proxy -> initialize(owner): owner, reentrancy guard, first tree
+               initialize can never run again, on the proxy or the implementation
+
+    upgrade    DRY_RUN=1 npx hardhat run scripts/upgrade.js --network <net>
+               npx hardhat run scripts/upgrade.js --network <net>
+               The OpenZeppelin plugin first checks the new contract is
+               upgrade-safe and its storage layout is compatible, and refuses
+               otherwise (tested with a deliberately broken layout).
+
+    freeze     renounceOwnership(): nobody can ever upgrade again (this also
+               removes the owner's token / adapter / pause controls).
+
+
+4. Rules for writing the next version
+
+    - Storage is APPEND-ONLY. Never reorder, remove, rename-with-new-type or
+      insert variables before existing ones; add new ones after the last.
+    - Never change the Registration, TokenConfig or PoolLib.Tree structs.
+      Tree sits in a dynamic array: adding a field shifts every tree.
+      Need more per-tree data? Add a new mapping(uint256 => ...) instead.
+    - Never add a new base contract that has storage in front of NoidPool.
+    - New state that needs setting up: add
+          function initializeV2(...) external reinitializer(2) { ... }
+      and call it in the same transaction as the upgrade (upgradeToAndCall).
+    - Keep the note formulas, domain separators and ext data layouts, or
+      existing notes and wallets break.
+    - Size: the implementation is ~22.4 KB. Base / Polygon / Arbitrum cap
+      contract code at 24 KB (EIP-170); Monad allows 128 KB. Growing past
+      ~24 KB means moving logic into libraries or a second contract.
+    - Run the full test suite against the new version, then DRY_RUN the
+      upgrade on the target network before sending it.
+
+
+5. The trust model changes — read this before mainnet
+
+    Before the proxy, the owner could only manage tokens, adapters and pauses.
+    With the proxy, THE OWNER CAN REPLACE ALL OF THE CODE, which means the
+    owner key can take every token in the pool. Users are trusting it.
+
+    So on mainnet:
+    - the owner must be a multisig (e.g. Safe, 2-of-3 or 3-of-5), never a
+      single hot key, and never the relayer key
+    - put upgrades behind a timelock (e.g. OpenZeppelin TimelockController,
+      24–72 h): users see a pending upgrade and can withdraw before it lands
+    - keep an instant "guardian" for pauses only, separate from the timelock,
+      if emergency pausing is needed (pauses never block withdrawals)
+    - publish each new implementation's source and verify it on the explorer
+    - plan to freeze (renounce) once the protocol has settled

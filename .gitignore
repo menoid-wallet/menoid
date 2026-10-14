@@ -38,3 +38,8 @@ witness.wtns
 
 # Hardhat fork cache (downloaded mainnet state from test/fork)
 evms/cache/hardhat-network-fork/
+
+# OpenZeppelin upgrades manifests for local dev chains (live-network manifests are committed)
+evms/.openzeppelin/unknown-31337.json
+evms/.openzeppelin/unknown-1337.json
+evms/cache/validations.json

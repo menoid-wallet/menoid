@@ -112,6 +112,7 @@ describe("Menoid v1-mainnet: private swaps (Uniswap V3)", function () {
     }
 
     before(async function () {
+        hre.upgrades.silenceWarnings();   // the linked-Poseidon-libraries notice is expected
         [owner, relayerSigner, aliceSigner, bobSigner, traderSigner] = await ethers.getSigners();
 
         const system = await deployLocalSystem(hre, { uniswap: true });

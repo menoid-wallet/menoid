@@ -23,7 +23,9 @@ contract MockERC20 is ERC20 {
     }
 }
 
-// WETH9-style wrapped native coin
+// WETH9-style wrapped native coin. Like the real WETH9 / WMON / WPOL it pays
+// out with transfer(), which forwards only 2,300 gas: the pool's proxy must
+// accept native coin within that stipend.
 contract MockWrappedNative is ERC20 {
     constructor() ERC20("Wrapped Native", "WNATIVE") {}
 
@@ -37,8 +39,7 @@ contract MockWrappedNative is ERC20 {
 
     function withdraw(uint256 amount) external {
         _burn(msg.sender, amount);
-        (bool ok, ) = msg.sender.call{value: amount}("");
-        require(ok, "Native transfer failed");
+        payable(msg.sender).transfer(amount);
     }
 }
 

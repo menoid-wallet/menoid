@@ -39,8 +39,21 @@ async function deployContract(hre, name, args = [], options = {}) {
     return { contract, gasUsed: receipt.gasUsed, blockNumber: receipt.blockNumber };
 }
 
-// the pool and everything it links to
-async function deployNoidPool(hre, { wrappedNative, log = () => {} }) {
+// The Poseidon libraries are pure hash functions with no storage, so linking
+// them into an upgradeable implementation is safe.
+const PROXY_OPTIONS = { kind: "uups", unsafeAllowLinkedLibraries: true };
+
+/**
+ * The pool behind its UUPS proxy (ERC-1967), and everything it links to.
+ *
+ * Returns `pool` attached to the PROXY address: that is the only address
+ * users, the relayer, adapters and indexers ever use. The implementation is
+ * an internal detail that upgrades replace.
+ */
+async function deployNoidPool(hre, { wrappedNative, owner, log = () => {} }) {
+    const { ethers, upgrades } = hre;
+    const [deployer] = await ethers.getSigners();
+
     const poseidonT3 = await deployPoseidonLibrary(hre, "PoseidonT3");
     log(`PoseidonT3        ${poseidonT3.address}  (${poseidonT3.how})`);
     const poseidonT5 = await deployPoseidonLibrary(hre, "PoseidonT5");
@@ -51,17 +64,24 @@ async function deployNoidPool(hre, { wrappedNative, log = () => {} }) {
     const withdrawVerifier = await deployContract(hre, "WithdrawVerifier");
     log(`WithdrawVerifier  ${withdrawVerifier.contract.address}`);
 
-    const pool = await deployContract(
-        hre,
-        "NoidPool",
-        [transferVerifier.contract.address, withdrawVerifier.contract.address, wrappedNative],
-        { libraries: { PoseidonT3: poseidonT3.address, PoseidonT5: poseidonT5.address } }
-    );
-    log(`NoidPool          ${pool.contract.address}  (block ${pool.blockNumber})`);
+    const libraries = { PoseidonT3: poseidonT3.address, PoseidonT5: poseidonT5.address };
+    const constructorArgs = [transferVerifier.contract.address, withdrawVerifier.contract.address, wrappedNative];
+    const factory = await ethers.getContractFactory("NoidPool", { libraries });
+
+    // deploys the implementation, then the proxy, which calls initialize(owner)
+    const pool = await upgrades.deployProxy(factory, [owner || deployer.address], { ...PROXY_OPTIONS, constructorArgs });
+    await pool.deployed();
+    const receipt = await pool.deployTransaction.wait();
+    const implementation = await upgrades.erc1967.getImplementationAddress(pool.address);
+    log(`NoidPool (proxy)  ${pool.address}  (block ${receipt.blockNumber})`);
+    log(`  implementation  ${implementation}  (v${await pool.version()})`);
 
     return {
-        pool: pool.contract,
-        deployBlock: pool.blockNumber,
+        pool,
+        implementation,
+        deployBlock: receipt.blockNumber,
+        libraries,
+        constructorArgs,
         poseidonT3,
         poseidonT5,
         transferVerifier: transferVerifier.contract,
@@ -71,9 +91,27 @@ async function deployNoidPool(hre, { wrappedNative, log = () => {} }) {
             poseidonT5: poseidonT5.gasUsed,
             transferVerifier: transferVerifier.gasUsed,
             withdrawVerifier: withdrawVerifier.gasUsed,
-            noidPool: pool.gasUsed
+            noidPoolProxy: receipt.gasUsed
         }
     };
+}
+
+/**
+ * Move the proxy to a new implementation. The upgrades plugin first checks
+ * that the new contract's storage layout is compatible and that it is
+ * upgrade-safe, and refuses otherwise.
+ *
+ *   libraries        Poseidon addresses (from deployments/<network>.json)
+ *   constructorArgs  [transferVerifier, withdrawVerifier, wrappedNative];
+ *                    pass new verifiers here to change circuits
+ */
+async function upgradeNoidPool(hre, { pool, contractName = "NoidPool", libraries, constructorArgs, signer, log = () => {} }) {
+    const { ethers, upgrades } = hre;
+    const factory = await ethers.getContractFactory(contractName, { libraries, signer });
+    const upgraded = await upgrades.upgradeProxy(pool.address, factory, { ...PROXY_OPTIONS, constructorArgs });
+    const implementation = await upgrades.erc1967.getImplementationAddress(pool.address);
+    log(`NoidPool (proxy)  ${pool.address} -> implementation ${implementation} (v${await upgraded.version()})`);
+    return { pool: upgraded, implementation };
 }
 
 // the Uniswap V3 swap venue for a pool, whitelisted
@@ -145,9 +183,11 @@ async function deployLocalSystem(hre, { log = () => {}, uniswap = false } = {}) 
 }
 
 module.exports = {
+    PROXY_OPTIONS,
     deployPoseidonLibrary,
     deployContract,
     deployNoidPool,
+    upgradeNoidPool,
     deployUniswapV3Adapter,
     deployLocalSystem
 };

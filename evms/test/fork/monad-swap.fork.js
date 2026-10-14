@@ -28,6 +28,7 @@ const USDC = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";   // Circle USDC on M
     const log = (line) => console.log("        " + line);
 
     before(async function () {
+        hre.upgrades.silenceWarnings();   // the linked-Poseidon-libraries notice is expected
         [, relayerSigner, aliceSigner] = await ethers.getSigners();
         chainId = (await ethers.provider.getNetwork()).chainId;
         log(`forked Monad at block ${await ethers.provider.getBlockNumber()}`);
@@ -127,5 +128,35 @@ const USDC = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";   // Circle USDC on M
         await (await pool.connect(relayerSigner).withdraw([withdrawal.call])).wait();
         expect(BigInt((await usdc.balanceOf(outsider)).toString())).to.equal(usdcNote.amount - fee);
         log(`withdrew ${ethers.utils.formatUnits((usdcNote.amount - fee).toString(), 6)} real USDC to a fresh address`);
+
+        // 5. native MON out: the real WMON pays the pool's PROXY with a 2,300-gas
+        //    transfer, which the proxy must forward to the implementation in time
+        await mirror.sync();
+        const monNote = scan(mirror, viewerFromWallet(alice)).unspent.find(
+            (n) => n.token === ethers.utils.getAddress(MONAD.wrappedNative)
+        );
+        const monOut = ethers.Wallet.createRandom().address;
+        const unwrap = await buildWithdraw({
+            pool,
+            chainId,
+            mirror,
+            sender: alice,
+            notes: [monNote],
+            token: MONAD.wrappedNative,
+            amount: ethers.utils.parseEther("500"),
+            recipient: monOut,
+            unwrapNative: true,
+            relayer: await W.resolveRecipient(pool, relayer.address),
+            fee: ethers.utils.parseEther("1")
+        });
+        await (await pool.connect(relayerSigner).withdraw([unwrap.call])).wait();
+        expect((await ethers.provider.getBalance(monOut)).toString()).to.equal(ethers.utils.parseEther("500").toString());
+        log("withdrew 500 native MON (unwrapped from the real WMON) through the proxy");
+    });
+
+    it("runs behind a UUPS proxy on the fork too", async function () {
+        const implementation = await hre.upgrades.erc1967.getImplementationAddress(pool.address);
+        expect(implementation).to.not.equal(pool.address);
+        expect(await pool.version()).to.equal("1.0.0");
     });
 });

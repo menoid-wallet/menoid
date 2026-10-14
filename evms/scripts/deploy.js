@@ -14,8 +14,12 @@
  * UNISWAP_V3_ROUTER). Accepted tokens are configured afterwards with
  * configureToken.
  *
- * signers[0] deploys, owns the pool (move ownership to a multisig on a live
- * network), and is registered as the relayer identity.
+ * The pool is deployed behind a UUPS proxy (ERC-1967): `noidPool` in the record
+ * is the proxy, the permanent address. Upgrade later with scripts/upgrade.js.
+ *
+ * signers[0] deploys, owns the pool (and with it the right to upgrade: move
+ * ownership to a multisig on a live network), and is registered as the relayer
+ * identity.
  *
  * Writes deployments/<network>.json.
  */
@@ -77,7 +81,10 @@ async function main() {
         network: network.name,
         chainId,
         version: "v1-mainnet",
-        noidPool: system.pool.address,
+        noidPool: system.pool.address,                       // the proxy: the only address clients use
+        noidPoolImplementation: system.implementation,
+        noidPoolVersion: await system.pool.version(),
+        proxyKind: "uups (ERC-1967)",
         deployBlock: system.deployBlock,
         transferVerifier: system.transferVerifier.address,
         withdrawVerifier: system.withdrawVerifier.address,
