@@ -1,0 +1,37 @@
+Reading r1cs
+Reading tauG1
+Reading tauG2
+Reading alphatauG1
+Reading betatauG1
+Circuit hash: 
+		de42585a 576277cc 5adb4bd2 1b03a019
+		8102949e ab4a7977 e438929b cb69ca04
+		8dc1e1a9 db8a2599 d2dbb1fc afb631fa
+		f23b43aa 9873a544 42e6fe5f 1ff9868e
+Circuit Hash: 
+		de42585a 576277cc 5adb4bd2 1b03a019
+		8102949e ab4a7977 e438929b cb69ca04
+		8dc1e1a9 db8a2599 d2dbb1fc afb631fa
+		f23b43aa 9873a544 42e6fe5f 1ff9868e
+-------------------------
+contribution #3 Beacon: Monad mainnet block 113529011:
+		96aeb1f4 b0cfb0c0 17edad26 897d8b68
+		9a2d65d1 33665494 1cd0c9df 630575f3
+		d9dba42b ad86e674 4e21d32a 016461c2
+		a37779ee 5c8d0f73 4e98d430 f1f59f9d
+Beacon generator: 2e54913df90306991fa0cb4e419c71f14412e9a17e3b43e53e3c6181a94d689d
+Beacon iterations Exp: 10
+-------------------------
+contribution #2 Mahesh K:
+		0bbce4eb f3832e56 76bb9eb4 274cf22e
+		65ff06ea 9639208f 6edfd19d 3c07385e
+		49c2423b 0e697f01 2abca387 cbacdf30
+		aa40353e 58b07d3a 3ce67df8 973fdf7a
+-------------------------
+contribution #1 Menoid build session (Claude Code, OS randomness):
+		86e93a7c e3ecb33c ca94339f 3b99c7bd
+		79126446 8ab82bf3 d4180422 479ad415
+		27d95658 a1e7007f c3889e18 62a28b26
+		7f905965 4310fef5 c3da6346 083cdef9
+-------------------------
+ZKey Ok!

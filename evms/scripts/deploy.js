@@ -33,12 +33,34 @@ const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-const { deployLocalSystem, deployNoidPool, deployUniswapV3Adapter } = require("../helpers/deploy");
+const { deployLocalSystem, deployNoidPool, deployUniswapV3Adapter, VERIFIERS } = require("../helpers/deploy");
 const { deriveWallet, registerWallet, keyNetworkForChainId, MAINNET_CHAIN_IDS } = require("../helpers/wallets");
 const { UNISWAP_V3 } = require("../helpers/uniswap");
 const { writeRelayerEnvBlock } = require("../helpers/relayer-env");
 
 const LOCAL_NETWORKS = new Set(["hardhat", "localhost"]);
+
+// A guarded launch: the tokens a mainnet pool accepts on day one, each with a
+// small PER-DEPOSIT cap (helpers/mainnet-tokens.js). The owner raises caps or
+// adds tokens later (scripts/list-tokens.js). Swaps can only buy listed tokens.
+const { MAINNET_TOKENS } = require("../helpers/mainnet-tokens");
+
+// mainnet pools are only deployed with the finished ceremony's verifiers
+function mainnetCeremony() {
+    const file = path.join(__dirname, "..", "ceremony", "v1m-mainnet", "transcript.json");
+    if (!fs.existsSync(file)) throw new Error("no mainnet ceremony: run scripts/ceremony.js (init, contribute, beacon, finalize)");
+    const t = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!t.final) throw new Error("the mainnet ceremony is not finalized: node scripts/ceremony.js finalize");
+    for (const name of Object.values(VERIFIERS.mainnet)) {
+        if (!fs.existsSync(path.join(__dirname, "..", "contracts", `${name}.sol`))) throw new Error(`contracts/${name}.sol is missing: re-run the ceremony's finalize`);
+    }
+    return {
+        transcript: "ceremony/v1m-mainnet/transcript.json",
+        contributions: t.contributions.map((c) => c.name),
+        beacon: t.beacon && t.beacon.source,
+        final: t.final
+    };
+}
 
 // the Uniswap V3 that scripts/testnet/deploy-uniswap.js put on a testnet
 function readTestnetVenue(networkName, chainId) {
@@ -56,6 +78,12 @@ async function main() {
     const log = (line) => console.log("  " + line);
 
     console.log(`Deploying Menoid v1-mainnet to ${network.name} (chain ${chainId}) with ${deployer.address}\n`);
+
+    // Mainnet chains get mainnet keys and the ceremony's verifiers; testnets
+    // and local nodes get testnet keys and the development setup.
+    const keyNetwork = keyNetworkForChainId(chainId);
+    const ceremony = keyNetwork === "mainnet" ? mainnetCeremony() : null;
+    if (ceremony) log(`trusted setup: ${ceremony.contributions.length} contributions + ${ceremony.beacon}`);
 
     let system;
     let swapVenue;
@@ -78,7 +106,7 @@ async function main() {
         const wrappedNative =
             process.env.WRAPPED_NATIVE || (known && known.wrappedNative) || (testnetVenue && testnetVenue.wrappedNative);
         if (!wrappedNative) throw new Error("unknown chain: set WRAPPED_NATIVE to its wrapped native token address");
-        system = await deployNoidPool(hre, { wrappedNative, log });
+        system = await deployNoidPool(hre, { wrappedNative, verifiers: VERIFIERS[keyNetwork], log });
 
         const router =
             process.env.UNISWAP_V3_ROUTER || (known && known.swapRouter02) || (testnetVenue && testnetVenue.swapRouter02);
@@ -110,9 +138,15 @@ async function main() {
         }
     }
 
-    // the relayer's identity: fee notes are locked to its user commitment.
-    // Mainnet chains get mainnet keys; testnets and local nodes get testnet keys.
-    const keyNetwork = keyNetworkForChainId(chainId);
+    // a mainnet pool's day-one tokens, with their guarded-launch caps
+    for (const t of (keyNetwork === "mainnet" && MAINNET_TOKENS[chainId]) || []) {
+        const decimals = await new ethers.Contract(t.address, ["function decimals() view returns (uint8)"], ethers.provider).decimals();
+        await (await system.pool.configureToken(t.address, true, ethers.utils.parseUnits(t.cap, decimals))).wait();
+        tokens[t.symbol] = t.address;
+        log(`accepted ${t.symbol.padEnd(6)} ${t.address}  (max ${t.cap} per deposit)`);
+    }
+
+    // the relayer's identity: fee notes are locked to its user commitment
     const relayer = await deriveWallet(deployer, { network: keyNetwork });
     await registerWallet(system.pool, relayer);
     log(`relayer registered (user commitment ${relayer.userCommitmentBytes32})`);
@@ -139,6 +173,7 @@ async function main() {
         wrappedNative: system.wrappedNative ? system.wrappedNative.address : system.pool.wrappedNative && (await system.pool.wrappedNative()),
         tokens,
         uniswapV3: swapVenue || null,
+        trustedSetup: ceremony || "development (one contributor): testnet only",
         owner: deployer.address,
         relayer: {
             address: relayer.address,

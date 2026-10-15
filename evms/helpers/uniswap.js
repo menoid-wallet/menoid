@@ -45,6 +45,18 @@ const UNISWAP_V3 = {
     }
 };
 
+// Uniswap V3 forks without Uniswap's router: the pool trades through their pools
+// with a V3PoolAdapter (scripts/add-venue.js), which is also the venue's quoter.
+const V3_FORKS = {
+    // nad.fun's DEX, where Monad's memecoins trade (github.com/Naddotfun/contract-v3-abi);
+    // its pools call back capricornCLSwapCallback
+    capricorn: {
+        chainId: 143,
+        name: "Capricorn",
+        factory: "0x6B5F564339DbAD6b780249827f2198a841FEB7F3"
+    }
+};
+
 const FACTORY_ABI = ["function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)"];
 const QUOTER_ABI = [
     "function quoteExactInput(bytes path, uint256 amountIn) returns (uint256 amountOut, uint160[] sqrtPriceX96AfterList, uint32[] initializedTicksCrossedList, uint256 gasEstimate)"
@@ -134,6 +146,7 @@ function withSlippage(amountOut, slippageBps = 50) {
 module.exports = {
     FEE_TIERS,
     UNISWAP_V3,
+    V3_FORKS,
     encodePath,
     decodePath,
     findBestRoute,

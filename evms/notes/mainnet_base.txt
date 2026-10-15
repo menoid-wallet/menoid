@@ -1,0 +1,81 @@
+Base MAINNET (v1-mainnet) — the runbook
+
+    The second mainnet (chain 8453), the same guarded launch as Monad: small
+    per-deposit caps, one funded wallet as deployer + owner + relayer (the
+    same key and the same relayer identity as Monad mainnet), Uniswap's own
+    V3 deployment, the same trusted setup (ceremony/v1m-mainnet).
+
+0. Live (deployed 2026-10-15, block 52,632,857; cost ~0.00013 ETH)
+
+    NoidPool (proxy)          0x436968db6B2B8E729cB21498030c5ebFa4ad0CE6
+      implementation 1.0.0    0xaf3a6f7A0e8AF0bcaCE10fB6c2ca8a2207A63e7b
+    MainnetTransferVerifier   0xd2e673237A8F3C0574D45B279202871ca3B45353   the ceremony's
+    MainnetWithdrawVerifier   0xE48c823cE81D4f8C41664C38d09006628dAE369b   the ceremony's
+    PoseidonT3 / PoseidonT5   0x3333333C…3B93 / 0x555333f3…9767            canonical (CREATE2)
+    UniswapV3Adapter          0x30Eb860540aB57523Cb8E35f78B37D89658F2595   -> Uniswap's SwapRouter02
+    owner and relayer         0x9fBe83e52F4346A492FB24EA7a8c31C5D140a31C   MAINNET_PRIVATE_KEY
+
+    50 tokens (helpers/mainnet-tokens.js, ~$5 per deposit): ETH, USDC, USDT,
+    DAI, USDS, USDe, EURC, cbBTC, WBTC, cbETH, wstETH, weETH, rETH, AERO,
+    VIRTUAL, MORPHO, AAVE, UNI, LINK, ZORA, COMP, CRV, WELL, VVV, AIXBT,
+    CLANKER, BNKR, uSOL, cbXRP, uDOGE and 20 memecoins (BRETT, TOSHI, DEGEN,
+    KEYCAT, MIGGLES, SKI, doginme, BENJI, TYBG, MOG, PEPE, TOBY, CAW, HIGHER,
+    DRB, LAPTOP, MOEW, RUSSELL, MOCHI, NOICE).
+
+    Each was checked before listing: a $1 and a $5 buy on Uniswap V3 sold
+    straight back keeps >= 97%, and plain transfers move exact amounts (no
+    transfer fee, no rebasing). Left out: PONKE, BLUECHIP, NORMIE, REKT, DINO,
+    ANDY, tBTC, PENDLE (thin or one-sided Uniswap V3 liquidity) and Basecat
+    (its transfers revert).
+
+1. Gas on Base
+
+    Base's whole gas price is ~0.006 gwei (base fee 0.005 + tip ~0.001), plus
+    a tiny L1 data fee. Library defaults assume Ethereum's 1-2 gwei tips —
+    hundreds of times too much — so hardhat.config.js fixes baseMainnet's gas
+    price at 0.012 gwei (BASE_GAS_PRICE_WEI overrides). The whole deploy (57
+    transactions, 11M gas) cost ~$0.30. A relayed private transaction costs
+    the relayer ~$0.01-0.03.
+
+2. RPCs (free ones, as of 2026-10-15)
+
+    mainnet.base.org          sending works, but it hung once mid-deploy (the
+                              deploy stopped after the adapter; see 4), and it
+                              refuses eth_getLogs entirely
+    base-rpc.publicnode.com   fast reads, eth_getLogs over the last ~5,000
+                              blocks only (~3 hours); older state: "archive
+                              requests require a personal token"
+    base-mainnet.public.blastapi.io   serves old state; sent the rest of the deploy
+
+    The backend reads and indexes through publicnode (config.js BASE_MAINNET).
+    Kept awake (UptimeRobot / HetrixTools ping), it never falls 3 hours behind;
+    if it might, set V1M_BASE_LOGS_RPC_URL to an endpoint with archive logs.
+
+3. Deploy (done) — rehearse on a fork first
+
+    FORK_CHAIN_ID=8453 npx hardhat node --fork https://base-mainnet.public.blastapi.io --port 8548
+    npx hardhat run scripts/deploy.js --network baseMainnetFork        (free; mine one block first)
+    npx hardhat run scripts/deploy.js --network baseMainnet
+
+4. If a deploy stops part-way (it did: an RPC timeout after the adapter)
+
+    BASE_MAINNET_RPC_URL=https://base-mainnet.public.blastapi.io \
+    POOL=0x436968db6B2B8E729cB21498030c5ebFa4ad0CE6 DEPLOY_BLOCK=52632857 \
+    ADAPTER=0x30Eb860540aB57523Cb8E35f78B37D89658F2595 \
+      npx hardhat run scripts/resume-deploy.js --network baseMainnet
+
+    It reads the chain, accepts the tokens the pool does not accept yet,
+    registers the relayer if needed and writes deployments/baseMainnet.json.
+    Safe to re-run.
+
+5. More tokens later
+
+    Add them to helpers/mainnet-tokens.js (checked the same way), then
+    npx hardhat run scripts/list-tokens.js --network baseMainnet
+    and add them to website/backend/v1mainnet/config.js (with a logo in
+    website/public/tokens/base/).
+
+6. The backend (the same server as Monad mainnet)
+
+    V1M_CHAINS=monad,base on Render. Base's addresses are config.js defaults;
+    nothing else to set. The first price pass after a start takes ~30 s.

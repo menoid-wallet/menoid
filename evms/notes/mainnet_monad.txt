@@ -1,0 +1,136 @@
+Monad MAINNET (v1-mainnet) — the runbook
+
+    A guarded first launch on Monad (chain 143): small per-deposit caps
+    (20 MON, 5 USDC), one funded wallet as deployer + owner + relayer.
+    Uniswap's own V3 deployment, WMON and Circle's USDC.
+
+0. Live (deployed 2026-10-15, block 113,530,136; cost 1.91 MON)
+
+    NoidPool (proxy)          0x3A3B64E3230C9A9aA32a1395C2c7B909cbe02EFB
+      implementation 1.0.0    0x30Eb860540aB57523Cb8E35f78B37D89658F2595
+    MainnetTransferVerifier   0xaf3a6f7A0e8AF0bcaCE10fB6c2ca8a2207A63e7b   the ceremony's
+    MainnetWithdrawVerifier   0x436968db6B2B8E729cB21498030c5ebFa4ad0CE6   the ceremony's
+    PoseidonT3 / PoseidonT5   0x3333333C…3B93 / 0x555333f3…9767            canonical (CREATE2)
+    UniswapV3Adapter          0xf5a599fA588C14C4787a090C7a30f2E4C163762B   -> Uniswap's SwapRouter02
+    owner and relayer         0x9fBe83e52F4346A492FB24EA7a8c31C5D140a31C   MAINNET_PRIVATE_KEY
+
+    Capricorn adapter         0xd6E8F9CaD752A21a741660B3aA244EA065A12cA7   V3PoolAdapter (2026-10-15)
+
+    Accepted (max per deposit): WMON 20, USDC 5, USDT0 5, AUSD 5, USDe 5, USD1 5,
+    WETH 0.002, WBTC / cbBTC / LBTC 0.00006, shMON / gMON / sMON / aprMON 200,
+    and 14 memecoins at ~$5 each (helpers/mainnet-tokens.js): CHOG, emo,
+    MOLANDAK, shramp, BOB, ANAGO, MONCAT, NADS, EGG, HOGDOG, 143, BC, MONI, FLING.
+    Rehearsed first on a local fork of Monad mainnet: register, mask, a private
+    swap on the real WMON/USDC pool, a private send and an unmask, all proven
+    with the ceremony's keys against the ceremony's verifiers.
+
+1. The trusted setup (scripts/ceremony.js)
+
+    Groth16 needs a one-time setup per circuit. Whoever knows its secret
+    randomness ("toxic waste") could forge proofs and drain the pool, so it is
+    built in two phases where nobody holds the whole secret:
+
+    Phase 1  the Hermez / Polygon perpetual powers of tau
+             (ptau/powersOfTau28_hez_final_17.ptau, blake2b 6247a343…49345,
+             the hash snarkjs publishes). A public ceremony with many
+             contributors. `init` checks the file before using it.
+    Phase 2  ours, per circuit (transfer_proof: 26,856 constraints,
+             withdraw_proof: 26,304). Every contribution mixes in fresh
+             randomness that exists only in memory while the command runs.
+             The setup is sound if ANY ONE contributor was honest.
+
+        node scripts/ceremony.js init                       done 2026-10-15
+        node scripts/ceremony.js contribute "Name" --auto   #1 done: Menoid build session
+        node scripts/ceremony.js contribute "Your name"     #2 done: Mahesh K
+        (optional) more people on other machines: send them
+            ceremony/v1m-mainnet/{transfer,withdraw}_NNNN.zkey (the latest two)
+            and this script; they run `contribute` and send the new files back
+        node scripts/ceremony.js beacon                     done: Monad block 113,529,011 — the hash of the
+                                                            latest Monad block, after the last
+                                                            contribution
+        node scripts/ceremony.js finalize                   verifies every step against phase 1,
+                                                            writes contracts/Mainnet*Verifier.sol
+                                                            and website/public/zk/v1m/mainnet/*.zkey
+        node scripts/ceremony.js status
+
+    ceremony/v1m-mainnet/transcript.json (commit it) records the circuits'
+    hashes, every contribution hash, the beacon and the final keys. Anyone can
+    re-check the final keys with `snarkjs zkey verify` against phase 1.
+
+    Testnet pools keep the development setup (contracts/TransferVerifier.sol,
+    one contributor). Those keys must never secure real funds; scripts/deploy.js
+    refuses to deploy a mainnet pool without the finished ceremony.
+
+2. Where the private key goes (never in chat, never in git)
+
+    menoid/evms/.env               MAINNET_PRIVATE_KEY=0x…              deploys, owns, registers the relayer
+    website/backend/.env           V1M_MAINNET_RELAYER_PRIVATE_KEY=0x…  the same key, for a local backend
+    Render (Environment tab)       V1M_MAINNET_RELAYER_PRIVATE_KEY      the same key, for the hosted backend
+
+    Both .env files are git-ignored. The relayer's public keys are derived
+    from the key at runtime (it signs the mainnet key message): nothing else
+    to paste. Checked 2026-10-15 that the protocol scripts, the backend and the
+    website derive identical keys from one signature (mainnet and testnet).
+
+3. Rehearse on a fork (free), then deploy
+
+    FORK_CHAIN_ID=143 npx hardhat node --fork https://rpc.monad.xyz --port 8547
+    npx hardhat compile
+    npx hardhat run scripts/deploy.js --network monadMainnetFork
+
+    npx hardhat run scripts/deploy.js --network monadMainnet      (real MON: ~2–3 MON of gas)
+
+    deploy.js on mainnet: the ceremony's verifiers, Uniswap's official router,
+    WMON and USDC accepted with their caps, the relayer registered with MAINNET
+    keys. Writes deployments/monadMainnet.json. Then put the pool address,
+    deploy block and adapter into website/backend/v1mainnet/config.js
+    (MONAD_MAINNET) and restart the backend: it shows "registered".
+
+4. The backend on Render (a separate workspace from the V1 demo's)
+
+    New Web Service → the website repo, branch v1-mainnet
+      Root directory   backend
+      Build            npm install
+      Start            npm start
+      Instance         Free (or Starter to avoid sleeping)
+      Health check     /
+    Environment
+      V1M_CHAINS                         monad,base
+      V1M_MAINNET_RELAYER_PRIVATE_KEY    the funded key
+      V1M_MONGODB_URI                    a MongoDB Atlas (M0 free) connection string
+      V1M_DB_NAME                        menoid_v1m_mainnet
+      CORS_ORIGINS                       the site's origin if it is not menoid.xyz / app.menoid.xyz
+      V1M_MONAD_POLL_MS                  5000 (optional: fewer RPC calls on a free instance)
+    The website (Vercel): NEXT_PUBLIC_V1M_API_URL = https://<service>.onrender.com
+    Keep it awake with a 5-minute ping of / (HetrixTools, or UptimeRobot for
+    non-commercial use).
+
+5. Memecoins: the Capricorn venue (2026-10-15)
+
+    Monad's memecoins trade on Capricorn — nad.fun's DEX, where its tokens
+    graduate — not on Uniswap V3. Capricorn is a Uniswap V3 fork (same
+    factory and pools) whose pools call back capricornCLSwapCallback, and its
+    router is nad.fun's own. So the pool reaches it through
+    contracts/adapters/V3PoolAdapter.sol: it swaps straight through the pools
+    (getPool from the factory; only the pool in flight may collect; partial
+    fills revert) and is also the venue's quoter (QuoterV2's interface).
+    Tested: test/v3pool-adapter-test.js (against Uniswap's own pool code) and
+    test/fork/monad-capricorn.fork.js (real Capricorn pools, MON -> CHOG ->
+    MON, withdraw CHOG).
+
+        VENUE=capricorn npx hardhat run scripts/add-venue.js --network monadMainnet   done
+        npx hardhat run scripts/list-tokens.js --network monadMainnet                done (14 added)
+
+    Listed only after checking on a fork: a $1 and a $5 buy sold straight back
+    keeps >= 97%, transfers move exact amounts. Left out: tokens with no
+    trading (sbgood, MOYAKI, MONCHEL), an ambiguous GMONAD, a vulgar name.
+    The backend routes across both venues and picks the best quote
+    (website/backend/v1mainnet/market.js; config.js `venues`).
+
+6. Before real users
+
+    - Move ownership to a multisig (the owner can upgrade the pool and change caps).
+    - Give the relayer its own key, separate from the owner.
+    - More ceremony contributors, on machines you do not control, then a new finalize.
+    - Raise caps slowly (configureToken); setDepositsPaused / setSwapsPaused exist
+      for emergencies. Withdrawals can never be paused.

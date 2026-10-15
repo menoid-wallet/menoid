@@ -50,7 +50,28 @@ const PROXY_OPTIONS = { kind: "uups", unsafeAllowLinkedLibraries: true };
  * users, the relayer, adapters and indexers ever use. The implementation is
  * an internal detail that upgrades replace.
  */
-async function deployNoidPool(hre, { wrappedNative, owner, log = () => {} }) {
+// A load-balanced RPC (Base's, for one) can answer from a node that has not
+// seen the proxy's block yet, and the implementation slot reads as empty:
+// ask again for a while before giving up.
+async function implementationOf(upgrades, proxy) {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await upgrades.erc1967.getImplementationAddress(proxy);
+        } catch (error) {
+            if (attempt >= 20) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+    }
+}
+
+// which Groth16 verifiers a pool gets: testnets keep the development setup,
+// mainnets the ceremony's (scripts/ceremony.js writes Mainnet*Verifier.sol)
+const VERIFIERS = {
+    testnet: { transfer: "TransferVerifier", withdraw: "WithdrawVerifier" },
+    mainnet: { transfer: "MainnetTransferVerifier", withdraw: "MainnetWithdrawVerifier" }
+};
+
+async function deployNoidPool(hre, { wrappedNative, owner, verifiers = VERIFIERS.testnet, log = () => {} }) {
     const { ethers, upgrades } = hre;
     const [deployer] = await ethers.getSigners();
 
@@ -59,10 +80,10 @@ async function deployNoidPool(hre, { wrappedNative, owner, log = () => {} }) {
     const poseidonT5 = await deployPoseidonLibrary(hre, "PoseidonT5");
     log(`PoseidonT5        ${poseidonT5.address}  (${poseidonT5.how})`);
 
-    const transferVerifier = await deployContract(hre, "TransferVerifier");
-    log(`TransferVerifier  ${transferVerifier.contract.address}`);
-    const withdrawVerifier = await deployContract(hre, "WithdrawVerifier");
-    log(`WithdrawVerifier  ${withdrawVerifier.contract.address}`);
+    const transferVerifier = await deployContract(hre, verifiers.transfer);
+    log(`${verifiers.transfer.padEnd(17)} ${transferVerifier.contract.address}`);
+    const withdrawVerifier = await deployContract(hre, verifiers.withdraw);
+    log(`${verifiers.withdraw.padEnd(17)} ${withdrawVerifier.contract.address}`);
 
     const libraries = { PoseidonT3: poseidonT3.address, PoseidonT5: poseidonT5.address };
     const constructorArgs = [transferVerifier.contract.address, withdrawVerifier.contract.address, wrappedNative];
@@ -72,7 +93,7 @@ async function deployNoidPool(hre, { wrappedNative, owner, log = () => {} }) {
     const pool = await upgrades.deployProxy(factory, [owner || deployer.address], { ...PROXY_OPTIONS, constructorArgs });
     await pool.deployed();
     const receipt = await pool.deployTransaction.wait();
-    const implementation = await upgrades.erc1967.getImplementationAddress(pool.address);
+    const implementation = await implementationOf(upgrades, pool.address);
     log(`NoidPool (proxy)  ${pool.address}  (block ${receipt.blockNumber})`);
     log(`  implementation  ${implementation}  (v${await pool.version()})`);
 
@@ -109,7 +130,7 @@ async function upgradeNoidPool(hre, { pool, contractName = "NoidPool", libraries
     const { ethers, upgrades } = hre;
     const factory = await ethers.getContractFactory(contractName, { libraries, signer });
     const upgraded = await upgrades.upgradeProxy(pool.address, factory, { ...PROXY_OPTIONS, constructorArgs });
-    const implementation = await upgrades.erc1967.getImplementationAddress(pool.address);
+    const implementation = await implementationOf(upgrades, pool.address);
     log(`NoidPool (proxy)  ${pool.address} -> implementation ${implementation} (v${await upgraded.version()})`);
     return { pool: upgraded, implementation };
 }
@@ -119,6 +140,15 @@ async function deployUniswapV3Adapter(hre, { pool, router, log = () => {} }) {
     const adapter = (await deployContract(hre, "UniswapV3Adapter", [router, pool.address])).contract;
     await (await pool.setSwapAdapter(adapter.address, true)).wait();
     log(`UniswapV3Adapter  ${adapter.address}  (router ${router})`);
+    return adapter;
+}
+
+// A Uniswap V3 fork without Uniswap's router (Capricorn on Monad): swaps go
+// straight through its pools, and the adapter is also the venue's quoter.
+async function deployV3PoolAdapter(hre, { pool, factory, label = "V3PoolAdapter", log = () => {} }) {
+    const adapter = (await deployContract(hre, "V3PoolAdapter", [factory, pool.address])).contract;
+    await (await pool.setSwapAdapter(adapter.address, true)).wait();
+    log(`${label.padEnd(17)} ${adapter.address}  (factory ${factory})`);
     return adapter;
 }
 
@@ -183,11 +213,13 @@ async function deployLocalSystem(hre, { log = () => {}, uniswap = false } = {}) 
 }
 
 module.exports = {
+    VERIFIERS,
     PROXY_OPTIONS,
     deployPoseidonLibrary,
     deployContract,
     deployNoidPool,
     upgradeNoidPool,
     deployUniswapV3Adapter,
+    deployV3PoolAdapter,
     deployLocalSystem
 };

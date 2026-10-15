@@ -1,0 +1,83 @@
+{
+    "network": "baseSepoliaV1m",
+    "chainId": 84532,
+    "version": "v1-mainnet",
+    "noidPool": "0xB74dDD9B6719402334b68cc126eca50744143673",
+    "noidPoolImplementation": "0xD184D35c4Fe39ecC2aE86a9E34f0Fb9a40198E02",
+    "noidPoolVersion": "1.0.0",
+    "proxyKind": "uups (ERC-1967)",
+    "deployBlock": 48131508,
+    "transferVerifier": "0xAae171c7de409f6c37BA92a6c3B83d52bd5dEac5",
+    "withdrawVerifier": "0xCc0857d3526674048235948d0d250F812b938751",
+    "poseidonT3": "0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93",
+    "poseidonT5": "0x555333f3f677Ca3930Bf7c56ffc75144c51D9767",
+    "wrappedNative": "0x4200000000000000000000000000000000000006",
+    "tokens": {
+        "WETH": "0x4200000000000000000000000000000000000006",
+        "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "mTKN": "0xb1943AC6fCAE3205c711f65BAB318c501bDB11b6"
+    },
+    "uniswapV3": {
+        "factory": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
+        "quoterV2": "0xC5290058841028F1614F3A6F0F5816cAd0df5E27",
+        "positionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2",
+        "pools": {
+            "WETH/USDC 0.01%": {
+                "address": "0x57183717A087d2fe3Ad890873877244c3B96156c",
+                "fee": 100,
+                "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "token1": "0x4200000000000000000000000000000000000006",
+                "liquidity": "2890001491047",
+                "seededBy": "others"
+            },
+            "WETH/USDC 0.05%": {
+                "address": "0x94bfc0574FF48E92cE43d495376C477B1d0EEeC0",
+                "fee": 500,
+                "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "token1": "0x4200000000000000000000000000000000000006",
+                "liquidity": "5303698200342",
+                "seededBy": "others"
+            },
+            "WETH/USDC 0.30%": {
+                "address": "0x46880b404CD35c165EDdefF7421019F8dD25F4Ad",
+                "fee": 3000,
+                "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "token1": "0x4200000000000000000000000000000000000006",
+                "liquidity": "315598590516394",
+                "seededBy": "others"
+            },
+            "WETH/USDC 1.00%": {
+                "address": "0x4664755562152EDDa3a3073850FB62835451926a",
+                "fee": 10000,
+                "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "token1": "0x4200000000000000000000000000000000000006",
+                "liquidity": "57734017049",
+                "seededBy": "others"
+            },
+            "mTKN/USDC 0.05%": {
+                "address": "0x6Aac1064F0a0c202977a3941696f8B786317297d",
+                "fee": 500,
+                "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "token1": "0xb1943AC6fCAE3205c711f65BAB318c501bDB11b6",
+                "seeded": {
+                    "USDC": "20000000",
+                    "mTKN": "20000000000000000000"
+                },
+                "seededBy": "menoid deployer",
+                "sqrtPriceX96": "79228162514264337593543950336000000",
+                "tick": 276324,
+                "liquidity": "0"
+            }
+        },
+        "deployedBy": "scripts/testnet/deploy-uniswap.js",
+        "swapRouter02": "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4",
+        "adapter": "0x589abAF22dABE13a4858a8133b5E807C8A1F4faF"
+    },
+    "owner": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+    "relayer": {
+        "address": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+        "keyNetwork": "testnet",
+        "userCommitment": "0x0fb072defe970a5eb0361cc5ce0a622eeaca8d983e3ee59571dcc3bdbd62899b",
+        "viewingPublicKey": "0x04fb53f574cb7320b10cb682cc28240a8242495d5b1a47fd1b24a3e86494ab1b7260ce5e69d9669cfe90d562a27c91b6b20925403506bddaccb4d4639178a3bc94"
+    }
+}

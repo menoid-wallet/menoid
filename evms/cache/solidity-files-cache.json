@@ -1237,6 +1237,126 @@
         "NoidPoolV2Mock",
         "StorageShifter"
       ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/MainnetTransferVerifier.sol": {
+      "lastModificationDate": 1792041924163,
+      "contentHash": "269f77c577f9966441b76020ddea88df",
+      "sourceName": "contracts/MainnetTransferVerifier.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "storageLayout"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.7.0 <0.9.0"
+      ],
+      "artifacts": [
+        "MainnetTransferVerifier"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/MainnetWithdrawVerifier.sol": {
+      "lastModificationDate": 1792041950635,
+      "contentHash": "7368a5bb2e1317da38860139dcfadf20",
+      "sourceName": "contracts/MainnetWithdrawVerifier.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "storageLayout"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.7.0 <0.9.0"
+      ],
+      "artifacts": [
+        "MainnetWithdrawVerifier"
+      ]
+    },
+    "/Users/maheshkarri/Desktop/Web3/Web3 Projects/Menoid/menoid_codes/menoid/evms/contracts/adapters/V3PoolAdapter.sol": {
+      "lastModificationDate": 1792052690577,
+      "contentHash": "87f350d7327f62a3908ab94e3be0b2e7",
+      "sourceName": "contracts/adapters/V3PoolAdapter.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": false,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata",
+                "storageLayout"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "../libraries/Interfaces.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IV3PoolFactory",
+        "IV3SwapPool",
+        "V3PoolAdapter"
+      ]
     }
   }
 }

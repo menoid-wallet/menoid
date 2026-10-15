@@ -1,0 +1,80 @@
+{
+    "ceremony": "Menoid v1-mainnet, Groth16 phase 2",
+    "startedAt": "2026-10-15T04:18:14.403Z",
+    "tools": {
+        "snarkjs": "0.7.6",
+        "circom": "circom compiler 2.2.3"
+    },
+    "phase1": {
+        "file": "powersOfTau28_hez_final_17.ptau",
+        "blake2b": "6247a3433948b35fbfae414fa5a9355bfb45f56efa7ab4929e669264a0258976741dfbe3288bfb49828e5df02c2e633df38d2245e30162ae7e3bcca5b8b49345",
+        "origin": "Hermez / Polygon perpetual powers of tau, as listed in the snarkjs README"
+    },
+    "circuits": {
+        "transfer": {
+            "source": "circuits/transfer_proof.circom",
+            "sourceSha256": "b50d91e97ca2c3a581f2597f022c1dd09ff3c93e365500331d56420738f6c832",
+            "r1csSha256": "06a892360ec268e11f4f8c51e441240c79d140a33e82cff064f6f5d65781c723",
+            "wasmSha256": "58cb55838bfed15f20ea2cc163d9fdf4d9ff8f3d577b1ad5078cc9efb298d6c3",
+            "constraints": 26856
+        },
+        "withdraw": {
+            "source": "circuits/withdraw_proof.circom",
+            "sourceSha256": "9fffdbe9ae2b3e10a50a88975311ecfc1bb31097875939a7a298e573dcc36eb1",
+            "r1csSha256": "9ee53def2f54226c415e9454e7804cd69d19e9f5c3934c397500982ac688f5e4",
+            "wasmSha256": "c705a1eb45162a8af846c459a7096aae53726c17a2f5bd8be8fc4db51aff46f4",
+            "constraints": 26304
+        }
+    },
+    "contributions": [
+        {
+            "index": 1,
+            "name": "Menoid build session (Claude Code, OS randomness)",
+            "at": "2026-10-15T04:18:19.333Z",
+            "contributionHash": {
+                "transfer": "86e93a7ce3ecb33cca94339f3b99c7bd791264468ab82bf3d4180422479ad41527d95658a1e7007fc3889e1862a28b267f9059654310fef5c3da6346083cdef9",
+                "withdraw": "9182d8f4c0152c702b6c71f5d5bfd4739a94af527e87ba32579a1b4be05550693e6f68be2a3beb461c49d515bbc508c337ad24b763e4833405848dd9448c34ae"
+            },
+            "zkeySha256": {
+                "transfer": "3ea08ff27db9ae9813dde915b7435300236aea14460a6289882709f33b0c05d5",
+                "withdraw": "92a9c370a76caa38a69ab243b679c971df0586c0d30deb74cfb1e2bae48d4fe8"
+            }
+        },
+        {
+            "index": 2,
+            "name": "Mahesh K",
+            "at": "2026-10-15T05:23:12.143Z",
+            "contributionHash": {
+                "transfer": "0bbce4ebf3832e5676bb9eb4274cf22e65ff06ea9639208f6edfd19d3c07385e49c2423b0e697f012abca387cbacdf30aa40353e58b07d3a3ce67df8973fdf7a",
+                "withdraw": "362951267c3962be000cf2cd632f129a408f85afe848753ec11a1a091dd633c52ad193e557a64a90394da5f24e0e9ed948e73d737fb007e2f4f130065e0d2b65"
+            },
+            "zkeySha256": {
+                "transfer": "ecc267d7edb5f14178b4da774dd36422d9d5ab3e9f5dc56d78531d9c165228cd",
+                "withdraw": "4af683fcf1dcd2ca4f6e377d9e6fbdebb7a36be860f3665841e1ee833f3597eb"
+            }
+        }
+    ],
+    "beacon": {
+        "source": "Monad mainnet (chain 143) block 113529011, via https://rpc.monad.xyz",
+        "blockNumber": 113529011,
+        "blockTime": "2026-10-15T05:24:50.000Z",
+        "hash": "0x2e54913df90306991fa0cb4e419c71f14412e9a17e3b43e53e3c6181a94d689d",
+        "iterationsExp": 10,
+        "appliedAt": "2026-10-15T05:24:55.490Z"
+    },
+    "final": {
+        "transfer": {
+            "zkeySha256": "7d3a4f4d16c6674dd54277752a0c0b78cf79a4e2fd13fdebfb6274f0e7f4c902",
+            "verificationKeySha256": "70dba8c2f543afc05cae53d5ee7df4a59d8861834b1f855aedd438acaffeacf4",
+            "verifier": "contracts/MainnetTransferVerifier.sol",
+            "served": "website/public/zk/v1m/mainnet/transfer_proof_final.zkey"
+        },
+        "withdraw": {
+            "zkeySha256": "e816fd2bba7c8ae4d8e7f2c936ee4a7ebf541e56fd562d4e06b2b09b35f71f85",
+            "verificationKeySha256": "7929031e14fdc4fdba4cff5e54c98df07cadbeebead18a04b3fb374ff8632de2",
+            "verifier": "contracts/MainnetWithdrawVerifier.sol",
+            "served": "website/public/zk/v1m/mainnet/withdraw_proof_final.zkey"
+        }
+    },
+    "finalizedAt": "2026-10-15T05:25:48.874Z"
+}

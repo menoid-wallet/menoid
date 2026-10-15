@@ -1,0 +1,97 @@
+Base Sepolia (v1-mainnet)
+
+    Menoid v1-mainnet runs on Base Sepolia (chain 84532) next to Monad testnet,
+    against Uniswap's OWN V3 deployment and its existing WETH/USDC pools.
+    Same contracts and circuits as Monad testnet; same testnet keys (one
+    signature gives the same identity on both chains, registered per pool).
+
+    Records   deployments/baseSepoliaV1m.json            Menoid addresses
+              deployments/baseSepoliaV1m-uniswap.json    Uniswap's addresses, pools, test token
+              .openzeppelin/base-sepolia.json            upgrade manifest (commit it)
+    Network   hardhat network `baseSepoliaV1m`. `baseSepolia` and
+              deployments/baseSepolia.json are the V1 DEMO's: untouched.
+    Secrets   .env (PRIVATE_KEY, BASE_SEPOLIA_RPC_URL, RELAYER WALLET block)
+
+
+1. Addresses
+
+    NoidPool (proxy)          0xB74dDD9B6719402334b68cc126eca50744143673   block 48,131,508
+      implementation 1.0.0    0xD184D35c4Fe39ecC2aE86a9E34f0Fb9a40198E02
+    TransferVerifier          0xAae171c7de409f6c37BA92a6c3B83d52bd5dEac5   dev setup, one contributor
+    WithdrawVerifier          0xCc0857d3526674048235948d0d250F812b938751
+    PoseidonT3                0x3333333C0A88F9BE4fd23ed0536F9B6c427e3B93   canonical (was already there)
+    PoseidonT5                0x555333f3f677Ca3930Bf7c56ffc75144c51D9767   canonical (CREATE2)
+    UniswapV3Adapter          0x589abAF22dABE13a4858a8133b5E807C8A1F4faF   -> Uniswap's SwapRouter02
+    owner and relayer         0x983B81da8b49c5e4EA9DA94613a89C8af4527715   PRIVATE_KEY
+
+    Unused: 0x320D75d60759Ed7B95917F97925375c3855feeF4, a proxy from the first
+    attempt (the RPC answered the implementation slot before it had the
+    block). helpers/deploy.js now asks again; nothing points at it.
+
+    Uniswap V3 — Uniswap's own Base Sepolia deployment (developers.uniswap.org),
+    checked on-chain by scripts/testnet/setup-uniswap-official.js:
+
+    UniswapV3Factory          0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24
+    NonfungiblePositionMgr    0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2
+    SwapRouter02              0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4
+    QuoterV2                  0xC5290058841028F1614F3A6F0F5816cAd0df5E27
+
+    Pools: four WETH/USDC pools that were already there (other people's
+    liquidity, testnet prices), plus one of Menoid's:
+    WETH/USDC 0.01%           0x57183717A087d2fe3Ad890873877244c3B96156c
+    WETH/USDC 0.05%           0x94bfc0574FF48E92cE43d495376C477B1d0EEeC0
+    WETH/USDC 0.30%           0x46880b404CD35c165EDdefF7421019F8dD25F4Ad   the deep one (~6.4 WETH)
+    WETH/USDC 1.00%           0x4664755562152EDDa3a3073850FB62835451926a
+    mTKN/USDC 0.05%           0x6Aac1064F0a0c202977a3941696f8B786317297d   20 USDC : 20 mTKN (Menoid)
+
+    Tokens the pool accepts
+    WETH                      0x4200000000000000000000000000000000000006   OP Stack WETH9 (shown as ETH)
+    USDC (6 decimals)         0x036CbD53842c5426634e7929541eC2318f3dCF7e   Circle's testnet USDC (faucet.circle.com)
+    mTKN (18 decimals)        0xb1943AC6fCAE3205c711f65BAB318c501bDB11b6   test token, anyone can mint()
+
+
+2. Running it again
+
+    npx hardhat run scripts/testnet/setup-uniswap-official.js --network baseSepoliaV1m
+    npx hardhat run scripts/deploy.js --network baseSepoliaV1m
+
+    setup-uniswap-official.js is resumable; deploy.js deploys a NEW pool every
+    time. Cost of this deployment: ~0.00004 ETH of gas, plus ~0.0043 ETH
+    swapped into the USDC that seeds the mTKN pool.
+
+
+3. What was tested (2026-10-15), through the website's own libraries
+   (website/src/lib/v1m) and the website backend's relayer (/api/v1m/base-sepolia)
+
+    keys          erin's Base keys = her Monad keys (one signature)
+    register      erin, alice: one transaction each
+    mask          0.002 ETH (native, wrapped by the pool) and 50 mTKN (approve + deposit)
+    swap          0.0005 ETH -> 2.4369 USDC on the WETH/USDC 0.30% pool
+                  0x29e114c129b61aa49f0fd3b01eb8051a88254ed7f54599919d9ed0b90f60d974
+    swap 2 hops   5 mTKN -> 0.00219 ETH: mTKN/USDC 0.05% (Menoid) then WETH/USDC 0.01%
+    transfer      1 USDC erin -> alice, fee 0.0212 USDC
+                  0xb637bcb1768a31853af51ec8b9e9d69dbaefab8172f542b7295e32e156380a09
+    withdraw      0.0003 ETH to dave (never registered), paid out as native ETH
+                  0xb311466135e3a55a0e6700d0717cee9a8a55b0568accc19fc353d18b82723850
+    books         every balance moved by exactly amount + fee; the backend's
+                  rebuilt tree root is one the pool knows
+
+    The relayer's fees here (0.006 gwei): ~$0.021 a transfer or withdraw,
+    ~$0.024 a swap. Ethereum-priced gas: ~1.04M a transfer (Monad bills ~2x).
+
+
+4. Base facts that matter
+
+    a. Gas is billed on gas USED (Monad bills the limit), plus an L1 data fee
+       for the calldata. The relayer's fee model reads the fee from the
+       GasPriceOracle predeploy (0x42...0F, getL1FeeUpperBound): ~1.6 KB per
+       proof; near zero on Sepolia, about $0.0002 a transaction on mainnet.
+    b. eth_getLogs: the public endpoint (sepolia.base.org) allows 200-block
+       ranges; free tiers of RPC providers allow 10. The backend reads logs
+       from the public endpoint in 150-block windows and sends through the
+       private one.
+    c. RPC load balancers can answer from a node a block behind: read state
+       right after a transaction with a retry (helpers/deploy.js does).
+    d. Testnet pool prices are whatever their liquidity providers set: the
+       0.30% pool pays ~4,900 USDC per ETH. The app prices ETH at Base
+       MAINNET's WETH/USDC mid price, so a quote can read "$2.37 in, $4.87 out".

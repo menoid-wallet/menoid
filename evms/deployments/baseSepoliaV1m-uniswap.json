@@ -1,0 +1,109 @@
+{
+    "network": "baseSepoliaV1m",
+    "chainId": 84532,
+    "purpose": "testnet only: Uniswap V3's own Base Sepolia deployment, plus a Menoid test token and pool",
+    "official": true,
+    "factory": "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
+    "positionManager": "0x27F971cb582BF9E50F397e4d29a5C7A34f11faA2",
+    "swapRouter02": "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4",
+    "quoterV2": "0xC5290058841028F1614F3A6F0F5816cAd0df5E27",
+    "deployer": "0x983B81da8b49c5e4EA9DA94613a89C8af4527715",
+    "wrappedNative": "0x4200000000000000000000000000000000000006",
+    "tokens": {
+        "WETH": "0x4200000000000000000000000000000000000006",
+        "USDC": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "mTKN": "0xb1943AC6fCAE3205c711f65BAB318c501bDB11b6"
+    },
+    "pools": {
+        "WETH/USDC 0.01%": {
+            "address": "0x57183717A087d2fe3Ad890873877244c3B96156c",
+            "fee": 100,
+            "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "token1": "0x4200000000000000000000000000000000000006",
+            "liquidity": "2890001491047",
+            "seededBy": "others"
+        },
+        "WETH/USDC 0.05%": {
+            "address": "0x94bfc0574FF48E92cE43d495376C477B1d0EEeC0",
+            "fee": 500,
+            "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "token1": "0x4200000000000000000000000000000000000006",
+            "liquidity": "5303698200342",
+            "seededBy": "others"
+        },
+        "WETH/USDC 0.30%": {
+            "address": "0x46880b404CD35c165EDdefF7421019F8dD25F4Ad",
+            "fee": 3000,
+            "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "token1": "0x4200000000000000000000000000000000000006",
+            "liquidity": "315598590516394",
+            "seededBy": "others"
+        },
+        "WETH/USDC 1.00%": {
+            "address": "0x4664755562152EDDa3a3073850FB62835451926a",
+            "fee": 10000,
+            "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "token1": "0x4200000000000000000000000000000000000006",
+            "liquidity": "57734017049",
+            "seededBy": "others"
+        },
+        "mTKN/USDC 0.05%": {
+            "address": "0x6Aac1064F0a0c202977a3941696f8B786317297d",
+            "fee": 500,
+            "token0": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "token1": "0xb1943AC6fCAE3205c711f65BAB318c501bDB11b6",
+            "seeded": {
+                "USDC": "20000000",
+                "mTKN": "20000000000000000000"
+            },
+            "seededBy": "menoid deployer",
+            "sqrtPriceX96": "79228162514264337593543950336000000",
+            "tick": 276324,
+            "liquidity": "0"
+        }
+    },
+    "txs": {
+        "mTKN": {
+            "hash": "0x7d1d6f4aa36bdd0d6232f35ee6709c88fa6ad14a1831074a46b771b3c534ccc9",
+            "block": 48131459,
+            "gasUsed": "630452",
+            "costETH": "0.000003782712"
+        },
+        "buy USDC": {
+            "hash": "0x241d415f182d0ec36bf7e610a54765daf952028b6c250270683bd18a83f18fc4",
+            "block": 48131460,
+            "gasUsed": "139523",
+            "costETH": "0.000000837138"
+        },
+        "mTKN/USDC 0.05%: mint mTKN": {
+            "hash": "0x960d74e88492f5704280d144680ec9bf90292837ca41c9a63cc7b110187eae5e",
+            "block": 48131461,
+            "gasUsed": "68249",
+            "costETH": "0.000000409494"
+        },
+        "mTKN/USDC 0.05%: createPool": {
+            "hash": "0xafc24ed88ddff9b70ecbdb1e070953f56d84f2f262f617e87dfa48c24aa641db",
+            "block": 48131461,
+            "gasUsed": "4613661",
+            "costETH": "0.000027681966"
+        },
+        "mTKN/USDC 0.05%: approve0": {
+            "hash": "0x6cfcf403b672b483119bf4e0683c12b764b3efc57fc33feaa53698225aba2778",
+            "block": 48131462,
+            "gasUsed": "55437",
+            "costETH": "0.000000332622"
+        },
+        "mTKN/USDC 0.05%: approve1": {
+            "hash": "0x0516efba5f69d53e4d931758f597982a0e042b0473697c813de3d183853b7969",
+            "block": 48131462,
+            "gasUsed": "46272",
+            "costETH": "0.000000277632"
+        },
+        "mTKN/USDC 0.05%: mint": {
+            "hash": "0x4fdedde1aa8d2026928af0c18c844477e7a8509f4751705071a682eb1e935237",
+            "block": 48131463,
+            "gasUsed": "599174",
+            "costETH": "0.000003595044"
+        }
+    }
+}
