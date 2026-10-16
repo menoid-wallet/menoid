@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Menoid V1 — protocol diagrams</title>
+<!--
+  The diagrams in V1-DOCS.md, drawn as SVG in the style of the V0.5 ones
+  (yellow #F0CF60 boxes and diamonds, black arrows, red Reject pills).
+  Open this file in a browser to see them; each <figure> is one PNG in this
+  folder, exported at 2x.
+-->
+<style>
+  body { margin: 0; background: #fff; }
+  figure { margin: 0 0 40px; display: block; width: max-content; }
+  svg { display: block; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+</style>
+</head>
+<body>
+<script>
+const Y = "#F0CF60", RED = "#DB6554";
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// text block centred on (x, y); `rotate` turns it about that point
+function T(x, y, lines, o = {}) {
+  const { size = 11.5, weight = 700, lh = size * 1.32, anchor = "middle", fill = "#000", rotate = 0 } = o;
+  lines = [].concat(lines);
+  const first = -((lines.length - 1) * lh) / 2 + size * 0.36;
+  const spans = lines.map((l, i) => `<tspan x="0" y="${(first + i * lh).toFixed(2)}">${esc(l) || " "}</tspan>`).join("");
+  return `<g transform="translate(${x},${y})${rotate ? ` rotate(${rotate})` : ""}"><text text-anchor="${anchor}" font-size="${size}" font-weight="${weight}" fill="${fill}">${spans}</text></g>`;
+}
+// a label (regular weight)
+const L = (x, y, lines, o = {}) => T(x, y, lines, { weight: 400, size: 10.8, ...o });
+function box(x, y, w, h, lines, o = {}) {
+  const r = o.r ?? 12;
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${o.fill || Y}"/>` + (lines ? T(x + w / 2, y + h / 2, lines, o) : "");
+}
+const pill = (x, y, w, h, lines, o = {}) => box(x, y, w, h, lines, { ...o, r: h / 2 });
+function dia(cx, cy, w, h, lines, o = {}) {
+  return `<polygon points="${cx},${cy - h / 2} ${cx + w / 2},${cy} ${cx},${cy + h / 2} ${cx - w / 2},${cy}" fill="${Y}"/>` + T(cx, cy, lines, o);
+}
+const reject = (cx, cy, text = "Reject", w = 92, h = 22) => pill(cx - w / 2, cy - h / 2, w, h, null, { fill: RED }) + T(cx, cy, [text], { size: 9.5, fill: "#fff" });
+function path(d, o = {}) {
+  const head = o.head ?? "end";
+  return `<path d="${d}" fill="none" stroke="#000" stroke-width="1.5"${o.dash ? ` stroke-dasharray="${o.dash}"` : ""}${head === "end" || head === "both" ? ' marker-end="url(#ah)"' : ""}${head === "both" ? ' marker-start="url(#ah)"' : ""}/>`;
+}
+const arrow = (pts, o) => path("M" + pts.map((p) => p.join(",")).join(" L"), o);
+// a cubic curve; its label follows the curve at `t`, `off` px to the text's top (negative: below);
+// `flat` keeps the label horizontal, starting `off` px to the right of the curve
+function curve(p0, p1, p2, p3, o = {}) {
+  let out = path(`M${p0} C${p1} ${p2} ${p3}`, o);
+  if (!o.label) return out;
+  const t = o.t ?? 0.5, mt = 1 - t;
+  const at = (i) => mt ** 3 * p0[i] + 3 * mt * mt * t * p1[i] + 3 * mt * t * t * p2[i] + t ** 3 * p3[i];
+  const dt = (i) => 3 * mt * mt * (p1[i] - p0[i]) + 6 * mt * t * (p2[i] - p1[i]) + 3 * t * t * (p3[i] - p2[i]);
+  const x = at(0), y = at(1);
+  if (o.flat) return out + L(x + (o.off ?? 12), y, o.label, { anchor: "start", size: o.size ?? 10.6 });
+  let ang = (Math.atan2(dt(1), dt(0)) * 180) / Math.PI;
+  if (ang > 90) ang -= 180;
+  if (ang < -90) ang += 180;
+  const r = (ang * Math.PI) / 180, off = o.off ?? 9;
+  return out + L(x + Math.sin(r) * off, y - Math.cos(r) * off, o.label, { rotate: ang, size: o.size ?? 10.6 });
+}
+// a speech bubble pointing down (the "Register" call-out)
+const bubble = (x, y, w, h, tipX, tipY, lines) =>
+  box(x, y, w, h, lines) + `<polygon points="${tipX - 22},${y + h - 1} ${tipX + 22},${y + h - 1} ${tipX},${tipY}" fill="${Y}"/>`;
+
+function figure(id, w, h, body) {
+  const f = document.createElement("figure");
+  f.id = id;
+  f.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <defs><marker id="ah-${id}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000"/></marker></defs>
+    <rect width="${w}" height="${h}" fill="#fff"/>${body.replaceAll("url(#ah)", `url(#ah-${id})`)}</svg>`;
+  document.body.appendChild(f);
+}
+
+/* ─── 1. Registration ─────────────────────────────────────────────────── */
+figure("01-registration", 780, 600, [
+  T(390, 48, ["V1 Registration"], { size: 25 }),
+  L(150, 90, ["Any wallet — MetaMask, Phantom, Rabby…"], { size: 11.5 }),
+  box(40, 104, 220, 88, ["Your Wallet", "", "Private Key", "Public Key"]),
+  arrow([[260, 148], [554, 148]]),
+  L(407, 120, ['Sign("Menoid: create my private account keys.', 'Only sign this on app.menoid.xyz …', 'Network: mainnet · Key index: 0")'], { size: 10.5 }),
+  pill(556, 130, 140, 36, ["Signature"]),
+  arrow([[626, 166], [626, 266]]),
+  L(642, 216, ["+ network → seed"], { rotate: 90 }),
+  dia(626, 310, 150, 86, ["Key", "Generator"]),
+  arrow([[626, 353], [626, 450]]),
+  L(611, 402, ["Spending keys"], { rotate: -90 }),
+  L(642, 402, ["BabyJubJub"], { rotate: 90 }),
+  box(540, 452, 172, 112, ["Spending Key  sk", "Spending PubKey", "", "Nullifier Key  nk"]),
+  arrow([[551, 310], [502, 310]]),
+  box(360, 282, 140, 56, ["Viewing Keys", "ivk · ovk"]),
+  L(430, 354, ["secp256k1 · one pair per epoch"], { size: 10 }),
+  arrow([[360, 310], [262, 310]]),
+  L(311, 300, ["ivkPub"]),
+  bubble(60, 246, 200, 118, 160, 396, ["register(", "userCommitment,", "ivkPub )", "", "once per chain"]),
+  pill(60, 500, 200, 38, ["User Commitment"]),
+  arrow([[540, 519], [262, 519]]),
+  L(401, 538, ["Poseidon(1, Wallet Address, Spending PublicKey)"]),
+  arrow([[160, 500], [160, 398]]),
+  L(146, 449, ["Register"], { rotate: -90 }),
+  L(175, 449, ["OnChain"], { rotate: -90 }),
+].join(""));
+
+/* ─── 2. Overview ─────────────────────────────────────────────────────── */
+figure("02-overview", 840, 660, [
+  T(420, 48, ["V1 Menoid Overview"], { size: 25 }),
+  box(330, 96, 180, 186, null),
+  T(420, 124, ["NoidPool", "Contract"]),
+  T(420, 170, ["Mask()"]),
+  T(420, 198, ["Send()"]),
+  T(420, 226, ["Swap()"]),
+  T(420, 254, ["Unmask()"]),
+  box(660, 96, 130, 66, ["DEX", "Uniswap V3", "Capricorn"]),
+  arrow([[510, 120], [658, 120]]),
+  L(584, 111, ["tokenIn (swap)"]),
+  arrow([[658, 140], [512, 140]]),
+  L(584, 154, ["tokenOut"]),
+  pill(40, 340, 100, 36, ["User"]),
+  dia(244, 358, 124, 92, ["Key", "Generator"]),
+  pill(340, 340, 160, 36, ["User Commitment"]),
+  box(660, 314, 120, 90, ["Relayer"]),
+  arrow([[140, 358], [180, 358]]),
+  arrow([[306, 358], [338, 358]]),
+  arrow([[500, 358], [658, 358]]),
+  L(579, 333, ["Send / Swap / Unmask call", "(proof + encrypted data)"], { size: 10.5 }),
+  curve([720, 314], [722, 262], [640, 212], [512, 212], { label: ["Send · Swap · Unmask"], t: 0.5, off: 9 }),
+  curve([80, 340], [84, 236], [196, 170], [328, 170], { label: ["Mask( token, amount )"], t: 0.42, off: 9 }),
+  curve([330, 250], [238, 262], [150, 292], [112, 338], { label: ["Unmask → any address"], t: 0.42, off: -11 }),
+  arrow([[420, 282], [420, 338]]),
+  L(428, 310, ["your new notes"], { anchor: "start" }),
+  L(420, 452, ["Mask ➝ Public tokens go from your own wallet into NoidPool. The pool computes the", "commitment itself — no proof, no relayer."], { size: 12, lh: 17 }),
+  L(420, 504, ["Send ➝ Your browser proves the transfer and the relayer submits it. Sender, receiver,", "amount and token stay hidden."], { size: 12, lh: 17 }),
+  L(420, 556, ["Swap ➝ The pool spends your notes, trades on a DEX through a whitelisted adapter,", "and finishes your new note on-chain."], { size: 12, lh: 17 }),
+  L(420, 608, ["Unmask ➝ Your notes are spent and the pool pays the tokens to any public address —", "the recipient is locked into the proof."], { size: 12, lh: 17 }),
+].join(""));
+
+/* ─── 3. Mask ─────────────────────────────────────────────────────────── */
+figure("03-mask-flow", 1280, 540, [
+  T(640, 44, ["Mask Flow"], { size: 22 }),
+  // left: the same person, public and private
+  box(30, 112, 124, 124, ["User Noid", "Wallet", "", "User", "Commitment", "( uc )"]),
+  box(30, 400, 124, 42, ["User Wallet"]),
+  arrow([[92, 400], [92, 238]]),
+  // bottom row: build the mask in the browser
+  arrow([[154, 421], [266, 421]]),
+  L(210, 410, ["token + Amount (a)"]),
+  dia(343, 421, 150, 78, ["Create Mask"]),
+  curve([418, 421], [470, 421], [474, 350], [528, 350]),
+  curve([418, 421], [470, 421], [474, 492], [528, 492]),
+  L(630, 318, ["npk = Poseidon(3, uc, r) — fresh r"]),
+  L(630, 526, ["ECIES(ivkPub, token, a, r)"]),
+  pill(530, 332, 200, 36, ["Note Public Key (npk)"]),
+  pill(530, 474, 200, 36, ["Encrypted Note"]),
+  path("M730,350 C784,350 776,421 828,421"),
+  path("M730,492 C784,492 776,421 828,421"),
+  box(830, 380, 166, 82, ["deposit(", "token, a, npk,", "encryptedNote )"]),
+  L(913, 365, ["sent from your own wallet"]),
+  curve([996, 421], [1110, 421], [1170, 330], [1170, 234], { label: ["tokens + transaction"], t: 0.45, off: -10 }),
+  // top row: what NoidPool does, right to left
+  box(1110, 112, 120, 120, ["Private Pool", "Contract", "", "deposit()"]),
+  arrow([[1110, 172], [1032, 172]]),
+  dia(965, 172, 132, 76, ["Validates"]),
+  L(965, 86, ["Masks on? Token accepted?", "0 < amount ≤ cap? Exactly", "the amount received?"], { size: 10.3 }),
+  arrow([[965, 108], [965, 132]]),
+  arrow([[965, 210], [965, 236]]),
+  L(973, 223, ["Invalid"], { anchor: "start" }),
+  reject(965, 248),
+  arrow([[899, 172], [770, 172]]),
+  L(834, 162, ["Valid"]),
+  pill(486, 154, 282, 36, ["commitment = Poseidon(4, token, a, npk)"]),
+  arrow([[486, 172], [418, 172]]),
+  box(256, 146, 160, 52, ["Merkle Tree", "+ chunk of 4 leaves"]),
+  L(336, 228, ["new root kept in the last 100"], { size: 10.3 }),
+  arrow([[256, 172], [156, 172]]),
+  L(206, 160, ["NoteCreated"]),
+  L(206, 186, ["decrypt (ivk)"]),
+].join(""));
+
+/* ─── shared shape of the spends (send, unmask) ───────────────────────── */
+function spend({ id, title, left, bottomLabel, buildLines, buildNote, extBox, extNote, proofLines, proofNote, callBox, poolLines, relayerNote, poolNote, outputs }) {
+  return figure(id, 1300, 660, [
+    T(650, 44, [title], { size: 22 }),
+    ...left,
+    // bottom row, left to right
+    arrow([[154, 540], [258, 540]]),
+    L(206, 528, [bottomLabel]),
+    dia(332, 540, 144, 76, ["Gather", "Inputs"]),
+    L(332, 600, ["Up to 4 notes of one token,", "largest first; zero notes fill the rest"], { size: 10.3 }),
+    arrow([[404, 540], [496, 540]]),
+    L(450, 528, ["≤ 4 notes"]),
+    dia(570, 540, 144, 76, buildLines),
+    L(570, 600, buildNote, { size: 10.3 }),
+    arrow([[642, 540], [716, 540]]),
+    box(718, 506, 160, 68, extBox),
+    L(798, 600, extNote, { size: 10.3 }),
+    arrow([[878, 540], [934, 540]]),
+    dia(1012, 540, 154, 82, proofLines),
+    L(1012, 436, proofNote, { size: 10.3 }),
+    arrow([[1012, 462], [1012, 497]]),
+    arrow([[1089, 540], [1124, 540]]),
+    box(1126, 494, 140, 92, callBox, { size: 10.8 }),
+    arrow([[1196, 494], [1196, 268]]),
+    // top row, right to left
+    box(1140, 172, 112, 94, ["Relayer"]),
+    arrow([[1140, 219], [1073, 219]]),
+    dia(1004, 219, 134, 76, ["Validates"]),
+    L(1004, 112, relayerNote, { size: 10.3 }),
+    arrow([[1004, 136], [1004, 179]]),
+    arrow([[1004, 257], [1004, 284]]),
+    L(1012, 271, ["Invalid"], { anchor: "start" }),
+    reject(1004, 296),
+    arrow([[937, 219], [866, 219]]),
+    L(902, 208, ["Valid"]),
+    box(744, 160, 120, 118, poolLines),
+    arrow([[744, 219], [688, 219]]),
+    dia(626, 219, 120, 76, ["Validates"]),
+    L(626, 112, poolNote, { size: 10.3 }),
+    arrow([[626, 136], [626, 179]]),
+    arrow([[626, 257], [626, 284]]),
+    L(634, 271, ["Invalid"], { anchor: "start" }),
+    reject(626, 296),
+    ...outputs,
+  ].join(""));
+}
+
+/* ─── 4. Send ─────────────────────────────────────────────────────────── */
+spend({
+  id: "04-send-flow",
+  title: "Send Flow",
+  left: [
+    box(30, 122, 124, 116, ["Relayer", "Wallet", "", "Relayer", "Commitment", "( rc )"]),
+    box(30, 290, 124, 118, ["Receiver", "Wallet", "", "Receiver", "Commitment", "( ReC )"]),
+    box(30, 480, 124, 120, ["User Noid", "Wallet", "", "User", "Commitment", "( uc )"]),
+  ],
+  bottomLabel: "Amount (a) + fee (f)",
+  buildLines: ["Build", "Outputs"],
+  buildNote: ["receiver · change · relayer fee,", "each encrypted to its owner"],
+  extBox: ["Encrypted Notes", "+ Outgoing Record"],
+  extNote: ["hashed into extDataHash —", "locked to the proof"],
+  proofLines: ["Create Proof", "(transfer)"],
+  proofNote: ["Merkle paths + nullifiers for every input;", "proves ownership, Σ in = Σ out,", "last output = relayer"],
+  callBox: ["Transfer Call:", "[ proof, root,", "nullifiers,", "outCmxs,", "relayer, ext ]"],
+  poolLines: ["Private Pool", "Contract", "", "transfer(", "[ TransferCall ] )"],
+  relayerNote: ["Opens its fee note (ivk),", "fee in the spent token,", "simulates the call"],
+  poolNote: ["Known root? Nullifiers", "unspent + distinct?", "Proof + extDataHash?"],
+  outputs: [
+    curve([566, 219], [470, 200], [300, 182], [156, 180], { label: ["Relayer fee (f) — fee note, encrypted to rc"], t: 0.45, off: 9 }),
+    curve([566, 219], [470, 240], [300, 330], [156, 349], { label: ["Amount (a) — receiver note, encrypted to ReC"], t: 0.45, off: 9 }),
+    curve([566, 219], [520, 360], [330, 470], [156, 520], { label: ["Change note → back to uc"], t: 0.55, off: 9 }),
+  ],
+});
+
+/* ─── 5. Swap ─────────────────────────────────────────────────────────── */
+figure("05-swap-flow", 1380, 660, [
+  T(690, 40, ["Swap Flow"], { size: 22 }),
+  box(30, 122, 124, 116, ["Relayer", "Wallet", "", "Relayer", "Commitment", "( rc )"]),
+  box(30, 460, 124, 120, ["User Noid", "Wallet", "", "User", "Commitment", "( uc )"]),
+  // bottom row, left to right
+  arrow([[154, 520], [262, 520]]),
+  L(208, 508, ["amountIn + fee"]),
+  dia(340, 520, 150, 78, ["Best", "Quote"]),
+  L(340, 584, ["Uniswap V3 · Capricorn:", "route, minOut, deadline"], { size: 10.3 }),
+  arrow([[415, 520], [490, 520]]),
+  box(492, 486, 176, 68, ["npkOut =", "Poseidon(3, uc, rOut)"]),
+  L(580, 584, ["owner of the note you buy,", "fixed before the trade"], { size: 10.3 }),
+  arrow([[668, 520], [726, 520]]),
+  dia(808, 520, 160, 84, ["Create Proof", "(withdraw circuit)"]),
+  L(808, 420, ["Notes of tokenIn leave: publicToken,", "publicAmount = amountIn; swap data", "locked by extDataHash"], { size: 10.3 }),
+  arrow([[808, 448], [808, 476]]),
+  arrow([[888, 520], [944, 520]]),
+  box(946, 474, 140, 92, ["Swap Call:", "[ proof, root,", "nullifiers,", "outCmxs,", "relayer, ext ]"], { size: 10.8 }),
+  path("M1086,520 C1200,520 1290,440 1290,272"),
+  // top row, right to left
+  box(1234, 176, 112, 94, ["Relayer"]),
+  L(1290, 122, ["Checks its fee note,", "simulates the call"], { size: 10.3 }),
+  arrow([[1290, 144], [1290, 174]]),
+  arrow([[1234, 223], [1176, 223]]),
+  box(1056, 164, 118, 118, ["Private Pool", "Contract", "", "swap(", "[ SwapCall ] )"]),
+  arrow([[1056, 223], [1004, 223]]),
+  dia(946, 223, 112, 76, ["Validates"]),
+  L(946, 120, ["Swaps on? tokenOut accepted?", "Adapter allowed? Before", "the deadline? Root, nullifiers,", "proof?"], { size: 10.3 }),
+  arrow([[946, 158], [946, 183]]),
+  arrow([[946, 261], [946, 288]]),
+  L(954, 275, ["Invalid"], { anchor: "start" }),
+  reject(946, 300),
+  arrow([[890, 223], [836, 223]]),
+  L(863, 212, ["Valid"]),
+  box(716, 190, 118, 66, ["Trade via", "Adapter"]),
+  box(696, 60, 158, 62, ["DEX", "Uniswap V3 / Capricorn"], { size: 10.8 }),
+  arrow([[764, 190], [764, 122]]),
+  L(756, 158, ["amountIn"], { anchor: "end" }),
+  arrow([[786, 122], [786, 190]]),
+  L(794, 158, ["out (tokenOut)"], { anchor: "start" }),
+  arrow([[716, 223], [660, 223]]),
+  dia(600, 223, 118, 80, ["out ≥", "minOut?"]),
+  arrow([[600, 263], [600, 290]]),
+  L(608, 276, ["No"], { anchor: "start" }),
+  reject(600, 302, "Revert — notes stay unspent", 156),
+  arrow([[541, 223], [488, 223]]),
+  L(515, 212, ["Yes"]),
+  pill(296, 205, 190, 36, ["Finish the Bought Note"]),
+  L(391, 256, ["Poseidon(4, tokenOut, out, npkOut)"], { size: 10.5 }),
+  curve([296, 215], [240, 196], [200, 184], [156, 182], { label: ["Relayer fee note (tokenIn)"], t: 0.5, off: 9 }),
+  curve([296, 232], [220, 300], [190, 420], [156, 486], { label: ["Bought note (tokenOut)", "+ change note (tokenIn)"], t: 0.5, flat: true, off: 14 }),
+].join(""));
+
+/* ─── 6. Unmask ───────────────────────────────────────────────────────── */
+spend({
+  id: "06-unmask-flow",
+  title: "Unmask Flow",
+  left: [
+    box(30, 140, 124, 64, ["Any Address", "(public)"]),
+    box(30, 270, 124, 116, ["Relayer", "Wallet", "", "Relayer", "Commitment", "( rc )"]),
+    box(30, 480, 124, 120, ["User Noid", "Wallet", "", "User", "Commitment", "( uc )"]),
+  ],
+  bottomLabel: "OutAmount (a) + fee (f)",
+  buildLines: ["Build", "Outputs"],
+  buildNote: ["change · relayer fee,", "each encrypted to its owner"],
+  extBox: ["Recipient", "+ Encrypted Notes", "+ Outgoing Record"],
+  extNote: ["hashed into extDataHash —", "the recipient can't be changed"],
+  proofLines: ["Create Proof", "(withdraw)"],
+  proofNote: ["Merkle paths + nullifiers; public: token", "and OutAmount; proves Σ in = Σ out + a,", "last output = relayer"],
+  callBox: ["Withdraw Call:", "[ proof, root,", "nullifiers,", "outCmxs, token,", "amount, ext ]"],
+  poolLines: ["Private Pool", "Contract", "", "withdraw(", "[ WithdrawCall ] )"],
+  relayerNote: ["Opens its fee note (ivk),", "fee in the spent token,", "simulates the call"],
+  poolNote: ["Amount < 2¹²⁸? Recipient", "set? Root, nullifiers,", "proof + extDataHash?"],
+  outputs: [
+    curve([566, 219], [470, 190], [300, 172], [156, 172], { label: ["OutAmount (a) — tokens to the recipient, paid last"], t: 0.45, off: 9 }),
+    curve([566, 219], [470, 250], [300, 320], [156, 328], { label: ["Relayer fee (f) — fee note, encrypted to rc"], t: 0.45, off: 9 }),
+    curve([566, 219], [520, 360], [330, 470], [156, 520], { label: ["Change note → back to uc"], t: 0.55, off: 9 }),
+  ],
+});
+
+/* ─── 7. Viewing keys ─────────────────────────────────────────────────── */
+figure("07-viewing-keys", 1240, 520, [
+  T(620, 44, ["Viewing Keys"], { size: 22 }),
+  box(30, 176, 128, 92, ["User Noid", "Wallet", "", "( uc )"]),
+  arrow([[158, 222], [236, 222]]),
+  L(197, 210, ["Copy"]),
+  pill(238, 204, 190, 36, ["Full Viewing Key"]),
+  L(333, 258, ["menoid-vk1:<base64url>.<checksum>"], { size: 10.3 }),
+  L(333, 276, ["incomingSecret · outgoingSecret · nk · uc"], { size: 10.3 }),
+  arrow([[428, 222], [500, 222]]),
+  L(464, 210, ["shared"]),
+  box(502, 176, 134, 92, ["Auditor", "Exchange", "Accountant"]),
+  arrow([[569, 268], [569, 316]], { dash: "4 4", head: "end" }),
+  reject(569, 330, "Can't spend — no sk", 150, 24),
+  arrow([[636, 222], [690, 222]]),
+  dia(770, 222, 160, 90, ["Scan Pool", "Events"]),
+  L(770, 296, ["NoteCreated · NullifierSpent ·", "OutgoingRecord · Swapped"], { size: 10.3 }),
+  path("M850,222 C880,222 880,140 906,140"),
+  path("M850,222 L906,222"),
+  path("M850,222 C880,222 880,304 906,304"),
+  pill(908, 122, 186, 36, ["ivk → notes received"]),
+  pill(908, 204, 186, 36, ["nk → which are spent"]),
+  pill(908, 286, 186, 36, ["ovk → who you paid"]),
+  path("M1094,140 C1120,140 1118,222 1140,222", { head: "none" }),
+  path("M1094,222 L1140,222", { head: "none" }),
+  path("M1094,304 C1120,304 1118,222 1140,222", { head: "none" }),
+  arrow([[1140, 222], [1146, 222]]),
+  box(1148, 182, 80, 80, ["Balance", "+ Full", "History"]),
+  L(620, 410, ["Everything is decrypted in the viewer's browser. Each note is kept only if it rebuilds the commitment on-chain —"], { size: 12 }),
+  L(620, 430, ["Poseidon(4, token, amount, Poseidon(3, uc, r)) — so nobody can plant fake notes on you. nk is Poseidon(2, sk):"], { size: 12 }),
+  L(620, 450, ["enough to see what was spent, never enough to spend."], { size: 12 }),
+].join(""));
+</script>
+</body>
+</html>
